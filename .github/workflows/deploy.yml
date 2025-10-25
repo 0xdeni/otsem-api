@@ -1,4 +1,4 @@
-name: Deploy to DigitalOcean Droplet
+name: Deploy to DO
 
 on:
   push:
@@ -12,22 +12,39 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Use Node.js 20
+      - name: Node 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
 
-      # Opcional: checar build localmente (CI)
-      - name: Install deps
-        run: npm ci
-
-      - name: Typecheck & Build
+      # Build no CI (máquina forte)
+      - name: Install & Build on CI
         run: |
+          npm ci --no-audit --no-fund
+          npx prisma generate --schema prisma/schema.prisma
           npm run build
+          tar -czf artifact.tar.gz \
+            dist \
+            package.json \
+            package-lock.json \
+            ecosystem.config.js \
+            prisma/schema.prisma
 
-      # Copiar código para o droplet (sem node_modules, sem artefatos de CI)
-      - name: Remote deploy via git
+      # Envia só o artefato
+      - name: Upload artifact to droplet
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USER }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          port: ${{ secrets.DO_SSH_PORT || 22 }}
+          source: artifact.tar.gz
+          target: /var/www/otsem-api
+          overwrite: true
+
+      # No servidor: extrai, instala só prod deps, migra e inicia
+      - name: Remote deploy
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.DO_HOST }}
@@ -36,35 +53,23 @@ jobs:
           port: ${{ secrets.DO_SSH_PORT || 22 }}
           script: |
             set -e
-            export GIT_SSH_COMMAND='ssh -i /home/deploy/.ssh/id_ed25519_github -o StrictHostKeyChecking=no'
-
+            export GIT_SSH_COMMAND='ssh -o StrictHostKeyChecking=no'
             cd /var/www/otsem-api
 
-            if [ ! -d .git ]; then
-              git init
-              git remote add origin git@github.com:cmtehenz/otsem-api.git
-            else
-              if ! git remote get-url origin >/dev/null 2>&1; then
-                git remote add origin git@github.com:cmtehenz/otsem-api.git
-              fi
-            fi
+            # manter .env e prisma/.env intocados
+            tar -xzf artifact.tar.gz
+            rm -f artifact.tar.gz
 
-            git fetch --depth=1 origin main
-            git checkout -B main origin/main
+            # instalar só deps de produção (muito mais leve)
+            npm_config_jobs=2 npm ci --omit=dev --no-audit --no-fund
 
-            # 1) instale TUDO (inclui @nestjs/cli e prisma CLI)
-            npm ci
-
-            # 2) prisma
-            npx prisma generate --schema prisma/schema.prisma
+            # migrate (usa prisma/.env do servidor)
             npx prisma migrate deploy --schema prisma/schema.prisma
 
-            # 3) build com nest (agora existe)
-            npm run build
+            # PM2 (descobre entry)
+            ENTRY="dist/main.js"
+            [ -f dist/src/main.js ] && ENTRY="dist/src/main.js"
 
-            # 4) opcional: remover dev deps para deixar leve
-            npm prune --omit=dev
-
-            # 5) pm2
-            pm2 reload otsem-api || pm2 start ecosystem.config.js
+            pm2 reload otsem-api --update-env --cwd /var/www/otsem-api --time || \
+            pm2 start "$ENTRY" --name otsem-api --cwd /var/www/otsem-api
             pm2 save
