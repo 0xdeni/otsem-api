@@ -27,40 +27,31 @@ jobs:
           npm run build
 
       # Copiar código para o droplet (sem node_modules, sem artefatos de CI)
-      - name: Copy files to Droplet
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.DO_HOST }}
-          username: ${{ secrets.DO_USER }}
-          key: ${{ secrets.DO_SSH_KEY }}
-          port: ${{ secrets.DO_SSH_PORT || 22 }}
-          source: ./
-          target: /var/www/otsem-api
-          overwrite: true
-
-      # Executar comandos de deploy no servidor
-      - name: Remote deploy commands
+      - name: Remote deploy via git pull
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.DO_HOST }}
-          username: ${{ secrets.DO_USER }}
-          key: ${{ secrets.DO_SSH_KEY }}
+          username: ${{ secrets.DO_USER }} # deploy
+          key: ${{ secrets.DO_SSH_KEY }} # chave para conectar no servidor (não é a deploy key do repo)
           port: ${{ secrets.DO_SSH_PORT || 22 }}
           script: |
             set -e
+            export GIT_SSH_COMMAND='ssh -i /home/deploy/.ssh/id_ed25519_github'
             cd /var/www/otsem-api
 
-            npm ci --omit=dev
+            if [ ! -d .git ]; then
+              git init
+              git remote add origin git@github.com:<ORG>/<REPO>.git
+              git fetch --depth=1 origin main
+              git checkout -t origin/main
+            else
+              git fetch --depth=1 origin main
+              git reset --hard origin/main
+            fi
 
-            # prisma: use o prisma/.env do servidor (produçao)
+            npm ci --omit=dev
             npx prisma generate --schema prisma/schema.prisma
             npx prisma migrate deploy --schema prisma/schema.prisma
-
             npm run build
-
-            if pm2 describe otsem-api > /dev/null; then
-              pm2 reload otsem-api
-            else
-              pm2 start ecosystem.config.js
-            fi
+            pm2 reload otsem-api || pm2 start ecosystem.config.js
             pm2 save
