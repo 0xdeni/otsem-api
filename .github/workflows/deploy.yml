@@ -41,7 +41,7 @@ jobs:
 
             if [ ! -d .git ]; then
               git init
-              git remote add origin git@github.com:<ORG>/<REPO>.git
+              git remote add origin git@github.com:cmtehenz/otsem-api.git
               git fetch --depth=1 origin main
               git checkout -t origin/main
             else
