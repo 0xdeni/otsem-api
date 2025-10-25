@@ -33,11 +33,11 @@ jobs:
           host: ${{ secrets.DO_HOST }}
           username: ${{ secrets.DO_USER }}
           key: ${{ secrets.DO_SSH_KEY }}
-          port: 22
-          source: |
-            ./
-          target: /var/www/otsem-api
+          port: ${{ secrets.DO_SSH_PORT || 22 }}
+          source: './'
+          target: '/var/www/otsem-api'
           rm: true
+          strip_components: 0
           # ignore arquivos que não precisam subir
           ignore: |
             .git
