@@ -27,31 +27,42 @@ jobs:
           npm run build
 
       # Copiar código para o droplet (sem node_modules, sem artefatos de CI)
-      - name: Remote deploy via git pull
+      - name: Remote deploy via git
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.DO_HOST }}
           username: ${{ secrets.DO_USER }} # deploy
-          key: ${{ secrets.DO_SSH_KEY }} # chave para conectar no servidor (não é a deploy key do repo)
+          key: ${{ secrets.DO_SSH_KEY }} # chave p/ conectar no servidor (não é a deploy key do repo)
           port: ${{ secrets.DO_SSH_PORT || 22 }}
           script: |
             set -e
-            export GIT_SSH_COMMAND='ssh -i /home/deploy/.ssh/id_ed25519_github'
+            export GIT_SSH_COMMAND='ssh -i /home/deploy/.ssh/id_ed25519_github -o StrictHostKeyChecking=no'
+
             cd /var/www/otsem-api
 
             if [ ! -d .git ]; then
               git init
               git remote add origin git@github.com:cmtehenz/otsem-api.git
-              git fetch --depth=1 origin main
-              git checkout -t origin/main
             else
-              git fetch --depth=1 origin main
-              git reset --hard origin/main
+              if ! git remote get-url origin >/dev/null 2>&1; then
+                git remote add origin git@github.com:cmtehenz/otsem-api.git
+              fi
             fi
 
+            # garanta que a branch é main (ajuste se usar master)
+            git fetch --depth=1 origin main
+            git checkout -B main origin/main
+
+            # deps de produção
             npm ci --omit=dev
+
+            # prisma (usa prisma/.env no servidor)
             npx prisma generate --schema prisma/schema.prisma
             npx prisma migrate deploy --schema prisma/schema.prisma
+
+            # build
             npm run build
+
+            # pm2 zero-downtime
             pm2 reload otsem-api || pm2 start ecosystem.config.js
             pm2 save
