@@ -4,7 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")   // <- tem que estar exatamente assim
+  url      = env("DATABASE_URL") // <- tem que estar exatamente assim
 }
 
 enum Role {
@@ -16,9 +16,65 @@ model User {
   id           String   @id @default(cuid())
   name         String
   email        String   @unique
-  passwordHash String   // guardamos hash da senha (argon2/bcrypt)
+  passwordHash String // guardamos hash da senha (argon2/bcrypt)
   role         Role     @default(ADMIN) // por enquanto admin; clientes serão CUSTOMER no futuro
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+enum TxType {
+  CREDIT
+  DEBIT
+}
+
+model Customer {
+  id                      String   @id @default(cuid())
+  name                    String
+  taxNumber               String? // CPF/CNPJ
+  externalAccountHolderId String?  @unique // GUID vindo do banco (AccoutHolderId)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  wallets                 Wallet[]
+}
+
+model Wallet {
+  id         String   @id @default(cuid())
+  customerId String
+  currency   String // "BRL"
+  balance    Decimal  @db.Decimal(18, 2)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  customer    Customer      @relation(fields: [customerId], references: [id])
+  Transaction Transaction[]
+
+  @@unique([customerId, currency])
+}
+
+model Transaction {
+  id        String   @id @default(cuid())
+  walletId  String
+  type      TxType
+  amount    Decimal  @db.Decimal(18, 2)
+  reference String   @unique // usamos EndToEnd como idempotência
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  wallet Wallet @relation(fields: [walletId], references: [id])
+
+  @@index([walletId, createdAt])
+}
+
+model PixWebhookEvent {
+  id          String    @id @default(cuid())
+  provider    String // "mtbank"
+  eventType   String // "cash-in"
+  signature   String?
+  endToEndId  String?
+  raw         Json
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+  error       String?
+  // opcionalmente: @@unique([provider, endToEndId])
 }

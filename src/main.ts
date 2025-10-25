@@ -2,11 +2,20 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import * as bodyParser from 'body-parser';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, { cors: true });
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+
+  app.use(
+    bodyParser.json({
+      verify: (req: any, _res, buf) => {
+        req.rawBody = buf; // importante: buffer puro!
+      },
+    }),
+  );
 
   const config = new DocumentBuilder()
     .setTitle('OTSEM API')

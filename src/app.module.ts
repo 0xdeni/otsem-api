@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaService } from './prisma/prisma.service';
+import { PixModule } from './pix/pix.module';
 
 
 @Module({
@@ -9,6 +10,7 @@ import { PrismaService } from './prisma/prisma.service';
       isGlobal: true,
       envFilePath: ['.env'],
     }),
+    PixModule
   ],
   providers: [PrismaService],
 })
