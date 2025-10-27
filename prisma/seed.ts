@@ -1,39 +1,16 @@
-// prisma/seed.ts
-import { PrismaClient } from '@prisma/client';
-import * as argon2 from 'argon2';
-
+import { PrismaClient, Role } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 const prisma = new PrismaClient();
 
 async function main() {
-    const email = process.env.SEED_ADMIN_EMAIL || 'admin@otsembank.com';
-    const name = process.env.SEED_ADMIN_NAME || 'Admin';
-    const password = process.env.SEED_ADMIN_PASSWORD || 'troque-me-123';
-
-    const passwordHash = await argon2.hash(password);
-
-    const existing = await prisma.user.findUnique({ where: { email } });
-    if (existing) {
-        console.log(`Admin já existe: ${email}`);
-        return;
-    }
-
-    await prisma.user.create({
-        data: {
-            name,
-            email,
-            passwordHash,
-            role: 'ADMIN',
-            isActive: true,
-        },
+    const email = 'admin@otsembank.com';
+    const pwd = await bcrypt.hash('Admin@123', 10);
+    await prisma.user.upsert({
+        where: { email },
+        update: {},
+        create: { email, password: pwd, role: Role.ADMIN, name: 'Admin' },
     });
-
-    console.log('Admin criado com sucesso:');
-    console.log({ email, password });
+    console.log('admin ok:', email);
 }
 
-main().catch((e) => {
-    console.error(e);
-    process.exit(1);
-}).finally(async () => {
-    await prisma.$disconnect();
-});
+main().finally(() => prisma.$disconnect());
