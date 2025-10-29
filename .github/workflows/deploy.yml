@@ -1,57 +1,66 @@
+name: Deploy to DO
+
+on:
+  push:
+    branches: ['main']
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
-      - name: Use Node 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node 20
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: 20
+          cache: 'npm'
 
-      - name: Install (with dev) and build
+      - name: Install & Build on CI
         run: |
           npm ci --no-audit --no-fund
+          npx prisma generate --schema prisma/schema.prisma
           npm run build
-
-      - name: Prune dev deps for runtime
-        run: |
-          npm ci --omit=dev --no-audit --no-fund
-
-      - name: Pack artifact
-        run: |
           tar -czf artifact.tar.gz \
-            dist package.json package-lock.json \
-            prisma \
-            # mantenha .env no servidor; não inclua:
-            # .env
+            dist \
+            package.json \
+            package-lock.json \
+            ecosystem.config.js \
+            prisma/schema.prisma \
+            prisma/migrations
 
-      - name: Upload to server
+      - name: Upload artifact to droplet
         uses: appleboy/scp-action@v0.1.7
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          port: 22
-          source: 'artifact.tar.gz'
-          target: '/var/www/otsem-api'
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USER }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          port: ${{ secrets.DO_SSH_PORT || 22 }}
+          source: artifact.tar.gz
+          target: /var/www/otsem-api
+          overwrite: true
 
-      - name: SSH & deploy
+      - name: Remote deploy
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          port: 22
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USER }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          port: ${{ secrets.DO_SSH_PORT || 22 }}
           script: |
             set -e
             cd /var/www/otsem-api
-            # manter .env e prisma/.env intocados
+
             tar -xzf artifact.tar.gz
             rm -f artifact.tar.gz
 
-            # migrações com o schema da pasta prisma (usa prisma/.env do servidor)
-            npx prisma migrate deploy --schema prisma/schema.prisma
+            # instala somente deps de runtime
+            npm_config_jobs=2 npm ci --omit=dev --no-audit --no-fund
+
+            # aplica migrações (usa prisma/.env do servidor)
+            npx --yes prisma migrate deploy --schema prisma/schema.prisma
 
             # PM2
             ENTRY="dist/main.js"
