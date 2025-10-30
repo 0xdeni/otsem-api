@@ -4,13 +4,17 @@ import * as bcrypt from 'bcrypt';
 import * as crypto from "crypto";
 import { PrismaService } from '../prisma/prisma.service';
 import { Role } from '@prisma/client';
+import { MailService } from '../mail/mail.service';
 
 const SALT_ROUNDS = 10;
 type JwtPayload = { sub: string; email: string; role: Role };
 
 @Injectable()
 export class AuthService {
-    constructor(private prisma: PrismaService, private jwt: JwtService) { }
+    constructor(
+        private prisma: PrismaService,
+        private jwt: JwtService,
+        private mail: MailService) { }
 
     async validateUser(email: string, password: string) {
         const user = await this.prisma.user.findUnique({ where: { email } });
@@ -59,8 +63,7 @@ export class AuthService {
         const frontendBase = process.env.FRONTEND_BASE_URL ?? "https://otsem-web.vercel.app";
         const resetUrl = `${frontendBase}/reset?token=${token}`;
 
-        // TODO: enviar email de verdade aqui
-        // this.mailer.sendPasswordReset(user.email, resetUrl);
+        await this.mail.sendPasswordReset(user.email, resetUrl);
 
         const showUrl = process.env.NODE_ENV !== "production" || process.env.SHOW_RESET_URL === "true";
         return showUrl ? { ok: true, resetUrl } : { ok: true };
