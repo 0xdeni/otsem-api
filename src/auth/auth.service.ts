@@ -19,7 +19,7 @@ export class AuthService {
     async validateUser(email: string, password: string) {
         const user = await this.prisma.user.findUnique({ where: { email } });
         if (!user) throw new UnauthorizedException('invalid_credentials');
-        const ok = await bcrypt.compare(password, user.password);
+        const ok = await bcrypt.compare(password, user.passwordHash);
         if (!ok) throw new UnauthorizedException('invalid_credentials');
         return user;
     }
@@ -37,7 +37,7 @@ export class AuthService {
 
         const hash = await bcrypt.hash(dto.password, SALT_ROUNDS);
         const user = await this.prisma.user.create({
-            data: { email: dto.email, password: hash, name: dto.name, role: Role.CUSTOMER },
+            data: { email: dto.email, passwordHash: hash, name: dto.name, role: Role.CUSTOMER },
             select: { id: true, email: true, role: true },
         });
 
@@ -70,24 +70,40 @@ export class AuthService {
     }
 
     // 2) Consumir token e definir nova senha
-    async resetPassword(token: string, password: string) {
+    async resetPassword(token: string, newPassword: string) {
         const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+
         const rec = await this.prisma.passwordResetToken.findFirst({
             where: { tokenHash, usedAt: null, expiresAt: { gt: new Date() } },
-            include: { user: true },
+            select: { id: true, userId: true }, // não traz o user inteiro à toa
         });
 
-        if (!rec) throw new BadRequestException("Token inválido ou expirado");
+        if (!rec) {
+            throw new BadRequestException("Token inválido ou expirado");
+        }
 
-        const passwordHash = await bcrypt.hash(password, 12);
+        // gere o hash da nova senha
+        const hash = await bcrypt.hash(newPassword, 12);
 
+        // 🔐 ATENÇÃO: troque "passwordHash" pelo campo certo no seu schema (pode ser "password")
         await this.prisma.$transaction([
-            this.prisma.user.update({ where: { id: rec.userId }, data: { password } }),
-            this.prisma.passwordResetToken.update({ where: { id: rec.id }, data: { usedAt: new Date() } }),
-            // opcional: invalidar tokens antigos desse usuário
-            this.prisma.passwordResetToken.updateMany({
-                where: { userId: rec.userId, usedAt: null, id: { not: rec.id } },
+            this.prisma.user.update({
+                where: { id: rec.userId },
+                data: { passwordHash: hash }, // <--- AQUI estava o bug: antes era { password: newPassword }
+            }),
+            this.prisma.passwordResetToken.update({
+                where: { id: rec.id },
                 data: { usedAt: new Date() },
+            }),
+            // opcional: invalida quaisquer outros tokens de reset em aberto
+            this.prisma.passwordResetToken.updateMany({
+                where: { userId: rec.userId, usedAt: null },
+                data: { usedAt: new Date() },
+            }),
+            // opcional (ver dicas abaixo): bump de versão de JWT / marca de alteração
+            this.prisma.user.update({
+                where: { id: rec.userId },
+                data: { passwordChangedAt: new Date() }, // crie este campo no User se ainda não tiver
             }),
         ]);
 

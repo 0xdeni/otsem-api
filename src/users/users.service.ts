@@ -16,7 +16,7 @@ export class UsersService {
         const user = await this.prisma.user.create({
             data: {
                 email: dto.email,
-                password: hash,
+                passwordHash: hash,
                 name: dto.name,
                 role: dto.role ?? Role.CUSTOMER,
                 isActive: dto.isActive ?? true,
@@ -56,11 +56,11 @@ export class UsersService {
         if (!user) throw new NotFoundException('user_not_found');
 
         if (requestUser.role !== Role.ADMIN) {
-            const ok = await bcrypt.compare(currentPassword, user.password);
+            const ok = await bcrypt.compare(currentPassword, user.passwordHash);
             if (!ok) throw new BadRequestException('current_password_invalid');
         }
         const hash = await bcrypt.hash(newPassword, SALT_ROUNDS);
-        await this.prisma.user.update({ where: { id }, data: { password: hash } });
+        await this.prisma.user.update({ where: { id }, data: { passwordHash: hash } });
         return { ok: true };
     }
 }
