@@ -6,6 +6,7 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { BrxWebhooksModule } from './brx-webhooks/brx-webhooks.module';
 import { BrxPixModule } from './brx/brx-pix.module';
+import { PixTransactionsModule } from './pix-transactions/pix-transactions.module';
 
 
 @Module({
@@ -14,7 +15,12 @@ import { BrxPixModule } from './brx/brx-pix.module';
       isGlobal: true,
       envFilePath: ['.env'],
     }),
-    PixModule, AuthModule, UsersModule, BrxWebhooksModule, BrxPixModule,
+    PixModule,
+    AuthModule,
+    UsersModule,
+    BrxWebhooksModule,
+    BrxPixModule,
+    PixTransactionsModule,
 
   ],
   providers: [PrismaService],
