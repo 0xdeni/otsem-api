@@ -203,14 +203,17 @@ model Payout {
 }
 
 model WebhookEvent {
-  id          String   @id @default(uuid())
-  kind        String // 'cash-in' | 'cash-out' | 'refunds'
-  endToEnd    String?
-  receivedAt  DateTime @default(now())
-  rawBody     Json
-  headers     Json
-  ip          String?
-  signatureOk Boolean? // caso a BRX passe a assinar; por ora, null
+  id               String   @id @default(uuid())
+  kind             String // 'cash-in' | 'cash-out' | 'refunds'
+  endToEnd         String?
+  receivedAt       DateTime @default(now())
+  valid            Boolean? // se o payload passou no schema
+  validationErrors Json? // <—
+  note             String? // opcional se quiser
+  rawBody          Json
+  headers          Json
+  ip               String?
+  signatureOk      Boolean? // caso a BRX passe a assinar; por ora, null
 
   @@index([kind])
   @@index([endToEnd])
