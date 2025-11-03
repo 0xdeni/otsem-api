@@ -12,6 +12,9 @@ enum Role {
   CUSTOMER
 }
 
+// ------------------------
+// AUTH (seu model atual)
+// ------------------------
 model User {
   id                 String               @id @default(cuid())
   email              String               @unique
@@ -23,6 +26,9 @@ model User {
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
   PasswordResetToken PasswordResetToken[]
+
+  // opcional: se quiser saber quais customers estão ligados a este login
+  customers Customer[]
 }
 
 enum TxType {
@@ -31,18 +37,52 @@ enum TxType {
 }
 
 model Customer {
-  id                      String    @id @default(uuid())
-  // Você pode preencher/relacionar dinamicamente por CPF/CNPJ (taxNumber) quando fizer o match:
-  name                    String?
-  taxNumber               String?   @unique // CPF/CNPJ sem máscara (opcional)
-  email                   String?
-  deposits                Deposit[]
-  payments                Payment[]
-  externalAccountHolderId String?   @unique // ID do correntista na BRX
-  refunds                 Refund[]
-  createdAt               DateTime  @default(now())
-  updatedAt               DateTime  @updatedAt
-  Wallet                  Wallet[]
+  id            String        @id @default(uuid())
+  type          CustomerType
+  accountStatus AccountStatus @default(not_requested)
+
+  // vínculo opcional com o usuário de autenticação
+  authUserId String?
+  authUser   User?   @relation(fields: [authUserId], references: [id], onDelete: SetNull)
+
+  // integração externa
+  externalClientId String? @unique
+  externalAccredId String? @unique
+
+  // integração/negócio base
+  identifier String // Identifier (integrador)
+  productId  Int // ProductId (ex.: 1 = digital-account)
+  email      String
+  phone      String
+
+  // PF
+  name       String? // Person.Name
+  socialName String? // Person.SocialName
+  cpf        String?   @unique // <— torne único
+  birthday   DateTime? // Person.Birthday
+  genderId   Int? // 1,2 (opcional)
+
+  // PJ
+  legalName String? // Company.LegalName
+  tradeName String? // Company.TradeName
+  cnpj      String? @unique
+
+  // relações
+  address    Address?
+  pixLimits  PixLimits?
+  ownerships Ownership[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  Refund    Refund[]
+  Payment   Payment[]
+  Deposit   Deposit[]
+  Wallet    Wallet[]
+
+  @@index([type, accountStatus])
+  @@index([cpf])
+  @@index([cnpj])
+  @@index([email])
 }
 
 model Refund {
@@ -232,4 +272,60 @@ model PasswordResetToken {
 
   @@index([userId])
   @@index([tokenHash])
+}
+
+// ------------------------
+// KYC / Customer domain
+// ------------------------
+enum CustomerType {
+  PF
+  PJ
+}
+
+enum AccountStatus {
+  not_requested
+  received
+  processing
+  approved
+  rejected
+}
+
+model Address {
+  id           String  @id @default(uuid())
+  customerId   String  @unique
+  zipCode      String
+  street       String
+  number       String?
+  complement   String?
+  neighborhood String
+  cityIbgeCode Int
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([cityIbgeCode])
+}
+
+model PixLimits {
+  id             String  @id @default(uuid())
+  customerId     String  @unique
+  singleTransfer Decimal
+  daytime        Decimal
+  nighttime      Decimal
+  monthly        Decimal
+  serviceId      Int
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+}
+
+model Ownership {
+  id              String   @id @default(uuid())
+  customerId      String
+  name            String
+  cpf             String
+  birthday        DateTime
+  isAdministrator Boolean
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
 }

@@ -107,12 +107,29 @@ export class BrxWebhooksService {
         return obj.AccountHolderId ?? obj.AccoutHolderId;
     }
 
+
+
     private async resolveCustomerId(taxNumber?: string) {
         if (!taxNumber) return null;
+
         const clean = taxNumber.replace(/\D/g, '');
-        const found = await prisma.customer.findUnique({ where: { taxNumber: clean } });
+
+        let found = null;
+
+        if (clean.length === 11) {
+            // CPF
+            found = await prisma.customer.findFirst({ where: { cpf: clean } });
+        } else if (clean.length === 14) {
+            // CNPJ
+            found = await prisma.customer.findFirst({ where: { cnpj: clean } });
+        } else {
+            // Documento inválido
+            return null;
+        }
+
         return found?.id ?? null;
     }
+
 
     /* 💰 CASH-IN */
     async handleCashIn(req: Request, headers: any) {

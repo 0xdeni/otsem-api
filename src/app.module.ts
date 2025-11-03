@@ -7,6 +7,9 @@ import { UsersModule } from './users/users.module';
 import { BrxWebhooksModule } from './brx-webhooks/brx-webhooks.module';
 import { BrxPixModule } from './brx/brx-pix.module';
 import { PixTransactionsModule } from './pix-transactions/pix-transactions.module';
+import { AccreditationModule } from './accreditation/accreditation.module';
+import { PixLimitsModule } from './pix/limits/pix-limits.module';
+import { CustomersModule } from './customers/customers.module';
 
 
 @Module({
@@ -21,6 +24,9 @@ import { PixTransactionsModule } from './pix-transactions/pix-transactions.modul
     BrxWebhooksModule,
     BrxPixModule,
     PixTransactionsModule,
+    AccreditationModule,
+    PixLimitsModule,
+    CustomersModule
 
   ],
   providers: [PrismaService],
