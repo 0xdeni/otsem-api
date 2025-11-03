@@ -10,6 +10,7 @@ import { PixTransactionsModule } from './pix-transactions/pix-transactions.modul
 import { AccreditationModule } from './accreditation/accreditation.module';
 import { PixLimitsModule } from './pix/limits/pix-limits.module';
 import { CustomersModule } from './customers/customers.module';
+import { AdminCustomersModule } from './admin-customers/admin-customers.module';
 
 
 @Module({
@@ -26,7 +27,8 @@ import { CustomersModule } from './customers/customers.module';
     PixTransactionsModule,
     AccreditationModule,
     PixLimitsModule,
-    CustomersModule
+    CustomersModule,
+    AdminCustomersModule,
 
   ],
   providers: [PrismaService],
