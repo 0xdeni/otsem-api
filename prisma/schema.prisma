@@ -53,7 +53,7 @@ model Customer {
   identifier String // Identifier (integrador)
   productId  Int // ProductId (ex.: 1 = digital-account)
   email      String
-  phone      String
+  phone      String?
 
   // PF
   name       String? // Person.Name

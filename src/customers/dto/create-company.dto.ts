@@ -27,7 +27,6 @@ export class CompanyBlock {
     ownershipStructure!: OwnershipItemDto[];
 }
 
-
 export class CreateCompanyDto {
     @IsString() @IsNotEmpty()
     identifier!: string;
@@ -41,3 +40,4 @@ export class CreateCompanyDto {
     @ValidateNested() @Type(() => PixLimitsDto)
     pixLimits!: PixLimitsDto;
 }
+
