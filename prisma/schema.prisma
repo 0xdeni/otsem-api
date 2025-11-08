@@ -42,8 +42,8 @@ model Customer {
   accountStatus AccountStatus @default(not_requested)
 
   // vínculo opcional com o usuário de autenticação
-  authUserId String?
-  authUser   User?   @relation(fields: [authUserId], references: [id], onDelete: SetNull)
+  userId   String? @unique
+  authUser User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   // integração externa
   externalClientId String? @unique
@@ -297,6 +297,8 @@ model Address {
   street       String
   number       String?
   complement   String?
+  city         String?
+  state        String?
   neighborhood String
   cityIbgeCode Int
 

@@ -251,4 +251,14 @@ export class CustomersService {
         await this.prisma.pixLimits.deleteMany({ where: { customerId: id } });
         return this.prisma.customer.delete({ where: { id } });
     }
+
+    // src/modules/customers/customers.service.ts
+    async findByUserId(userId: string) {
+        return this.prisma.customer.findUnique({
+            where: { userId },
+            include: {
+                address: true,
+            },
+        });
+    }
 }

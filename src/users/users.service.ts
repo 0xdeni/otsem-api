@@ -57,7 +57,7 @@ export class UsersService {
                     data: {
                         type: dto.customer.type,
                         accountStatus: AccountStatus.not_requested,
-                        authUserId: user.id,
+                        userId: user.id,
                         externalClientId: null,
                         externalAccredId: null,
                         identifier,
