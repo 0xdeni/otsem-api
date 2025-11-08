@@ -14,6 +14,12 @@ export class AddressDto {
     @IsOptional() @IsString()
     complement?: string;
 
+    @IsOptional() @IsString()
+    city?: string;
+
+    @IsOptional() @IsString()
+    state?: string;
+
     @IsString() @IsNotEmpty()
     neighborhood!: string;
 
