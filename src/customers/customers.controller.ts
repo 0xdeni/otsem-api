@@ -11,7 +11,7 @@ import { UpdateCustomerDto, AccountStatusDto, CustomerTypeDto } from './dto/upda
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
-import { Role, AccountStatus } from '@prisma/client';
+import { Role } from '@prisma/client';
 import { Request } from 'express';
 
 interface AuthRequest extends Request {
@@ -61,16 +61,14 @@ export class CustomersController {
         const userId = req.user?.sub!;
 
         if (userRole === Role.ADMIN) {
-            // Admin pode listar todos
             return this.service.list(query);
         }
 
-        // Customer vê apenas o próprio
         const customer = await this.service.findByUserId(userId);
         return customer ? [customer] : [];
     }
 
-    // Retorna dados do próprio customer (ADMIN ou CUSTOMER)
+    // Retorna dados do próprio customer
     @Get('me')
     async getMyCustomer(@Req() req: AuthRequest) {
         const userId = req.user?.sub;
@@ -79,13 +77,10 @@ export class CustomersController {
         if (!userId) throw new UnauthorizedException('Usuário não autenticado.');
 
         if (userRole === Role.ADMIN) {
-            // Admin pode ver todos os customers que ele gerencia
-            // Ou retornar informações do próprio admin (se houver customer vinculado)
             const customer = await this.service.findByUserId(userId);
             return customer ?? { message: 'Admin não possui customer vinculado' };
         }
 
-        // Customer retorna seus próprios dados
         const customer = await this.service.findByUserId(userId);
         if (!customer) {
             throw new ForbiddenException('Você ainda não possui um cadastro de cliente.');
@@ -93,7 +88,7 @@ export class CustomersController {
         return customer;
     }
 
-    // Cadastro próprio (self-service) - apenas CUSTOMER
+    // Cadastro próprio (self-service)
     @Post('pf/self')
     @Roles(Role.CUSTOMER)
     async createPfSelf(@Req() req: AuthRequest, @Body() dto: CreatePersonDto) {
@@ -121,23 +116,6 @@ export class CustomersController {
         return this.service.createPF(dto, userId, AccountStatusDto.requested);
     }
 
-    // Buscar customer por ID (Admin acessa qualquer; Customer apenas o próprio)
-    @Get(':id')
-    async get(@Req() req: AuthRequest, @Param('id') id: string) {
-        const userId = req.user?.sub!;
-        const userRole = req.user?.role;
-
-        const customer = await this.service.findById(id);
-        if (!customer) return null;
-
-        // Apenas admin ou dono do customer pode acessar
-        if (userRole !== Role.ADMIN && customer.userId !== userId) {
-            throw new ForbiddenException('Você não tem permissão para acessar este recurso.');
-        }
-
-        return customer;
-    }
-
     // Buscar por CPF/CNPJ (apenas ADMIN)
     @Get('by-tax/:tax')
     @Roles(Role.ADMIN)
@@ -147,21 +125,37 @@ export class CustomersController {
         return this.service.findById(id);
     }
 
-    // Criar PF via admin (apenas ADMIN)
+    // Buscar customer por ID
+    @Get(':id')
+    async get(@Req() req: AuthRequest, @Param('id') id: string) {
+        const userId = req.user?.sub!;
+        const userRole = req.user?.role;
+
+        const customer = await this.service.findById(id);
+        if (!customer) return null;
+
+        if (userRole !== Role.ADMIN && customer.userId !== userId) {
+            throw new ForbiddenException('Você não tem permissão para acessar este recurso.');
+        }
+
+        return customer;
+    }
+
+    // Criar PF via admin
     @Post('pf')
     @Roles(Role.ADMIN)
     async createPF(@Body() dto: CreatePersonDto) {
         return this.service.createPF(dto);
     }
 
-    // Criar PJ via admin (apenas ADMIN)
+    // Criar PJ via admin
     @Post('pj')
     @Roles(Role.ADMIN)
     async createPJ(@Body() dto: CreateCompanyDto) {
         return this.service.createPJ(dto);
     }
 
-    // Submeter KYC (CUSTOMER envia para análise)
+    // Submeter KYC
     @Post('submit-kyc')
     @Roles(Role.CUSTOMER)
     async submitKyc(@Req() req: AuthRequest) {
@@ -169,7 +163,7 @@ export class CustomersController {
         return this.service.submitKycByUser(userId);
     }
 
-    // Atualizar customer (Admin atualiza qualquer; Customer apenas o próprio)
+    // Atualizar customer
     @Patch(':id')
     async update(@Req() req: AuthRequest, @Param('id') id: string, @Body() dto: UpdateCustomerDto) {
         const userId = req.user?.sub!;
@@ -178,7 +172,6 @@ export class CustomersController {
         const customer = await this.service.findById(id);
         if (!customer) throw new ForbiddenException('Customer não encontrado.');
 
-        // Apenas admin ou dono pode atualizar
         if (userRole !== Role.ADMIN && customer.userId !== userId) {
             throw new ForbiddenException('Você não tem permissão para atualizar este recurso.');
         }
@@ -186,7 +179,7 @@ export class CustomersController {
         return this.service.update(id, dto);
     }
 
-    // Deletar customer (apenas ADMIN)
+    // Deletar customer
     @Delete(':id')
     @Roles(Role.ADMIN)
     async remove(@Param('id') id: string) {
@@ -194,34 +187,56 @@ export class CustomersController {
     }
 
     // ==================== ROTAS KYC (PATCH) ====================
+    // Cada alias precisa de método próprio
 
-    // Aprovar KYC (múltiplos aliases)
-    @Patch(':id/kyc/approve')
     @Patch(':id/approve-kyc')
-    @Patch(':id/approve')
     @Roles(Role.ADMIN)
-    async approveKyc(@Param('id') id: string) {
+    async approveKycAlias1(@Param('id') id: string) {
         return this.service.update(id, { accountStatus: AccountStatusDto.approved });
     }
 
-    // Rejeitar KYC (múltiplos aliases)
-    @Patch(':id/kyc/reject')
-    @Patch(':id/reject-kyc')
-    @Patch(':id/reject')
+    @Patch(':id/kyc/approve')
     @Roles(Role.ADMIN)
-    async rejectKyc(@Param('id') id: string) {
+    async approveKycAlias2(@Param('id') id: string) {
+        return this.service.update(id, { accountStatus: AccountStatusDto.approved });
+    }
+
+    @Patch(':id/approve')
+    @Roles(Role.ADMIN)
+    async approveKycAlias3(@Param('id') id: string) {
+        return this.service.update(id, { accountStatus: AccountStatusDto.approved });
+    }
+
+    @Patch(':id/reject-kyc')
+    @Roles(Role.ADMIN)
+    async rejectKycAlias1(@Param('id') id: string) {
         return this.service.update(id, { accountStatus: AccountStatusDto.rejected });
     }
 
-    // Colocar em revisão
-    @Patch(':id/kyc/review')
-    @Patch(':id/review')
+    @Patch(':id/kyc/reject')
     @Roles(Role.ADMIN)
-    async reviewKyc(@Param('id') id: string) {
+    async rejectKycAlias2(@Param('id') id: string) {
+        return this.service.update(id, { accountStatus: AccountStatusDto.rejected });
+    }
+
+    @Patch(':id/reject')
+    @Roles(Role.ADMIN)
+    async rejectKycAlias3(@Param('id') id: string) {
+        return this.service.update(id, { accountStatus: AccountStatusDto.rejected });
+    }
+
+    @Patch(':id/kyc/review')
+    @Roles(Role.ADMIN)
+    async reviewKycAlias1(@Param('id') id: string) {
         return this.service.update(id, { accountStatus: AccountStatusDto.in_review });
     }
 
-    // Atualizar status genérico via body
+    @Patch(':id/review')
+    @Roles(Role.ADMIN)
+    async reviewKycAlias2(@Param('id') id: string) {
+        return this.service.update(id, { accountStatus: AccountStatusDto.in_review });
+    }
+
     @Patch(':id/status')
     @Roles(Role.ADMIN)
     async patchStatus(@Param('id') id: string, @Body() dto: UpdateStatusDto) {
