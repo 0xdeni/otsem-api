@@ -1,10 +1,11 @@
 // src/modules/customers/customers.service.ts
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePersonDto } from './dto/create-person.dto';
 import { CreateCompanyDto } from './dto/create-company.dto';
 import { ListCustomersDto } from './dto/list-customers.dto';
 import { UpdateCustomerDto, AccountStatusDto } from './dto/update-customer.dto';
+import { AccreditationService } from '../accreditation/accreditation.service';
 
 function onlyDigits(v: string): string {
     return (v || '').replace(/\D/g, '');
@@ -12,22 +13,27 @@ function onlyDigits(v: string): string {
 
 @Injectable()
 export class CustomersService {
-    constructor(private readonly prisma: PrismaService) { }
+    private readonly logger = new Logger(CustomersService.name);
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly accreditationService: AccreditationService,
+    ) { }
 
     // ✨ createPF agora aceita userId e status inicial (opcionais)
     async createPF(
         input: CreatePersonDto,
         userId?: string,
         initialStatus: AccountStatusDto = AccountStatusDto.not_requested,
+        accreditNow = false, // ← novo: se true, credencia na BRX e loga resposta
     ) {
         const { identifier, productId, person, pixLimits } = input;
         const cpf = onlyDigits(person.cpf);
 
-        return this.prisma.customer.create({
+        const created = await this.prisma.customer.create({
             data: {
-                userId: userId ?? null,                    // <<-- vincula ao usuário se vier
+                userId: userId ?? null,
                 type: 'PF',
-                accountStatus: initialStatus,              // <<-- status inicial
+                accountStatus: initialStatus,
                 identifier,
                 productId,
                 email: person.email,
@@ -59,6 +65,59 @@ export class CustomersService {
             },
             include: { address: true, pixLimits: true, ownerships: true },
         });
+
+        if (accreditNow) {
+            try {
+                const dto = {
+                    identifier: input.identifier,
+                    productId: input.productId,
+                    name: person.name,
+                    socialName: person.socialName ?? '',
+                    cpf,
+                    birthday: person.birthday,
+                    phone: onlyDigits(person.phone),
+                    email: person.email.toLowerCase(),
+                    genderId: person.genderId ?? undefined,
+                    address: {
+                        zipCode: onlyDigits(person.address.zipCode),
+                        street: person.address.street,
+                        number: person.address.number ?? '',
+                        complement: person.address.complement ?? '',
+                        neighborhood: person.address.neighborhood,
+                        cityIbgeCode: person.address.cityIbgeCode,
+                    },
+                    pixLimits: {
+                        singleTransfer: pixLimits.singleTransfer,
+                        daytime: pixLimits.daytime,
+                        nighttime: pixLimits.nighttime,
+                        monthly: pixLimits.monthly,
+                        serviceId: pixLimits.serviceId,
+                    },
+                };
+
+                const brxRes = await this.accreditationService.accreditPerson(dto as any);
+
+                // Logs
+                this.logger.log(`[BRX][PF] Credenciado id=${brxRes.accreditationId} status=${brxRes.accreditationStatus}`);
+                console.log('[BRX][PF] Response:', JSON.stringify(brxRes, null, 2));
+
+                // Opcional: atualizar o registro local com IDs externos (se já não foi feito pelo AccreditationService)
+                if (!created.externalAccredId || !created.externalClientId) {
+                    await this.prisma.customer.update({
+                        where: { id: created.id },
+                        data: {
+                            externalAccredId: brxRes.accreditationId,
+                            externalClientId: brxRes.clientId,
+                        },
+                    });
+                }
+            } catch (e: any) {
+                this.logger.error(`[BRX][PF] Falha ao credenciar cpf=${cpf}: ${e?.message || e}`);
+                console.error('[BRX][PF] Error:', e?.response?.data || e?.message || e);
+            }
+        }
+
+        return created;
     }
 
     async createPJ(input: CreateCompanyDto) {
