@@ -1,28 +1,42 @@
-import { IsArray, IsEmail, IsInt, IsOptional, IsString, IsDateString, ValidateNested } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsArray, IsEmail, IsInt, IsOptional, IsString, IsDateString, ValidateNested, IsBoolean } from 'class-validator';
+import { Type, Transform } from 'class-transformer';
 import { AddressDto, PixLimitsDto } from './common.dto';
 
 export class OwnershipItemDto {
     @IsString() name!: string;
-    @IsString() cpf!: string;
+
+    @IsString()
+    @Transform(({ value }) => String(value).replace(/\D/g, ''))
+    cpf!: string;
+
     @IsDateString() birthday!: string;
-    @IsInt() // 0/1; mas doc diz boolean. Vamos usar boolean no body final.
-    // para o DTO manteremos boolean (melhor):
-    // Ajuste:
+
+    @IsBoolean()
+    @Type(() => Boolean)
     isAdministrator!: boolean;
 }
 
 export class AccreditationCompanyDto {
     @IsString() identifier!: string;
-    @IsInt() productId!: number; // 1 = digital-account
+    @IsInt() productId!: number;
 
-    // Company
     @IsString() legalName!: string;
     @IsString() tradeName!: string;
-    @IsString() cnpj!: string;
-    @IsString() phone!: string;
-    @IsEmail() email!: string;
 
+    @IsString()
+    @Transform(({ value }) => String(value).replace(/\D/g, ''))
+    cnpj!: string;
+
+    @IsString()
+    @Transform(({ value }) => String(value).replace(/\D/g, ''))
+    phone!: string;
+
+    @IsEmail()
+    @Transform(({ value }) => String(value).toLowerCase())
+    email!: string;
+
+    @ValidateNested()
+    @Type(() => AddressDto)
     address!: AddressDto;
 
     @IsArray()
@@ -30,6 +44,7 @@ export class AccreditationCompanyDto {
     @Type(() => OwnershipItemDto)
     ownershipStructure!: OwnershipItemDto[];
 
-    // Pix limits
+    @ValidateNested()
+    @Type(() => PixLimitsDto)
     pixLimits!: PixLimitsDto;
 }

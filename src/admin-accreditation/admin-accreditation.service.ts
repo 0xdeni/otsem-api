@@ -64,7 +64,7 @@ export class AdminAccreditationService {
             data: {
                 externalClientId: result.clientId,
                 externalAccredId: result.accreditationId,
-                accountStatus: AccountStatus.processing,
+                accountStatus: AccountStatus.in_review,
             },
         });
 
@@ -89,7 +89,7 @@ export class AdminAccreditationService {
             data: {
                 externalClientId: result.clientId,
                 externalAccredId: result.accreditationId,
-                accountStatus: AccountStatus.processing,
+                accountStatus: AccountStatus.in_review,
             },
         });
 

@@ -1,22 +1,29 @@
 import { IsEmail, IsInt, IsOptional, IsString, IsBoolean, IsDateString, Min, IsNumber } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export class AddressDto {
-    @IsString() zipCode!: string;        // CEP
-    @IsString() street!: string;
-    @IsOptional() @IsString() number?: string;
-    @IsOptional() @IsString() complement?: string;
-    @IsString() neighborhood!: string;
-    @IsString() cityIbgeCode!: string | number; // API aceita string/number
+  @IsString()
+  @Transform(({ value }) => String(value).replace(/\D/g, ''))
+  zipCode!: string;
+
+  @IsString() street!: string;
+
+  @IsOptional() @IsString() number?: string;
+
+  @IsOptional() @IsString() complement?: string;
+
+  @IsString() neighborhood!: string;
+
+  @IsInt() cityIbgeCode!: number;
 }
 
 /** Limites Pix (campos em camelCase; no service eu mapeio para PascalCase) */
 export class PixLimitsDto {
-    @IsNumber() @Min(0) singleTransfer!: number;
-    @IsNumber() @Min(0) daytime!: number;
-    @IsNumber() @Min(0) nighttime!: number;
-    @IsNumber() @Min(0) monthly!: number;
-    /** 1=big-pix, 8=pix (conforme doc) */
-    @IsInt() serviceId!: number;
+  @IsNumber() singleTransfer!: number;
+  @IsNumber() daytime!: number;
+  @IsNumber() nighttime!: number;
+  @IsNumber() monthly!: number;
+  @IsInt() serviceId!: number;
 }
 
 /** Resposta normalizada para o front */

@@ -1,35 +1,36 @@
-import { IsNotEmpty, IsString, IsEmail, IsNumber, ValidateNested } from 'class-validator';
-import { Type } from 'class-transformer';
-
-class AddressDto {
-    @IsString() zipCode: string;
-    @IsString() street: string;
-    @IsString() neighborhood: string;
-    @IsNumber() cityIbgeCode: number;
-    number?: string;
-    complement?: string;
-}
-
-class PixLimitsDto {
-    @IsNumber() singleTransfer: number;
-    @IsNumber() daytime: number;
-    @IsNumber() nighttime: number;
-    @IsNumber() monthly: number;
-    @IsNumber() serviceId: number;
-}
+import { IsEmail, IsInt, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { Type, Transform } from 'class-transformer';
+import { AddressDto, PixLimitsDto } from '../../accreditation/dto/common.dto';
 
 export class AdminAccreditatePfDto {
     @IsString() identifier: string;
-    @IsNumber() productId: number;
+    @IsInt() productId: number;
 
     @IsString() name: string;
-    socialName?: string;
-    @IsString() cpf: string;
-    @IsString() birthday: string;
-    @IsString() phone: string;
-    @IsEmail() email: string;
-    genderId?: number;
 
-    @ValidateNested() @Type(() => AddressDto) address: AddressDto;
-    @ValidateNested() @Type(() => PixLimitsDto) pixLimits: PixLimitsDto;
+    @IsOptional() @IsString() socialName?: string;
+
+    @IsString()
+    @Transform(({ value }) => String(value).replace(/\D/g, ''))
+    cpf: string;
+
+    @IsString() birthday: string;
+
+    @IsString()
+    @Transform(({ value }) => String(value).replace(/\D/g, ''))
+    phone: string;
+
+    @IsEmail()
+    @Transform(({ value }) => String(value).toLowerCase())
+    email: string;
+
+    @IsOptional() @IsInt() genderId?: number;
+
+    @ValidateNested()
+    @Type(() => AddressDto)
+    address: AddressDto;
+
+    @ValidateNested()
+    @Type(() => PixLimitsDto)
+    pixLimits: PixLimitsDto;
 }
