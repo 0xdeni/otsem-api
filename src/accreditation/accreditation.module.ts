@@ -1,13 +1,18 @@
 import { Module } from '@nestjs/common';
-import { HttpModule } from '@nestjs/axios';
-import { AccreditationController } from './accreditation.controller';
 import { AccreditationService } from './accreditation.service';
-import { BrxAuthService } from '../brx/brx-auth.service';
+import { AccreditationController } from './accreditation.controller';
 import { PrismaModule } from '../prisma/prisma.module';
+import { HttpModule } from '@nestjs/axios';
+import { BrxAuthModule } from '../brx/brx-auth.module';
 
 @Module({
-    imports: [HttpModule, PrismaModule],
+    imports: [
+        PrismaModule,
+        HttpModule,
+        BrxAuthModule, // módulo correto (não o serviço)
+    ],
     controllers: [AccreditationController],
-    providers: [AccreditationService, BrxAuthService],
+    providers: [AccreditationService],
+    exports: [AccreditationService],
 })
 export class AccreditationModule { }

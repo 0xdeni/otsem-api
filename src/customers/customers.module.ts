@@ -1,11 +1,16 @@
 import { Module } from '@nestjs/common';
 import { CustomersController } from './customers.controller';
 import { CustomersService } from './customers.service';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaModule } from '../prisma/prisma.module';
+import { AccreditationModule } from '../accreditation/accreditation.module';
 
 @Module({
+    imports: [
+        PrismaModule,
+        AccreditationModule, // ← torna AccreditationService disponível aqui
+    ],
     controllers: [CustomersController],
-    providers: [CustomersService, PrismaService],
+    providers: [CustomersService],
     exports: [CustomersService],
 })
 export class CustomersModule { }
