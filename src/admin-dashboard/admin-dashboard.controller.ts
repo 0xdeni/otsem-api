@@ -9,20 +9,20 @@ import { Role } from '@prisma/client';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.ADMIN)
 export class AdminDashboardController {
-    constructor(private readonly service: AdminDashboardService) { }
+  constructor(private readonly service: AdminDashboardService) {}
 
-    @Get('summary')
-    async summary() {
-        return this.service.getSummary();
-    }
+  @Get('summary')
+  async summary() {
+    return this.service.getSummary();
+  }
 
-    @Get('latest-users')
-    async latestUsers() {
-        return this.service.getLatestUsers();
-    }
+  @Get('latest-users')
+  async latestUsers() {
+    return this.service.getLatestUsers();
+  }
 
-    @Get('latest-transactions')
-    async latestTransactions() {
-        return this.service.getLatestTransactions();
-    }
+  @Get('latest-transactions')
+  async latestTransactions() {
+    return this.service.getLatestTransactions();
+  }
 }

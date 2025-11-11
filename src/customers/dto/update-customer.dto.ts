@@ -1,71 +1,124 @@
-import { IsEnum, IsInt, IsNumber, IsOptional, IsString, ValidateNested, IsEmail, IsBoolean } from 'class-validator';
+import {
+  IsEnum,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+  ValidateNested,
+  IsEmail,
+  IsBoolean,
+  IsDateString,
+} from 'class-validator';
 import { Type } from 'class-transformer';
-import { AddressDto, PixLimitsDto, OwnershipItemDto } from './common.dto';
 
 export enum AccountStatusDto {
-    not_requested = 'not_requested',
-    requested = 'requested',
-    approved = 'approved',
-    rejected = 'rejected',
-    in_review = 'in_review',
+  not_requested = 'not_requested',
+  requested = 'requested',
+  in_review = 'in_review',
+  approved = 'approved',
+  rejected = 'rejected',
 }
 
 export enum CustomerTypeDto {
-    PF = 'PF',
-    PJ = 'PJ',
+  PF = 'PF',
+  PJ = 'PJ',
+}
+
+class AddressDto {
+  @IsString()
+  zipCode!: string;
+
+  @IsString()
+  street!: string;
+
+  @IsOptional()
+  @IsString()
+  number?: string;
+
+  @IsOptional()
+  @IsString()
+  complement?: string;
+
+  @IsString()
+  neighborhood!: string;
+
+  @IsInt()
+  cityIbgeCode!: number;
+}
+
+class PixLimitsDto {
+  @IsInt()
+  singleTransfer!: number;
+
+  @IsInt()
+  daytime!: number;
+
+  @IsInt()
+  nighttime!: number;
+
+  @IsInt()
+  monthly!: number;
+
+  @IsInt()
+  serviceId!: number;
 }
 
 export class UpdateCustomerDto {
-    @IsOptional() @IsEnum(CustomerTypeDto)
-    type?: CustomerTypeDto;
+  @IsOptional()
+  @IsEnum(AccountStatusDto)
+  accountStatus?: AccountStatusDto;
 
-    @IsOptional() @IsEnum(AccountStatusDto)
-    accountStatus?: AccountStatusDto;
+  @IsOptional()
+  @IsEnum(CustomerTypeDto)
+  type?: CustomerTypeDto;
 
-    @IsOptional() @IsString()
-    identifier?: string;
+  @IsOptional()
+  @IsString()
+  name?: string;
 
-    @IsOptional() @IsInt()
-    productId?: number;
+  @IsOptional()
+  @IsString()
+  socialName?: string;
 
-    @IsOptional() @IsEmail()
-    email?: string;
+  @IsOptional()
+  @IsEmail()
+  email?: string;
 
-    @IsOptional() @IsString()
-    phone?: string;
+  @IsOptional()
+  @IsString()
+  phone?: string;
 
-    // PF
-    @IsOptional() @IsString()
-    name?: string;
+  @IsOptional()
+  @IsString()
+  cpf?: string;
 
-    @IsOptional() @IsString()
-    socialName?: string;
+  @IsOptional()
+  @IsString()
+  cnpj?: string;
 
-    @IsOptional() @IsString()
-    cpf?: string;
+  @IsOptional()
+  @IsDateString()
+  birthday?: string;
 
-    @IsOptional() @IsString()
-    birthday?: string;
+  @IsOptional()
+  @IsInt()
+  genderId?: number;
 
-    @IsOptional() @IsInt()
-    genderId?: number;
+  @IsOptional()
+  @IsString()
+  legalName?: string;
 
-    // PJ
-    @IsOptional() @IsString()
-    legalName?: string;
+  @IsOptional()
+  @IsString()
+  tradeName?: string;
 
-    @IsOptional() @IsString()
-    tradeName?: string;
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => AddressDto)
+  address?: AddressDto;
 
-    @IsOptional() @IsString()
-    cnpj?: string;
-
-    @IsOptional() @ValidateNested() @Type(() => AddressDto)
-    address?: AddressDto;
-
-    @IsOptional() @ValidateNested() @Type(() => PixLimitsDto)
-    pixLimits?: PixLimitsDto;
-
-    @IsOptional() @ValidateNested({ each: true }) @Type(() => OwnershipItemDto)
-    ownerships?: OwnershipItemDto[];
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => PixLimitsDto)
+  pixLimits?: PixLimitsDto;
 }

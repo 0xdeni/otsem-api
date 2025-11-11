@@ -4,8 +4,8 @@ import { AdminDashboardService } from './admin-dashboard.service';
 import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
-    imports: [PrismaModule],
-    controllers: [AdminDashboardController],
-    providers: [AdminDashboardService],
+  imports: [PrismaModule],
+  controllers: [AdminDashboardController],
+  providers: [AdminDashboardService],
 })
-export class AdminDashboardModule { }
+export class AdminDashboardModule {}

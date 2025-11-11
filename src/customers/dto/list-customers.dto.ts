@@ -1,31 +1,43 @@
 import { Transform, Type } from 'class-transformer';
-import { IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator';
-
-export enum AccountStatusFilter {
-    not_requested = 'not_requested',
-    requested = 'requested',
-    approved = 'approved',
-    rejected = 'rejected',
-}
-
-export enum CustomerTypeFilter {
-    PF = 'PF',
-    PJ = 'PJ',
-}
+import {
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  Min,
+  Max,
+  IsBoolean,
+} from 'class-validator';
+import { AccountStatusDto, CustomerTypeDto } from './update-customer.dto';
 
 export class ListCustomersDto {
-    @IsOptional() @IsString()
-    q?: string;
+  @IsOptional()
+  @IsString()
+  q?: string;
 
-    @IsOptional() @IsEnum(CustomerTypeFilter)
-    type?: CustomerTypeFilter;
+  @IsOptional()
+  @IsEnum(CustomerTypeDto)
+  type?: CustomerTypeDto;
 
-    @IsOptional() @IsEnum(AccountStatusFilter)
-    status?: AccountStatusFilter;
+  @IsOptional()
+  @IsEnum(AccountStatusDto)
+  accountStatus?: AccountStatusDto;
 
-    @Type(() => Number) @IsInt() @Min(1)
-    page = 1;
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  hasAccreditation?: boolean;
 
-    @Type(() => Number) @IsInt() @Min(1)
-    pageSize = 10;
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
 }

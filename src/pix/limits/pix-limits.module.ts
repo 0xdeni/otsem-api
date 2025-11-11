@@ -5,8 +5,8 @@ import { PixLimitsService } from './pix-limits.service';
 import { BrxAuthService } from '../../brx/brx-auth.service';
 
 @Module({
-    imports: [HttpModule],
-    controllers: [PixLimitsController],
-    providers: [PixLimitsService, BrxAuthService],
+  imports: [HttpModule],
+  controllers: [PixLimitsController],
+  providers: [PixLimitsService, BrxAuthService],
 })
-export class PixLimitsModule { }
+export class PixLimitsModule {}

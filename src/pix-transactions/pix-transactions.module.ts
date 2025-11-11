@@ -7,13 +7,13 @@ import { BrxPixModule } from '../brx/brx-pix.module';
 import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
-    imports: [
-        HttpModule,        // <- necessário para injetar HttpService
-        PrismaModule,
-        BrxPixModule,      // <- exporta BrxAuthService
-    ],
-    controllers: [PixTransactionsController],
-    providers: [PixTransactionsService],
-    exports: [PixTransactionsService],
+  imports: [
+    HttpModule, // <- necessário para injetar HttpService
+    PrismaModule,
+    BrxPixModule, // <- exporta BrxAuthService
+  ],
+  controllers: [PixTransactionsController],
+  providers: [PixTransactionsService],
+  exports: [PixTransactionsService],
 })
-export class PixTransactionsModule { }
+export class PixTransactionsModule {}

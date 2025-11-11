@@ -1,16 +1,16 @@
 // src/auth/dto/me.dto.ts
-import { ApiProperty } from "@nestjs/swagger";
+import { ApiProperty } from '@nestjs/swagger';
 
 export class MeDto {
-    @ApiProperty()
-    id: string;
+  @ApiProperty()
+  id: string;
 
-    @ApiProperty()
-    email: string;
+  @ApiProperty()
+  email: string;
 
-    @ApiProperty({ required: false, nullable: true })
-    name?: string | null;
+  @ApiProperty({ required: false, nullable: true })
+  name?: string | null;
 
-    @ApiProperty({ required: false, nullable: true })
-    role?: string | null;
+  @ApiProperty({ required: false, nullable: true })
+  role?: string | null;
 }

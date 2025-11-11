@@ -6,13 +6,13 @@ import { HttpModule } from '@nestjs/axios';
 import { BrxAuthModule } from '../brx/brx-auth.module';
 
 @Module({
-    imports: [
-        PrismaModule,
-        HttpModule,
-        BrxAuthModule, // módulo correto (não o serviço)
-    ],
-    controllers: [AccreditationController],
-    providers: [AccreditationService],
-    exports: [AccreditationService],
+  imports: [
+    PrismaModule,
+    HttpModule,
+    BrxAuthModule, // módulo correto (não o serviço)
+  ],
+  controllers: [AccreditationController],
+  providers: [AccreditationService],
+  exports: [AccreditationService],
 })
-export class AccreditationModule { }
+export class AccreditationModule {}

@@ -1,12 +1,12 @@
 // src/mail/templates/password-reset.html.ts
 export function passwordResetHtml(params: {
-    resetUrl: string;
-    productName?: string; // ex.: "Otsem Bank"
+  resetUrl: string;
+  productName?: string; // ex.: "Otsem Bank"
 }): string {
-    const { resetUrl, productName = "Otsem Bank" } = params;
-    const year = new Date().getFullYear();
+  const { resetUrl, productName = 'Otsem Bank' } = params;
+  const year = new Date().getFullYear();
 
-    return `
+  return `
 <!doctype html>
 <html lang="pt-BR">
 <head>
