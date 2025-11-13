@@ -4,269 +4,16 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL") // <- tem que estar exatamente assim
+  url      = env("DATABASE_URL")
 }
+
+// ==================== ENUMS ====================
 
 enum Role {
   ADMIN
   CUSTOMER
 }
 
-// ------------------------
-// AUTH (seu model atual)
-// ------------------------
-model User {
-  id                 String               @id @default(cuid())
-  email              String               @unique
-  passwordHash       String               @map("password")
-  name               String?
-  role               Role                 @default(ADMIN)
-  isActive           Boolean              @default(true)
-  passwordChangedAt  DateTime?
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
-  PasswordResetToken PasswordResetToken[]
-
-  // opcional: se quiser saber quais customers estão ligados a este login
-  customers Customer[]
-}
-
-enum TxType {
-  CREDIT
-  DEBIT
-}
-
-model Customer {
-  id            String        @id @default(uuid())
-  type          CustomerType
-  accountStatus AccountStatus @default(not_requested)
-
-  // vínculo opcional com o usuário de autenticação
-  userId   String? @unique
-  authUser User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  // integração externa
-  externalClientId String? @unique
-  externalAccredId String? @unique
-
-  // integração/negócio base
-  identifier String // Identifier (integrador)
-  productId  Int // ProductId (ex.: 1 = digital-account)
-  email      String
-  phone      String?
-
-  // PF
-  name       String? // Person.Name
-  socialName String? // Person.SocialName
-  cpf        String?   @unique // <— torne único
-  birthday   DateTime? // Person.Birthday
-  genderId   Int? // 1,2 (opcional)
-
-  // PJ
-  legalName String? // Company.LegalName
-  tradeName String? // Company.TradeName
-  cnpj      String? @unique
-
-  // relações
-  address         Address?
-  pixLimits       PixLimits?
-  ownerships      Ownership[]
-  PixKey          PixKey[]
-  CardTransaction CardTransaction[]
-  Chargeback      Chargeback[]
-
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  Refund    Refund[]
-  Payment   Payment[]
-  Deposit   Deposit[]
-  Wallet    Wallet[]
-
-  account Account?
-
-  @@index([type, accountStatus])
-  @@index([cpf])
-  @@index([cnpj])
-  @@index([email])
-}
-
-model Refund {
-  id          String    @id @default(uuid())
-  endToEnd    String    @unique
-  // Demais campos a partir do endpoint "Consulta de Devolução" (não fornecidos na amostra).
-  status      String?
-  statusId    Int?
-  valueCents  Int?
-  refundDate  DateTime?
-  bankPayload Json
-  customerId  String?
-  customer    Customer? @relation(fields: [customerId], references: [id])
-  createdAt   DateTime  @default(now())
-
-  @@index([customerId])
-}
-
-model Payment {
-  id                  String    @id @default(uuid())
-  endToEnd            String    @unique
-  identifier          String? // enviado pelo integrador quando solicita o pagamento
-  paymentValue        Int // em centavos
-  paymentDate         DateTime
-  receiverName        String?
-  receiverTaxNumber   String?
-  receiverBankCode    String?
-  receiverBankBranch  String?
-  receiverBankAccount String?
-  receiverISPB        String?
-  receiverPixKey      String?
-  payerName           String?
-  payerTaxNumber      String?
-  payerBankCode       String?
-  payerBankBranch     String?
-  payerBankAccount    String?
-  payerISPB           String?
-  status              String?
-  statusId            Int?
-  errorMessage        String?
-  bankPayload         Json
-  customerId          String?
-  customer            Customer? @relation(fields: [customerId], references: [id])
-  createdAt           DateTime  @default(now())
-
-  @@index([customerId])
-}
-
-model Deposit {
-  id                       String    @id @default(uuid())
-  endToEnd                 String    @unique
-  accountHolderId          String? // Accou(n)tHolderId (aceitamos ambos nos webhooks)
-  receiptValue             Int // em centavos (BRL)
-  receiptDate              DateTime
-  payerName                String?
-  payerTaxNumber           String? // CPF/CNPJ do pagador
-  payerBankCode            String?
-  payerBankBranch          String?
-  payerBankAccount         String?
-  payerBankAccountDigit    String?
-  payerISPB                String?
-  payerMessage             String?
-  receiverName             String?
-  receiverTaxNumber        String?
-  receiverBankCode         String?
-  receiverBankBranch       String?
-  receiverBankAccount      String?
-  receiverBankAccountDigit String?
-  receiverISPB             String?
-  receiverPixKey           String?
-  status                   String? // "confirmed", etc.
-  statusId                 Int?
-  bankPayload              Json // payload bruto como veio
-  customerId               String?
-  customer                 Customer? @relation(fields: [customerId], references: [id])
-  createdAt                DateTime  @default(now())
-
-  @@index([customerId])
-}
-
-model Wallet {
-  id         String   @id @default(cuid())
-  customerId String
-  currency   String // "BRL"
-  balance    Decimal  @db.Decimal(18, 2)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  customer    Customer      @relation(fields: [customerId], references: [id])
-  Transaction Transaction[]
-  Payout      Payout[]
-
-  @@unique([customerId, currency])
-}
-
-model PixWebhookEvent {
-  id          String    @id @default(cuid())
-  provider    String // "mtbank"
-  eventType   String // "cash-in"
-  signature   String?
-  endToEndId  String?
-  raw         Json
-  receivedAt  DateTime  @default(now())
-  processedAt DateTime?
-  error       String?
-  // opcionalmente: @@unique([provider, endToEndId])
-}
-
-enum PayoutStatus {
-  PENDING
-  PROCESSING
-  CONFIRMED
-  FAILED
-  CANCELED
-}
-
-model Payout {
-  id           String       @id @default(cuid())
-  walletId     String
-  amount       Decimal      @db.Decimal(18, 2)
-  status       PayoutStatus @default(PENDING)
-  requestId    String       @unique // idempotência da requisição do seu sistema
-  endToEndId   String?      @unique // quando o banco retornar
-  bankRequest  Json? // request enviado ao banco
-  bankResponse Json? // resposta imediata
-  error        String?
-
-  // Beneficiário (quem recebe)
-  beneficiaryName      String
-  beneficiaryTaxNumber String
-  pixKey               String
-  pixKeyType           String // CPF/CNPJ/EMAIL/CELULAR/CHAVE_ALEATORIA
-  // opcional: dados bancários se o banco exigir
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  wallet    Wallet       @relation(fields: [walletId], references: [id])
-  debitTx   Transaction? @relation(fields: [debitTxId], references: [id])
-  debitTxId String?
-
-  @@index([walletId, status, createdAt])
-}
-
-model WebhookEvent {
-  id               String   @id @default(uuid())
-  kind             String // 'cash-in' | 'cash-out' | 'refunds'
-  endToEnd         String?
-  receivedAt       DateTime @default(now())
-  valid            Boolean? // se o payload passou no schema
-  validationErrors Json? // <—
-  note             String? // opcional se quiser
-  rawBody          Json
-  headers          Json
-  ip               String?
-  signatureOk      Boolean? // caso a BRX passe a assinar; por ora, null
-
-  @@index([kind])
-  @@index([endToEnd])
-}
-
-// prisma/schema.prisma
-model PasswordResetToken {
-  id        String    @id @default(cuid())
-  userId    String
-  tokenHash String // hash do token (nunca salve o token puro)
-  expiresAt DateTime
-  usedAt    DateTime?
-  createdAt DateTime  @default(now())
-
-  user User @relation(fields: [userId], references: [id])
-
-  @@index([userId])
-  @@index([tokenHash])
-}
-
-// ------------------------
-// KYC / Customer domain
-// ------------------------
 enum CustomerType {
   PF
   PJ
@@ -278,6 +25,181 @@ enum AccountStatus {
   approved
   rejected
   in_review
+}
+
+enum PixKeyType {
+  CPF
+  CNPJ
+  EMAIL
+  PHONE
+  RANDOM
+}
+
+enum PixKeyStatus {
+  PENDING
+  ACTIVE
+  BLOCKED
+  DELETED
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  CONFIRMED
+  FAILED
+  CANCELED
+}
+
+enum DepositStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+  REFUNDED
+}
+
+enum PayoutStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELED
+}
+
+enum CardTransactionStatus {
+  PENDING
+  AUTHORIZED
+  CAPTURED
+  CANCELED
+  REFUNDED
+  FAILED
+}
+
+enum CardTransactionType {
+  DEBIT
+  CREDIT
+}
+
+enum ChargebackStatus {
+  OPENED
+  UNDER_ANALYSIS
+  WON
+  LOST
+  CANCELED
+}
+
+enum ChargebackReason {
+  FRAUD
+  PRODUCT_NOT_RECEIVED
+  PRODUCT_DEFECTIVE
+  DUPLICATE_CHARGE
+  CANCELED_RECURRING
+  OTHER
+}
+
+enum TransactionType {
+  DEPOSIT
+  WITHDRAW
+  TRANSFER_IN
+  TRANSFER_OUT
+  PIX_IN
+  PIX_OUT
+  FEE
+  REVERSAL
+}
+
+enum TransactionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REVERSED
+  CANCELED
+}
+
+// ==================== AUTH ====================
+
+model User {
+  id                String    @id @default(cuid())
+  email             String    @unique
+  passwordHash      String    @map("password")
+  name              String?
+  role              Role      @default(ADMIN)
+  isActive          Boolean   @default(true)
+  passwordChangedAt DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  customers           Customer[]
+  passwordResetTokens PasswordResetToken[]
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+}
+
+// ==================== CUSTOMER ====================
+
+model Customer {
+  id            String        @id @default(uuid())
+  type          CustomerType
+  accountStatus AccountStatus @default(not_requested)
+
+  // Auth
+  userId   String? @unique
+  authUser User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  // Integração externa
+  externalClientId String? @unique
+  externalAccredId String? @unique
+
+  // Base
+  identifier String
+  productId  Int
+  email      String
+  phone      String?
+
+  // PF
+  name       String?
+  socialName String?
+  cpf        String?   @unique
+  birthday   DateTime?
+  genderId   Int?
+
+  // PJ
+  legalName String?
+  tradeName String?
+  cnpj      String? @unique
+
+  // Relações
+  address          Address?
+  pixLimits        PixLimits?
+  account          Account?
+  ownerships       Ownership[]
+  pixKeys          PixKey[]
+  cardTransactions CardTransaction[]
+  chargebacks      Chargeback[]
+  refunds          Refund[]
+  payments         Payment[]
+  deposits         Deposit[]
+  wallets          Wallet[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type, accountStatus])
+  @@index([cpf])
+  @@index([cnpj])
+  @@index([email])
 }
 
 model Address {
@@ -300,10 +222,10 @@ model Address {
 model PixLimits {
   id             String  @id @default(uuid())
   customerId     String  @unique
-  singleTransfer Decimal
-  daytime        Decimal
-  nighttime      Decimal
-  monthly        Decimal
+  singleTransfer Decimal @db.Decimal(15, 2)
+  daytime        Decimal @db.Decimal(15, 2)
+  nighttime      Decimal @db.Decimal(15, 2)
+  monthly        Decimal @db.Decimal(15, 2)
   serviceId      Int
 
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
@@ -322,21 +244,6 @@ model Ownership {
   @@index([customerId])
 }
 
-enum PixKeyType {
-  CPF
-  CNPJ
-  EMAIL
-  PHONE
-  RANDOM
-}
-
-enum PixKeyStatus {
-  PENDING
-  ACTIVE
-  BLOCKED
-  DELETED
-}
-
 model PixKey {
   id         String       @id @default(uuid())
   customerId String
@@ -344,9 +251,8 @@ model PixKey {
   keyValue   String
   status     PixKeyStatus @default(PENDING)
 
-  // Dados externos do banco
   externalKeyId String? @unique
-  accountType   String? // CACC (conta corrente), SVGS (poupança)
+  accountType   String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -358,191 +264,184 @@ model PixKey {
   @@index([keyValue])
 }
 
-enum CardTransactionStatus {
-  PENDING
-  AUTHORIZED
-  CAPTURED
-  CANCELED
-  REFUNDED
-  FAILED
-}
+// ==================== TRANSACTIONS ====================
 
-enum CardTransactionType {
-  DEBIT
-  CREDIT
-}
+model Payment {
+  id           String  @id @default(uuid())
+  endToEnd     String  @unique
+  identifier   String?
+  paymentValue Int
 
-model CardTransaction {
-  id         String @id @default(uuid())
-  customerId String
+  receiverName      String?
+  receiverTaxNumber String?
+  receiverPixKey    String?
+  receiverBankCode  String?
 
-  // Dados da transação
-  amount   Int // centavos
-  currency String                @default("BRL")
-  type     CardTransactionType
-  status   CardTransactionStatus @default(PENDING)
+  payerName      String?
+  payerTaxNumber String?
 
-  // Dados do cartão (últimos 4 dígitos)
-  cardLast4 String
-  cardBrand String // VISA, MASTERCARD, ELO
+  paymentDate  DateTime
+  status       PaymentStatus @default(PENDING)
+  errorMessage String?       @db.Text
 
-  // Autorização
-  authorizationCode String?
-  nsu               String? // Número Sequencial Único
-  tid               String? // Terminal ID
+  bankPayload Json
+  externalId  String? @unique
 
-  // Descrição
-  merchantName     String?
-  merchantCategory String?
-  description      String?
-
-  // Chargeback
-  hasChargeback Boolean @default(false)
-  chargebackId  String?
-
-  // Auditoria
-  externalTxId String? @unique
-  bankPayload  Json?
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  customer   Customer?   @relation(fields: [customerId], references: [id])
-  chargeback Chargeback?
+  @@index([customerId])
+  @@index([status, createdAt])
+}
 
-  @@index([customerId, status, createdAt])
+model Deposit {
+  id           String   @id @default(uuid())
+  endToEnd     String   @unique
+  receiptValue Int
+  receiptDate  DateTime
+
+  payerName      String?
+  payerTaxNumber String?
+  payerMessage   String? @db.Text
+
+  receiverPixKey String?
+
+  status       DepositStatus @default(PENDING)
+  errorMessage String?       @db.Text
+
+  bankPayload Json
+  externalId  String? @unique
+
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([status, createdAt])
+  @@index([endToEnd])
+}
+
+model Refund {
+  id          String    @id @default(uuid())
+  endToEnd    String    @unique
+  status      String?
+  statusId    Int?
+  valueCents  Int?
+  refundDate  DateTime?
+  bankPayload Json
+
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([customerId])
+}
+
+// ==================== WALLET & PAYOUT ====================
+
+model Wallet {
+  id         String  @id @default(cuid())
+  customerId String
+  currency   String  @default("BRL")
+  balance    Decimal @db.Decimal(18, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  payouts  Payout[]
+
+  @@unique([customerId, currency])
+  @@index([customerId])
+}
+
+model Payout {
+  id         String       @id @default(cuid())
+  walletId   String
+  amount     Decimal      @db.Decimal(18, 2)
+  status     PayoutStatus @default(PENDING)
+  requestId  String       @unique
+  endToEndId String?      @unique
+
+  bankRequest  Json?
+  bankResponse Json?
+  error        String? @db.Text
+
+  beneficiaryName      String
+  beneficiaryTaxNumber String
+  pixKey               String
+  pixKeyType           String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  wallet    Wallet       @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  debitTx   Transaction? @relation(fields: [debitTxId], references: [id], onDelete: SetNull)
+  debitTxId String?      @unique
+
+  @@index([walletId, createdAt])
   @@index([status])
 }
 
-enum ChargebackStatus {
-  OPENED
-  UNDER_ANALYSIS
-  WON
-  LOST
-  CANCELED
-}
+// ==================== ACCOUNT & TRANSACTIONS ====================
 
-enum ChargebackReason {
-  FRAUD
-  PRODUCT_NOT_RECEIVED
-  PRODUCT_DEFECTIVE
-  DUPLICATE_CHARGE
-  CANCELED_RECURRING
-  OTHER
-}
-
-model Chargeback {
-  id                String @id @default(uuid())
-  cardTransactionId String @unique
-  customerId        String
-
-  // Dados do chargeback
-  amount Int // centavos
-  reason ChargebackReason
-  status ChargebackStatus @default(OPENED)
-
-  // Documentação
-  customerEvidence Json? // documentos/provas do cliente
-  bankEvidence     Json? // resposta do banco
-
-  // Datas importantes
-  openedAt   DateTime  @default(now())
-  deadlineAt DateTime? // prazo para defesa
-  resolvedAt DateTime?
-
-  // Resultado
-  favoredParty String? // MERCHANT | CUSTOMER
-  notes        String?
-
-  externalCaseId String? @unique
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  cardTransaction CardTransaction @relation(fields: [cardTransactionId], references: [id])
-  customer        Customer        @relation(fields: [customerId], references: [id])
-
-  @@index([customerId, status])
-  @@index([status, openedAt])
-}
-
-model InterWebhookLog {
-  id          String   @id @default(uuid())
-  type        String // pix_received, boleto_paid, etc
-  txid        String?
-  payload     String   @db.Text
-  processedAt DateTime
-  createdAt   DateTime @default(now())
-
-  @@map("inter_webhook_logs")
-}
-
-// Conta do Customer (saldo interno OTSEM)
 model Account {
-  id         String   @id @default(uuid())
-  customerId String   @unique
-  customer   Customer @relation(fields: [customerId], references: [id])
+  id         String  @id @default(uuid())
+  customerId String  @unique
+  balance    Decimal @default(0) @db.Decimal(15, 2)
 
-  // Saldo
-  balance Decimal @default(0) @db.Decimal(15, 2)
+  pixKey     String? @unique
+  pixKeyType String? @default("RANDOM")
 
-  // Chave Pix única do customer
-  pixKey     String? @unique // ← Adicionar (nullable inicialmente)
-  pixKeyType String? @default("RANDOM") // ← Adicionar
-
-  // Limites
   dailyLimit   Decimal @default(5000) @db.Decimal(15, 2)
   monthlyLimit Decimal @default(20000) @db.Decimal(15, 2)
 
-  // Status
   status        String  @default("active")
   blockedAmount Decimal @default(0) @db.Decimal(15, 2)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  customer     Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
   transactions Transaction[]
 
+  @@index([customerId])
   @@map("accounts")
 }
 
-// Transações (depósitos, saques, transferências)
 model Transaction {
-  id        String  @id @default(uuid())
+  id        String @id @default(uuid())
   accountId String
-  account   Account @relation(fields: [accountId], references: [id])
 
-  // Tipo
-  type String // DEPOSIT, WITHDRAW, TRANSFER_IN, TRANSFER_OUT, PIX_IN, PIX_OUT
+  type   TransactionType
+  status TransactionStatus
 
-  // Valores
   amount        Decimal @db.Decimal(15, 2)
   balanceBefore Decimal @db.Decimal(15, 2)
   balanceAfter  Decimal @db.Decimal(15, 2)
 
-  // Status
-  status String // PENDING, PROCESSING, COMPLETED, FAILED, REVERSED
-
-  // Metadados
   description String?
-  metadata    Json? // Dados extras (pagador, E2E ID, etc)
+  metadata    Json?
 
-  // Integração externa (Inter)
-  externalId   String? @unique // TxID do Inter, E2E ID
+  externalId   String? @unique
   externalData Json?
 
-  // Contrapartida (para transferências entre customers)
-  relatedTxId   String?      @unique
-  relatedTx     Transaction? @relation("RelatedTransactions", fields: [relatedTxId], references: [id])
-  counterpartTx Transaction? @relation("RelatedTransactions")
+  relatedTxId String? @unique
 
-  // Datas
   createdAt   DateTime  @default(now())
   processedAt DateTime?
   completedAt DateTime?
-  wallet      Wallet?   @relation(fields: [walletId], references: [id])
-  walletId    String?
-  payouts     Payout[]
+
+  account       Account      @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  relatedTx     Transaction? @relation("RelatedTransactions", fields: [relatedTxId], references: [id], onDelete: SetNull)
+  counterpartTx Transaction? @relation("RelatedTransactions")
+  payouts       Payout[]
 
   @@index([accountId, createdAt])
   @@index([type, status])
@@ -550,17 +449,93 @@ model Transaction {
   @@map("transactions")
 }
 
-// Logs de Webhook (para auditoria)
+// ==================== CARD TRANSACTIONS ====================
+
+model CardTransaction {
+  id         String @id @default(uuid())
+  customerId String
+
+  amount   Int
+  currency String                @default("BRL")
+  type     CardTransactionType
+  status   CardTransactionStatus @default(PENDING)
+
+  cardLast4 String
+  cardBrand String
+
+  authorizationCode String?
+  nsu               String?
+  tid               String?
+
+  merchantName     String?
+  merchantCategory String?
+  description      String?
+
+  hasChargeback Boolean @default(false)
+  chargebackId  String? @unique
+
+  externalTxId String? @unique
+  bankPayload  Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  customer   Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  chargeback Chargeback?
+
+  @@index([customerId, status, createdAt])
+  @@index([status])
+}
+
+model Chargeback {
+  id                String @id @default(uuid())
+  cardTransactionId String @unique
+  customerId        String
+
+  amount Int
+  reason ChargebackReason
+  status ChargebackStatus @default(OPENED)
+
+  customerEvidence Json?
+  bankEvidence     Json?
+
+  openedAt   DateTime  @default(now())
+  deadlineAt DateTime?
+  resolvedAt DateTime?
+
+  favoredParty String?
+  notes        String? @db.Text
+
+  externalCaseId String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cardTransaction CardTransaction @relation(fields: [cardTransactionId], references: [id], onDelete: Cascade)
+  customer        Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, status])
+  @@index([status, openedAt])
+}
+
+// ==================== WEBHOOK LOGS ====================
+
 model WebhookLog {
-  id          String    @id @default(uuid())
-  source      String // INTER, BRX, etc
-  type        String // pix_received, pix_sent, etc
-  payload     Json
-  processed   Boolean   @default(false)
-  error       String?   @db.Text
+  id        String  @id @default(uuid())
+  source    String
+  type      String
+  payload   Json
+  processed Boolean @default(false)
+  error     String? @db.Text
+
+  endToEnd String?
+  txid     String?
+
   createdAt   DateTime  @default(now())
   processedAt DateTime?
 
   @@index([source, type, createdAt])
+  @@index([endToEnd])
+  @@index([processed])
   @@map("webhook_logs")
 }

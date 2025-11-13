@@ -1,10 +1,9 @@
 // src/brx-webhooks/brx-webhooks.service.ts
-import { Injectable } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import { Injectable, Logger } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import type { Request } from 'express';
-
-const prisma = new PrismaClient();
 
 /* 🧩 Funções auxiliares para normalizar tipos */
 const toNumber = (v: unknown): number | undefined => {
@@ -31,7 +30,7 @@ const baseIdSchema = z.object({
   EndToEndId: z.string().min(3).optional(),
   EndToEndIdentifier: z.string().min(3).optional(),
   AccountHolderId: z.string().uuid().optional(),
-  AccoutHolderId: z.string().uuid().optional(),
+  AccoutHolderId: z.string().uuid().optional(), // typo da BRX
 });
 
 const cashInSchema = baseIdSchema.extend({
@@ -91,14 +90,21 @@ const refundSchema = baseIdSchema
     RefundDate: z.preprocess(toDate, z.string().optional()).optional(),
     Status: z.string().optional(),
     StatusId: z.number().optional(),
+    PayerTaxNumber: z.string().optional(),
+    ReceiverTaxNumber: z.string().optional(),
   })
   .passthrough();
 
 @Injectable()
 export class BrxWebhooksService {
+  private readonly logger = new Logger(BrxWebhooksService.name);
+
+  constructor(private readonly prisma: PrismaService) { }
+
   /* ⚙️ Se a BRX passar a assinar, validar aqui */
   private checkSignature(_req: Request, _headers: any): boolean | null {
-    return null; // ainda não implementado pela BRX
+    // TODO: Implementar validação de assinatura BRX quando disponível
+    return null;
   }
 
   private getEndToEnd(obj: any): string | undefined {
@@ -109,7 +115,7 @@ export class BrxWebhooksService {
     return obj.AccountHolderId ?? obj.AccoutHolderId;
   }
 
-  private async resolveCustomerId(taxNumber?: string) {
+  private async resolveCustomerId(taxNumber?: string): Promise<string | null> {
     if (!taxNumber) return null;
 
     const clean = taxNumber.replace(/\D/g, '');
@@ -118,38 +124,37 @@ export class BrxWebhooksService {
 
     if (clean.length === 11) {
       // CPF
-      found = await prisma.customer.findFirst({ where: { cpf: clean } });
+      found = await this.prisma.customer.findFirst({ where: { cpf: clean } });
     } else if (clean.length === 14) {
       // CNPJ
-      found = await prisma.customer.findFirst({ where: { cnpj: clean } });
+      found = await this.prisma.customer.findFirst({ where: { cnpj: clean } });
     } else {
-      // Documento inválido
+      this.logger.warn(`⚠️ Documento inválido: ${clean}`);
       return null;
     }
 
     return found?.id ?? null;
   }
 
-  /* 💰 CASH-IN */
-  async handleCashIn(req: Request, headers: any) {
+  /* 💰 CASH-IN (PIX Recebido) */
+  async handleCashIn(req: Request, headers: any): Promise<void> {
     const body = req.body;
     const parsed = cashInSchema.safeParse(body);
 
     if (!parsed.success) {
-      console.error(
-        '❌ [Webhook] Falha no parse CASH-IN:',
+      this.logger.error(
+        '❌ [Webhook BRX] Falha no parse CASH-IN:',
         parsed.error.flatten().fieldErrors,
       );
-      await prisma.webhookEvent.create({
+
+      await this.prisma.webhookLog.create({
         data: {
-          kind: 'cash-in',
-          endToEnd: this.getEndToEnd(body) ?? null,
-          rawBody: body,
-          headers,
-          ip: req.socket.remoteAddress ?? undefined,
-          signatureOk: this.checkSignature(req, headers),
-          valid: false,
-          validationErrors: parsed.error.flatten().fieldErrors,
+          source: 'BRX',
+          type: 'cash_in',
+          payload: body as Prisma.InputJsonValue,
+          endToEnd: this.getEndToEnd(body) ?? undefined,
+          processed: false,
+          error: JSON.stringify(parsed.error.flatten().fieldErrors),
         },
       });
       return;
@@ -157,88 +162,84 @@ export class BrxWebhooksService {
 
     const data = parsed.data;
     const endToEnd = this.getEndToEnd(data);
-    if (!endToEnd) return;
 
-    const existing = await prisma.deposit.findUnique({ where: { endToEnd } });
+    if (!endToEnd) {
+      this.logger.warn('⚠️ CASH-IN sem EndToEnd, ignorando');
+      return;
+    }
+
+    // ✅ Verificar duplicação
+    const existing = await this.prisma.deposit.findUnique({ where: { endToEnd } });
     if (existing) {
-      await prisma.webhookEvent.create({
+      this.logger.warn(`⚠️ CASH-IN duplicado: ${endToEnd}`);
+
+      await this.prisma.webhookLog.create({
         data: {
-          kind: 'cash-in',
+          source: 'BRX',
+          type: 'cash_in',
+          payload: body as Prisma.InputJsonValue,
           endToEnd,
-          rawBody: body,
-          headers,
-          ip: req.socket.remoteAddress ?? undefined,
-          valid: true,
-          note: 'duplicate_ignored',
+          processed: true,
+          error: 'Duplicado - ignorado',
         },
       });
       return;
     }
 
-    const accountHolderId = this.getAccountHolderId(data);
     const customerId = await this.resolveCustomerId(data.PayerTaxNumber);
 
-    await prisma.$transaction([
-      prisma.deposit.create({
+    // ✅ Criar deposit + log em transação
+    await this.prisma.$transaction([
+      this.prisma.deposit.create({
         data: {
           endToEnd,
-          accountHolderId: accountHolderId ?? null,
           receiptValue: Math.round(Number(data.ReceiptValue) * 100),
           receiptDate: new Date(data.ReceiptDate),
-          payerName: data.PayerName,
-          payerTaxNumber: data.PayerTaxNumber?.replace(/\D/g, ''),
-          payerBankCode: data.PayerBankCode,
-          payerBankBranch: data.PayerBankBranch,
-          payerBankAccount: data.PayerBankAccount,
-          payerBankAccountDigit: data.PayerBankAccountDigit,
-          payerISPB: data.PayerISPB,
-          payerMessage: data.PayerMessage,
-          receiverName: data.ReceiverName,
-          receiverTaxNumber: data.ReceiverTaxNumber?.replace(/\D/g, ''),
-          receiverBankCode: data.ReceiverBankCode,
-          receiverBankBranch: data.ReceiverBankBranch,
-          receiverBankAccount: data.ReceiverBankAccount,
-          receiverBankAccountDigit: data.ReceiverBankAccountDigit,
-          receiverISPB: data.ReceiverISPB,
-          receiverPixKey: data.ReceiverPixKey,
-          status: data.Status,
-          statusId: data.StatusId,
-          bankPayload: body,
-          customerId,
+
+          payerName: data.PayerName ?? undefined,
+          payerTaxNumber: data.PayerTaxNumber?.replace(/\D/g, '') ?? undefined,
+          payerMessage: data.PayerMessage ?? undefined,
+
+          receiverPixKey: data.ReceiverPixKey ?? undefined,
+
+          status: 'CONFIRMED',
+          bankPayload: body as Prisma.InputJsonValue,
+          customerId: customerId ?? undefined,
         },
       }),
-      prisma.webhookEvent.create({
+      this.prisma.webhookLog.create({
         data: {
-          kind: 'cash-in',
+          source: 'BRX',
+          type: 'cash_in',
+          payload: body as Prisma.InputJsonValue,
           endToEnd,
-          rawBody: body,
-          headers,
-          ip: req.socket.remoteAddress ?? undefined,
-          valid: true,
+          processed: true,
         },
       }),
     ]);
+
+    this.logger.log(`✅ CASH-IN processado: ${endToEnd} | Customer: ${customerId || 'N/A'}`);
   }
 
-  /* 💸 CASH-OUT */
-  async handleCashOut(req: Request, headers: any) {
+  /* 💸 CASH-OUT (PIX Enviado) */
+  async handleCashOut(req: Request, headers: any): Promise<void> {
     const body = req.body;
     const parsed = cashOutSchema.safeParse(body);
 
     if (!parsed.success) {
-      console.error(
-        '❌ [Webhook] Falha no parse CASH-OUT:',
+      this.logger.error(
+        '❌ [Webhook BRX] Falha no parse CASH-OUT:',
         parsed.error.flatten().fieldErrors,
       );
-      await prisma.webhookEvent.create({
+
+      await this.prisma.webhookLog.create({
         data: {
-          kind: 'cash-out',
-          endToEnd: this.getEndToEnd(body) ?? null,
-          rawBody: body,
-          headers,
-          ip: req.socket.remoteAddress ?? undefined,
-          valid: false,
-          validationErrors: parsed.error.flatten().fieldErrors,
+          source: 'BRX',
+          type: 'cash_out',
+          payload: body as Prisma.InputJsonValue,
+          endToEnd: this.getEndToEnd(body) ?? undefined,
+          processed: false,
+          error: JSON.stringify(parsed.error.flatten().fieldErrors),
         },
       });
       return;
@@ -246,19 +247,25 @@ export class BrxWebhooksService {
 
     const data = parsed.data;
     const endToEnd = this.getEndToEnd(data);
-    if (!endToEnd) return;
 
-    const existing = await prisma.payment.findUnique({ where: { endToEnd } });
+    if (!endToEnd) {
+      this.logger.warn('⚠️ CASH-OUT sem EndToEnd, ignorando');
+      return;
+    }
+
+    // ✅ Verificar duplicação
+    const existing = await this.prisma.payment.findUnique({ where: { endToEnd } });
     if (existing) {
-      await prisma.webhookEvent.create({
+      this.logger.warn(`⚠️ CASH-OUT duplicado: ${endToEnd}`);
+
+      await this.prisma.webhookLog.create({
         data: {
-          kind: 'cash-out',
+          source: 'BRX',
+          type: 'cash_out',
+          payload: body as Prisma.InputJsonValue,
           endToEnd,
-          rawBody: body,
-          headers,
-          ip: req.socket.remoteAddress ?? undefined,
-          valid: true,
-          note: 'duplicate_ignored',
+          processed: true,
+          error: 'Duplicado - ignorado',
         },
       });
       return;
@@ -266,65 +273,69 @@ export class BrxWebhooksService {
 
     const customerId = await this.resolveCustomerId(data.PayerTaxNumber);
 
-    await prisma.$transaction([
-      prisma.payment.create({
+    // ✅ Mapear status
+    let status: 'PENDING' | 'CONFIRMED' | 'FAILED' = 'PENDING';
+    if (data.Status === 'CONFIRMED' || data.StatusId === 1) {
+      status = 'CONFIRMED';
+    } else if (data.Status === 'FAILED' || data.StatusId === 2) {
+      status = 'FAILED';
+    }
+
+    // ✅ Criar payment + log em transação
+    await this.prisma.$transaction([
+      this.prisma.payment.create({
         data: {
           endToEnd,
-          identifier: data.Identifier ?? null,
+          identifier: data.Identifier ?? undefined,
           paymentValue: Math.round(Number(data.PaymentValue) * 100),
           paymentDate: new Date(data.PaymentDate),
-          receiverName: data.ReceiverName,
-          receiverTaxNumber: data.ReceiverTaxNumber?.replace(/\D/g, ''),
-          receiverBankCode: data.ReceiverBankCode,
-          receiverBankBranch: data.ReceiverBankBranch,
-          receiverBankAccount: data.ReceiverBankAccount,
-          receiverISPB: data.ReceiverISPB,
-          receiverPixKey: data.ReceiverPixKey,
-          payerName: data.PayerName,
-          payerTaxNumber: data.PayerTaxNumber?.replace(/\D/g, ''),
-          payerBankCode: data.PayerBankCode,
-          payerBankBranch: data.PayerBankBranch,
-          payerBankAccount: data.PayerBankAccount,
-          payerISPB: data.PayerISPB,
-          status: data.Status,
-          statusId: data.StatusId,
-          errorMessage: data.ErrorMessage ?? null,
-          bankPayload: body,
-          customerId,
+
+          receiverName: data.ReceiverName ?? undefined,
+          receiverTaxNumber: data.ReceiverTaxNumber?.replace(/\D/g, '') ?? undefined,
+          receiverPixKey: data.ReceiverPixKey ?? undefined,
+
+          payerName: data.PayerName ?? undefined,
+          payerTaxNumber: data.PayerTaxNumber?.replace(/\D/g, '') ?? undefined,
+
+          status,
+          errorMessage: data.ErrorMessage ?? undefined,
+          bankPayload: body as Prisma.InputJsonValue,
+          customerId: customerId ?? undefined,
         },
       }),
-      prisma.webhookEvent.create({
+      this.prisma.webhookLog.create({
         data: {
-          kind: 'cash-out',
+          source: 'BRX',
+          type: 'cash_out',
+          payload: body as Prisma.InputJsonValue,
           endToEnd,
-          rawBody: body,
-          headers,
-          ip: req.socket.remoteAddress ?? undefined,
-          valid: true,
+          processed: true,
         },
       }),
     ]);
+
+    this.logger.log(`✅ CASH-OUT processado: ${endToEnd} | Status: ${status}`);
   }
 
-  /* 🔁 REFUND */
-  async handleRefund(req: Request, headers: any) {
+  /* 🔁 REFUND (Devolução) */
+  async handleRefund(req: Request, headers: any): Promise<void> {
     const body = req.body;
     const parsed = refundSchema.safeParse(body);
 
     if (!parsed.success) {
-      console.error(
-        '❌ [Webhook] Falha no parse REFUND:',
+      this.logger.error(
+        '❌ [Webhook BRX] Falha no parse REFUND:',
         parsed.error.flatten().fieldErrors,
       );
-      await prisma.webhookEvent.create({
+
+      await this.prisma.webhookLog.create({
         data: {
-          kind: 'refunds',
-          endToEnd: this.getEndToEnd(body) ?? null,
-          rawBody: body,
-          headers,
-          ip: req.socket.remoteAddress ?? undefined,
-          valid: false,
-          validationErrors: parsed.error.flatten().fieldErrors,
+          source: 'BRX',
+          type: 'refund',
+          payload: body as Prisma.InputJsonValue,
+          endToEnd: this.getEndToEnd(body) ?? undefined,
+          processed: false,
+          error: JSON.stringify(parsed.error.flatten().fieldErrors),
         },
       });
       return;
@@ -332,57 +343,60 @@ export class BrxWebhooksService {
 
     const data = parsed.data;
     const endToEnd = this.getEndToEnd(data);
-    if (!endToEnd) return;
 
-    const existing = await prisma.refund.findUnique({ where: { endToEnd } });
+    if (!endToEnd) {
+      this.logger.warn('⚠️ REFUND sem EndToEnd, ignorando');
+      return;
+    }
+
+    // ✅ Verificar duplicação
+    const existing = await this.prisma.refund.findUnique({ where: { endToEnd } });
     if (existing) {
-      await prisma.webhookEvent.create({
+      this.logger.warn(`⚠️ REFUND duplicado: ${endToEnd}`);
+
+      await this.prisma.webhookLog.create({
         data: {
-          kind: 'refunds',
+          source: 'BRX',
+          type: 'refund',
+          payload: body as Prisma.InputJsonValue,
           endToEnd,
-          rawBody: body,
-          headers,
-          ip: req.socket.remoteAddress ?? undefined,
-          valid: true,
-          note: 'duplicate_ignored',
+          processed: true,
+          error: 'Duplicado - ignorado',
         },
       });
       return;
     }
 
-    let customerId: string | null = null;
-    const tax =
-      typeof data.PayerTaxNumber === 'string'
-        ? data.PayerTaxNumber
-        : typeof data.ReceiverTaxNumber === 'string'
-          ? data.ReceiverTaxNumber
-          : undefined;
-    if (tax) customerId = await this.resolveCustomerId(tax);
+    // ✅ Resolver customer (tentar por pagador ou recebedor)
+    const taxNumber = data.PayerTaxNumber ?? data.ReceiverTaxNumber;
+    const customerId = await this.resolveCustomerId(taxNumber);
 
-    await prisma.$transaction([
-      prisma.refund.create({
+    // ✅ Criar refund + log em transação
+    await this.prisma.$transaction([
+      this.prisma.refund.create({
         data: {
           endToEnd,
-          status: data.Status ?? null,
-          statusId: data.StatusId ?? null,
+          status: data.Status ?? undefined,
+          statusId: data.StatusId ?? undefined,
           valueCents: data.RefundValue
             ? Math.round(Number(data.RefundValue) * 100)
-            : null,
-          refundDate: data.RefundDate ? new Date(data.RefundDate) : null,
-          bankPayload: body,
-          customerId,
+            : undefined,
+          refundDate: data.RefundDate ? new Date(data.RefundDate) : undefined,
+          bankPayload: body as Prisma.InputJsonValue,
+          customerId: customerId ?? undefined,
         },
       }),
-      prisma.webhookEvent.create({
+      this.prisma.webhookLog.create({
         data: {
-          kind: 'refunds',
+          source: 'BRX',
+          type: 'refund',
+          payload: body as Prisma.InputJsonValue,
           endToEnd,
-          rawBody: body,
-          headers,
-          ip: req.socket.remoteAddress ?? undefined,
-          valid: true,
+          processed: true,
         },
       }),
     ]);
+
+    this.logger.log(`✅ REFUND processado: ${endToEnd}`);
   }
 }

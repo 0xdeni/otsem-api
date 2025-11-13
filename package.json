@@ -23,7 +23,9 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:seed": "ts-node --transpile-only prisma/seed.ts"
+    "prisma:seed": "ts-node --transpile-only prisma/seed.ts",
+    "setup:webhooks": "ts-node scripts/setup-webhooks.ts",
+    "webhook:test": "curl -X POST http://localhost:3333/inter/webhooks/test/pix"
   },
   "dependencies": {
     "@nestjs/axios": "^4.0.1",

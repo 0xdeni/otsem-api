@@ -1,7 +1,7 @@
 // src/statements/statements.service.ts
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { Prisma } from '@prisma/client';
+import { Prisma, TransactionType, TransactionStatus } from '@prisma/client';
 import { StatementQueryDto } from './dto/statement-query.dto';
 
 @Injectable()
@@ -11,7 +11,6 @@ export class StatementsService {
   constructor(private readonly prisma: PrismaService) { }
 
   private async resolveAccountByAccountHolderId(accountHolderId: string) {
-    // accountHolderId == externalClientId do customer
     const customer = await this.prisma.customer.findFirst({
       where: { externalClientId: accountHolderId },
       select: { id: true },
@@ -28,9 +27,14 @@ export class StatementsService {
     return account;
   }
 
-  private isCredit(type: string): boolean {
-    // Ajuste conforme os tipos válidos no seu enum
-    return ['PIX_IN', 'TRANSFER_IN', 'ADJUST_CREDIT', 'DEPOSIT_IN'].includes(type);
+  private isCredit(type: TransactionType): boolean {
+    const creditTypes: TransactionType[] = [
+      'PIX_IN',
+      'TRANSFER_IN',
+      'DEPOSIT',
+      'REVERSAL', // se for reversão de débito
+    ];
+    return creditTypes.includes(type);
   }
 
   /**
@@ -119,8 +123,11 @@ export class StatementsService {
     let totalCredits = new Prisma.Decimal(0);
     let totalDebits = new Prisma.Decimal(0);
     for (const t of transactions) {
-      if (this.isCredit(t.type)) totalCredits = totalCredits.add(t.amount);
-      else totalDebits = totalDebits.add(t.amount);
+      if (this.isCredit(t.type)) {
+        totalCredits = totalCredits.add(t.amount);
+      } else {
+        totalDebits = totalDebits.add(t.amount);
+      }
     }
 
     const closingBalance =
@@ -190,14 +197,26 @@ export class StatementsService {
     });
     const openingBalance = lastBefore?.balanceAfter ?? new Prisma.Decimal(0);
 
-    // Transações do período
+    // ✅ Validar e converter tipos
+    const whereClause: Prisma.TransactionWhereInput = {
+      accountId: account.id,
+      createdAt: { gte: from, lte: to },
+    };
+
+    // ✅ Validar enum TransactionType
+    if (query.type) {
+      const validType = this.validateTransactionType(query.type);
+      whereClause.type = validType;
+    }
+
+    // ✅ Validar enum TransactionStatus
+    if (query.status) {
+      const validStatus = this.validateTransactionStatus(query.status);
+      whereClause.status = validStatus;
+    }
+
     const transactions = await this.prisma.transaction.findMany({
-      where: {
-        accountId: account.id,
-        createdAt: { gte: from, lte: to },
-        ...(query.type ? { type: query.type } : {}),
-        ...(query.status ? { status: query.status } : {}),
-      },
+      where: whereClause,
       orderBy: { createdAt: 'asc' },
       take: limit,
       select: {
@@ -218,8 +237,11 @@ export class StatementsService {
     let totalCredits = new Prisma.Decimal(0);
     let totalDebits = new Prisma.Decimal(0);
     for (const t of transactions) {
-      if (this.isCredit(t.type)) totalCredits = totalCredits.add(t.amount);
-      else totalDebits = totalDebits.add(t.amount);
+      if (this.isCredit(t.type)) {
+        totalCredits = totalCredits.add(t.amount);
+      } else {
+        totalDebits = totalDebits.add(t.amount);
+      }
     }
 
     const closingBalance =
@@ -252,5 +274,27 @@ export class StatementsService {
       count: items.length,
       items,
     };
+  }
+
+  // ==================== VALIDADORES ====================
+
+  private validateTransactionType(type: string): TransactionType {
+    const validTypes = Object.values(TransactionType);
+    if (!validTypes.includes(type as TransactionType)) {
+      throw new BadRequestException(
+        `Tipo de transação inválido. Valores válidos: ${validTypes.join(', ')}`
+      );
+    }
+    return type as TransactionType;
+  }
+
+  private validateTransactionStatus(status: string): TransactionStatus {
+    const validStatuses = Object.values(TransactionStatus);
+    if (!validStatuses.includes(status as TransactionStatus)) {
+      throw new BadRequestException(
+        `Status de transação inválido. Valores válidos: ${validStatuses.join(', ')}`
+      );
+    }
+    return status as TransactionStatus;
   }
 }

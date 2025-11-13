@@ -12,11 +12,7 @@ export class InterAuthService {
     private readonly logger = new Logger(InterAuthService.name);
 
     // Produção: https://cdpj.partners.bancointer.com.br | Sandbox: https://cdpj-sandbox.partners.uatinter.co
-    private readonly INTER_API_URL =
-        process.env.INTER_API_URL ||
-        (process.env.NODE_ENV === 'production'
-            ? 'https://cdpj.partners.bancointer.com.br'
-            : 'https://cdpj-sandbox.partners.uatinter.co');
+    private readonly INTER_API_URL = 'https://cdpj.partners.bancointer.com.br';
 
     private readonly CLIENT_ID = process.env.INTER_CLIENT_ID;
     private readonly CLIENT_SECRET = process.env.INTER_CLIENT_SECRET;

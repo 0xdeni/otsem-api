@@ -1,47 +1,75 @@
 // src/inter/controllers/inter-pix.controller.ts
 
-import { Controller, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+    Controller,
+    Post,
+    Get,
+    Param,
+    Body,
+    UseGuards,
+    Request,
+} from '@nestjs/common';
+import {
+    ApiTags,
+    ApiBearerAuth,
+    ApiOperation,
+    ApiResponse,
+} from '@nestjs/swagger';
+import { InterPixService } from '../services/inter-pix.service';
+import { SendPixDto, PixPaymentResponseDto } from '../dto/send-pix.dto';
+import { CreatePixChargeDto } from '../dto/create-pix-charge.dto';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { RolesGuard } from '../../auth/roles.guard';
 import { Roles } from '../../auth/roles.decorator';
 import { Role } from '@prisma/client';
-import { InterPixService } from '../services/inter-pix.service';
-import { CreatePixChargeDto } from '../dto/create-pix-charge.dto';
-import { SendPixDto } from '../dto/send-pix.dto';
 
-@ApiTags('Inter - Pix')
+@ApiTags('💸 Pix (Inter)')
 @ApiBearerAuth()
 @Controller('inter/pix')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class InterPixController {
-    constructor(private readonly service: InterPixService) { }
+    constructor(private readonly pixService: InterPixService) { }
 
-    @Get('chaves')
-    @Roles(Role.ADMIN)
-    @ApiOperation({ summary: 'Listar chaves Pix (Admin)' })
-    async getChaves() {
-        return this.service.getChaves();
+    // ==================== ENVIAR PIX ====================
+
+    @Post('send')
+    @Roles(Role.CUSTOMER, Role.ADMIN)
+    @ApiOperation({ summary: '💸 Enviar Pix' })
+    @ApiResponse({
+        status: 201,
+        description: 'Pix enviado com sucesso',
+        type: PixPaymentResponseDto,
+    })
+    @ApiResponse({
+        status: 400,
+        description: 'Saldo insuficiente ou dados inválidos',
+    })
+    async sendPix(@Request() req: any, @Body() dto: SendPixDto) {
+        const customerId = req.user.customerId;
+        return this.pixService.sendPix(customerId, dto);
     }
 
+    @Get('status/:endToEndId')
+    @Roles(Role.CUSTOMER, Role.ADMIN)
+    @ApiOperation({ summary: '🔍 Consultar status de Pix enviado' })
+    async getPixStatus(@Param('endToEndId') endToEndId: string) {
+        return this.pixService.getPixStatus(endToEndId);
+    }
+
+
+    // ==================== COBRANÇAS (QR CODE) ====================
+
     @Post('cobrancas')
-    @Roles(Role.ADMIN)
-    @ApiOperation({ summary: 'Criar cobrança Pix (QR Code)' })
+    @Roles(Role.CUSTOMER, Role.ADMIN)
+    @ApiOperation({ summary: '📱 Criar cobrança Pix (QR Code)' })
     async createCobranca(@Body() dto: CreatePixChargeDto) {
-        return this.service.createCobranca(dto);
+        return this.pixService.createCobranca(dto);
     }
 
     @Get('cobrancas/:txid')
-    @Roles(Role.ADMIN)
-    @ApiOperation({ summary: 'Consultar cobrança Pix' })
+    @Roles(Role.CUSTOMER, Role.ADMIN)
+    @ApiOperation({ summary: '🔍 Consultar cobrança Pix' })
     async getCobranca(@Param('txid') txid: string) {
-        return this.service.getCobranca(txid);
-    }
-
-    @Post('send')
-    @Roles(Role.ADMIN)
-    @ApiOperation({ summary: 'Enviar Pix (pagamento)' })
-    async sendPix(@Body() dto: SendPixDto) {
-        return this.service.sendPix(dto);
+        return this.pixService.getCobranca(txid);
     }
 }
