@@ -17,15 +17,8 @@ export class InterAuthService {
     private readonly CLIENT_ID = process.env.INTER_CLIENT_ID;
     private readonly CLIENT_SECRET = process.env.INTER_CLIENT_SECRET;
 
-    // ✅ Caminho atualizado para /src/inter-keys
-    private readonly CERT_PATH = path.join(
-        process.cwd(),
-        'src/inter-keys/certificado.crt'
-    );
-    private readonly KEY_PATH = path.join(
-        process.cwd(),
-        'src/inter-keys/chave_privada.key'
-    );
+    private CERT_PATH: string;
+    private KEY_PATH: string;
 
     private accessToken: string | null = null;
     private tokenExpiry: Date | null = null;
@@ -33,21 +26,64 @@ export class InterAuthService {
     private axiosInstance: AxiosInstance;
 
     constructor() {
+        this.resolveCertPaths();
         this.initializeHttpsAgent();
         this.initializeAxiosInstance();
     }
 
+    /**
+     * Resolve caminhos dos certificados (dev vs produção)
+     */
+    private resolveCertPaths() {
+        const possiblePaths = [
+            // 1. Produção (dist compilado) - PRIORIDADE
+            {
+                cert: path.join(process.cwd(), 'dist/src/inter-keys/certificado.crt'),
+                key: path.join(process.cwd(), 'dist/src/inter-keys/chave_privada.key'),
+            },
+            // 2. Produção alternativa (dist raiz)
+            {
+                cert: path.join(process.cwd(), 'dist/inter-keys/certificado.crt'),
+                key: path.join(process.cwd(), 'dist/inter-keys/chave_privada.key'),
+            },
+            // 3. Desenvolvimento (src)
+            {
+                cert: path.join(process.cwd(), 'src/inter-keys/certificado.crt'),
+                key: path.join(process.cwd(), 'src/inter-keys/chave_privada.key'),
+            },
+            // 4. Desenvolvimento (__dirname relativo)
+            {
+                cert: path.join(__dirname, '../../inter-keys/certificado.crt'),
+                key: path.join(__dirname, '../../inter-keys/chave_privada.key'),
+            },
+        ];
+
+        // Tentar cada caminho possível
+        for (const paths of possiblePaths) {
+            if (fs.existsSync(paths.cert) && fs.existsSync(paths.key)) {
+                this.CERT_PATH = paths.cert;
+                this.KEY_PATH = paths.key;
+                this.logger.log(`✅ Certificados encontrados em: ${path.dirname(paths.cert)}`);
+                this.logger.debug(`📄 Certificado: ${this.CERT_PATH}`);
+                this.logger.debug(`🔑 Chave: ${this.KEY_PATH}`);
+                return;
+            }
+        }
+
+        // Se não encontrou em nenhum lugar, listar tentativas
+        this.logger.error('❌ Certificados não encontrados. Tentativas:');
+        possiblePaths.forEach((p, i) => {
+            const certExists = fs.existsSync(p.cert) ? '✓' : '✗';
+            const keyExists = fs.existsSync(p.key) ? '✓' : '✗';
+            this.logger.error(`  ${i + 1}. ${certExists} Cert: ${p.cert}`);
+            this.logger.error(`     ${keyExists} Key:  ${p.key}`);
+        });
+
+        throw new Error('Certificados do Banco Inter não encontrados');
+    }
+
     private initializeHttpsAgent() {
         try {
-            // ✅ Verificar se certificados existem
-            if (!fs.existsSync(this.CERT_PATH)) {
-                throw new Error(`❌ Certificado não encontrado: ${this.CERT_PATH}`);
-            }
-
-            if (!fs.existsSync(this.KEY_PATH)) {
-                throw new Error(`❌ Chave privada não encontrada: ${this.KEY_PATH}`);
-            }
-
             this.httpsAgent = new https.Agent({
                 cert: fs.readFileSync(this.CERT_PATH),
                 key: fs.readFileSync(this.KEY_PATH),
@@ -55,11 +91,9 @@ export class InterAuthService {
             });
 
             this.logger.log('✅ Certificados carregados com sucesso');
-            this.logger.debug(`📄 Certificado: ${this.CERT_PATH}`);
-            this.logger.debug(`🔑 Chave: ${this.KEY_PATH}`);
         } catch (error) {
             this.logger.error('❌ Erro ao carregar certificados:', error.message);
-            throw new Error('Certificados do Banco Inter não encontrados');
+            throw new Error('Falha ao carregar certificados do Banco Inter');
         }
     }
 
