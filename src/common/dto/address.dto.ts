@@ -3,7 +3,8 @@ import { IsString, IsInt, IsOptional } from 'class-validator';
 
 export class AddressDto {
   @IsString()
-  zipCode!: string;
+  @IsOptional()
+  zipCode?: string;
 
   @IsString()
   street!: string;

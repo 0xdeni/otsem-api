@@ -18,7 +18,7 @@ import { PublicRegisterDto } from './dto/public-register.dto';
 
 @Controller('users')
 export class UsersController {
-  constructor(private readonly svc: UsersService) {}
+  constructor(private readonly svc: UsersService) { }
 
   @Post('register') // pública
   async register(@Body() dto: PublicRegisterDto) {
@@ -30,7 +30,6 @@ export class UsersController {
         type: CustomerType.PF,
         name: dto.name,
         phone: '00000000000',
-        identifier: 'public',
         productId: 1,
       } as any,
     });

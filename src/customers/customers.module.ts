@@ -1,18 +1,26 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { CustomersController } from './customers.controller';
 import { CustomersService } from './customers.service';
+import { CustomerBalanceService } from './customer-balance.service';
+import { CustomerKycService } from './customer-kyc.service';
 import { PrismaModule } from '../prisma/prisma.module';
-import { AccreditationModule } from '../accreditation/accreditation.module';
 import { StatementsModule } from '../statements/statements.module';
 
 @Module({
   imports: [
     PrismaModule,
-    AccreditationModule,
-    StatementsModule, // ← para injetar StatementsService
+    forwardRef(() => StatementsModule),
   ],
   controllers: [CustomersController],
-  providers: [CustomersService],
-  exports: [CustomersService],
+  providers: [
+    CustomersService,
+    CustomerBalanceService,
+    CustomerKycService,
+  ],
+  exports: [
+    CustomersService,
+    CustomerBalanceService,
+    CustomerKycService,
+  ],
 })
-export class CustomersModule {}
+export class CustomersModule { }

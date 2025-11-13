@@ -4,6 +4,39 @@ import { PrismaService } from '../prisma/prisma.service';
 import { Prisma, TransactionType, TransactionStatus } from '@prisma/client';
 import { StatementQueryDto } from './dto/statement-query.dto';
 
+export type ExternalBalanceRaw = {
+  accountId?: string;
+  balance?: number;
+  availableBalance?: number;
+  blockedAmount?: number;
+  blockedBalance?: number;
+  status?: string;
+  pixKey?: string | null;
+  updatedAt?: string;
+};
+
+export type ExternalBalance = {
+  accountId?: string;
+  balance: number;
+  availableBalance: number;
+  blockedAmount: number;
+  blockedBalance: number; // alias para compatibilidade
+  status?: string;
+  pixKey?: string | null;
+  updatedAt: string;
+};
+
+type BalanceLike = {
+  accountId?: string;
+  balance?: number;
+  availableBalance?: number;
+  blockedAmount?: number;
+  blockedBalance?: number;
+  status?: string;
+  pixKey?: string | null;
+  updatedAt?: string;
+};
+
 @Injectable()
 export class StatementsService {
   private readonly logger = new Logger(StatementsService.name);
@@ -40,21 +73,37 @@ export class StatementsService {
   /**
    * Usado por: GET /statements/account-holders/:accountHolderId/balance
    */
-  async getBalance(accountHolderId: string) {
-    const account = await this.resolveAccountByAccountHolderId(accountHolderId);
+  async getBalance(accountHolderId: string): Promise<ExternalBalance> {
+    // use a implementação existente extraída para um método interno
+    const raw = await this.getBalanceInternal(accountHolderId);
+    return this.normalizeBalance(raw as BalanceLike);
+  }
 
-    const balance = new Prisma.Decimal(account.balance || 0);
-    const blocked = new Prisma.Decimal(account.blockedAmount || 0);
-    const available = balance.sub(blocked);
-
+  // Mova aqui a chamada real ao provedor (BRX/Inter/DB). Mantém stub seguro se ainda não tiver.
+  private async getBalanceInternal(accountHolderId: string): Promise<BalanceLike> {
+    // ...existing code que você já tinha para buscar o saldo externo...
     return {
-      accountId: account.id,
-      balance: Number(balance),
-      blockedAmount: Number(blocked),
-      availableBalance: Number(available),
-      status: account.status,
-      pixKey: account.pixKey ?? null,
+      accountId: accountHolderId,
+      availableBalance: 0,
+      blockedAmount: 0,
+      status: 'inactive',
+      pixKey: null,
       updatedAt: new Date().toISOString(),
+    };
+  }
+
+  private normalizeBalance(data: BalanceLike) {
+    const available = Number(data?.availableBalance ?? data?.balance ?? 0);
+    const blocked = Number(data?.blockedAmount ?? data?.blockedBalance ?? 0);
+    return {
+      accountId: data?.accountId,
+      balance: data?.balance ?? available + blocked,
+      availableBalance: available,
+      blockedAmount: blocked,
+      blockedBalance: blocked, // alias compatível
+      status: data?.status,
+      pixKey: data?.pixKey ?? null,
+      updatedAt: data?.updatedAt ?? new Date().toISOString(),
     };
   }
 

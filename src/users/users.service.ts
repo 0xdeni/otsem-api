@@ -18,7 +18,7 @@ function onlyDigits(v: string): string {
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   async createByAdminWithCustomer(dto: CreateUserWithCustomerDto) {
     const exists = await this.prisma.user.findUnique({
@@ -30,9 +30,6 @@ export class UsersService {
         'Este e-mail já está em uso. Por favor, utilize outro endereço.',
       );
     }
-
-    const identifier = dto.customer.identifier?.trim() || 'app';
-    const productId = dto.customer.productId ?? 1;
 
     const rawPhone = dto.customer.phone?.trim() ?? '';
     const phone = onlyDigits(rawPhone);
@@ -71,25 +68,17 @@ export class UsersService {
             userId: user.id,
             externalClientId: null,
             externalAccredId: null,
-            identifier,
-            productId,
             email: user.email,
             phone,
-            name: dto.name,
-            socialName: null,
+            name: dto.name ?? '',
             cpf: null,
             birthday: null,
-            genderId: null,
-            legalName: null,
-            tradeName: null,
             cnpj: null,
           },
           select: {
             id: true,
             type: true,
             accountStatus: true,
-            identifier: true,
-            productId: true,
             email: true,
             phone: true,
             createdAt: true,
@@ -212,5 +201,80 @@ export class UsersService {
       data: { passwordHash: hash },
     });
     return { ok: true };
+  }
+
+  // Use this for any lookup by userId on Customer (userId is not unique yet)
+  private async findCustomerByUserId(userId: string) {
+    return this.prisma.customer.findFirst({ where: { userId } }); // instead of findUnique({ where: { userId } })
+  }
+
+  // Example: get profile merging user + customer
+  async getProfile(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+        // ajuste o nome do campo conforme seu Prisma: `customers` ou `Customer`
+        customers: {
+          select: {
+            id: true,
+            type: true,
+            accountStatus: true,
+            phone: true,
+            createdAt: true,
+          },
+        },
+      },
+    });
+    if (!user) throw new NotFoundException('Usuário não encontrado');
+
+    const customer = await this.findCustomerByUserId(userId);
+    return { ...user, customer };
+  }
+
+  // Example: update customer via userId (fix for where: { userId } on update)
+  async updateCustomerByUserId(userId: string, data: Record<string, any>) {
+    const customer = await this.findCustomerByUserId(userId);
+    if (!customer) throw new NotFoundException('Customer não encontrado para este usuário');
+
+    return this.prisma.customer.update({
+      where: { id: customer.id }, // update by primary key
+      data,
+    });
+  }
+
+  // Example: safe delete customer via userId
+  async deleteCustomerByUserId(userId: string) {
+    const customer = await this.findCustomerByUserId(userId);
+    if (!customer) return { deleted: false };
+    await this.prisma.customer.delete({ where: { id: customer.id } });
+    return { deleted: true };
+  }
+
+  // Exemplo de busca de customer sem 'identifier' (use apenas campos definidos no schema)
+  async getCustomerProfile(userId: string) {
+    const customer = await this.prisma.customer.findFirst({
+      where: { userId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        cpf: true,
+        cnpj: true,
+        birthday: true,
+        accountStatus: true,
+        externalClientId: true,
+        externalAccredId: true,
+        // Remova 'identifier' se estava aqui!
+        // Adicione outros campos válidos conforme seu schema
+      },
+    });
+    if (!customer) throw new NotFoundException('Customer não encontrado');
+    return customer;
   }
 }

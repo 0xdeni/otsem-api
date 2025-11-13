@@ -22,9 +22,10 @@ enum CustomerType {
 enum AccountStatus {
   not_requested
   requested
+  in_review
   approved
   rejected
-  in_review
+  suspended
 }
 
 enum PixKeyType {
@@ -150,73 +151,68 @@ model PasswordResetToken {
 // ==================== CUSTOMER ====================
 
 model Customer {
-  id            String        @id @default(uuid())
-  type          CustomerType
-  accountStatus AccountStatus @default(not_requested)
+  id     String  @id @default(cuid())
+  userId String? // deixe opcional por ENQUANTO para permitir backfill
+  user   User?   @relation(fields: [userId], references: [id])
 
-  // Auth
-  userId   String? @unique
-  authUser User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  // Integração externa
-  externalClientId String? @unique
-  externalAccredId String? @unique
-
-  // Base
-  identifier String
-  productId  Int
-  email      String
-  phone      String?
+  type  CustomerType
+  name  String
+  email String       @unique
+  phone String?
 
   // PF
-  name       String?
-  socialName String?
-  cpf        String?   @unique
-  birthday   DateTime?
-  genderId   Int?
+  cpf         String?   @unique
+  birthday    DateTime?
+  rg          String?
+  mothersName String?
 
   // PJ
-  legalName String?
-  tradeName String?
-  cnpj      String? @unique
+  cnpj         String?   @unique
+  companyName  String?
+  tradingName  String?
+  foundingDate DateTime?
 
-  // Relações
+  // Integrações/estado
+  accountStatus    AccountStatus @default(not_requested)
+  externalClientId String?
+  externalAccredId String?
+
+  // Extras
+  metadata Json?
+
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
   address          Address?
   pixLimits        PixLimits?
-  account          Account?
   ownerships       Ownership[]
   pixKeys          PixKey[]
-  cardTransactions CardTransaction[]
-  chargebacks      Chargeback[]
-  refunds          Refund[]
   payments         Payment[]
   deposits         Deposit[]
+  refunds          Refund[]
   wallets          Wallet[]
+  account          Account?
+  cardTransactions CardTransaction[]
+  chargebacks      Chargeback[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([type, accountStatus])
+  @@index([email])
   @@index([cpf])
   @@index([cnpj])
-  @@index([email])
+  @@index([externalClientId])
 }
 
 model Address {
-  id           String  @id @default(uuid())
-  customerId   String  @unique
-  zipCode      String
+  id           String  @id @default(cuid())
   street       String
   number       String?
   complement   String?
+  neighborhood String?
+  cityIbgeCode Int?
+  zipCode      String?
   city         String?
   state        String?
-  neighborhood String
-  cityIbgeCode Int
 
-  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-
-  @@index([cityIbgeCode])
+  customer   Customer? @relation(fields: [customerId], references: [id])
+  customerId String?   @unique
 }
 
 model PixLimits {
@@ -267,7 +263,7 @@ model PixKey {
 // ==================== TRANSACTIONS ====================
 
 model Payment {
-  id           String  @id @default(uuid())
+  id           String  @id @default(cuid())
   endToEnd     String  @unique
   identifier   String?
   paymentValue Int
@@ -298,7 +294,7 @@ model Payment {
 }
 
 model Deposit {
-  id           String   @id @default(uuid())
+  id           String   @id @default(cuid())
   endToEnd     String   @unique
   receiptValue Int
   receiptDate  DateTime
