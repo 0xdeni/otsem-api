@@ -53,6 +53,21 @@ export class CustomersService {
         },
       });
 
+      // Cria a conta vinculada ao cliente
+      await this.prisma.account.create({
+        data: {
+          customerId: customer.id,
+          balance: 0,
+          pixKey: null,
+          pixKeyType: 'RANDOM',
+          dailyLimit: 5000,
+          monthlyLimit: 20000,
+          status: 'active',
+          blockedAmount: 0,
+          // createdAt e updatedAt são automáticos
+        },
+      });
+
       this.logger.log(`✅ Customer criado: ${customer.id}`);
       return this.toResponse(customer);
     } catch (error: any) {
