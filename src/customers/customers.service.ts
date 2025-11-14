@@ -4,7 +4,6 @@ import {
   Logger,
   NotFoundException,
   ConflictException,
-  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCustomerDto, CustomerType } from './dto/create-customer.dto';

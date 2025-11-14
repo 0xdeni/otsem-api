@@ -16,11 +16,13 @@ import { AdminDashboardModule } from './admin-dashboard/admin-dashboard.module';
 import { InterModule } from './inter/inter.module';
 import { TransactionsModule } from './transactions/transactions.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { AccountsModule } from './accounts/accounts.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
+    AccountsModule,
     AuthModule,
     UsersModule,
     CustomersModule,

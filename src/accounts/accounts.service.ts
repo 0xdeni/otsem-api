@@ -2,6 +2,8 @@
 
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { AccountSummary } from './types/account-summary.type';
+import { PaymentSummary } from './types/payment-summary.type';
 
 @Injectable()
 export class AccountsService {
@@ -113,6 +115,55 @@ export class AccountsService {
                 parseFloat(account.blockedAmount.toString()),
             pixKey: account.pixKey,
             status: account.status,
+        };
+    }
+
+    /**
+     * Obter resumo da conta e pagamentos do customer
+     */
+    async getAccountSummary(customerId: string): Promise<AccountSummary | null> {
+        const account = await this.prisma.account.findUnique({
+            where: { customerId },
+            select: {
+                id: true,
+                balance: true,
+                status: true,
+                pixKey: true,
+                pixKeyType: true,
+                dailyLimit: true,
+                monthlyLimit: true,
+                blockedAmount: true,
+                createdAt: true,
+                updatedAt: true,
+            },
+        });
+
+        if (!account) return null;
+
+        const payments = await this.prisma.payment.findMany({
+            where: {
+                customerId,
+                status: 'CONFIRMED',
+                paymentValue: { gt: 0 }, // apenas entradas
+            },
+            orderBy: { paymentDate: 'desc' },
+            select: {
+                id: true,
+                paymentValue: true,
+                paymentDate: true,
+                receiverPixKey: true,
+                endToEnd: true,
+                bankPayload: true,
+            },
+        });
+
+        return {
+            ...account,
+            balance: parseFloat(account.balance.toString()),
+            dailyLimit: account.dailyLimit ? parseFloat(account.dailyLimit.toString()) : 0,
+            monthlyLimit: account.monthlyLimit ? parseFloat(account.monthlyLimit.toString()) : 0,
+            blockedAmount: account.blockedAmount ? parseFloat(account.blockedAmount.toString()) : 0,
+            payments,
         };
     }
 }
