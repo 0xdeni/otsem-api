@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { StatementsService } from '../statements/statements.service';
+import { DepositStatus } from '@prisma/client';
 
 @Injectable()
 export class CustomerBalanceService {
@@ -53,6 +54,27 @@ export class CustomerBalanceService {
             accountHolderId: customer.externalClientId,
             pixKey: raw.pixKey ?? null,
             updatedAt: raw.updatedAt ?? new Date().toISOString(),
+        };
+    }
+
+    async getPixBalanceByCustomerId(customerId: string) {
+        const deposits = await this.prisma.deposit.findMany({
+            where: {
+                customerId,
+                status: DepositStatus.CONFIRMED, // use o enum do Prisma!
+                receiverPixKey: { not: null },
+            },
+            select: { receiptValue: true },
+        });
+
+        const total = deposits.reduce((sum, d) => sum + d.receiptValue, 0);
+
+        return {
+            available: total,
+            blocked: 0,
+            total,
+            currency: 'BRL',
+            updatedAt: new Date().toISOString(),
         };
     }
 }

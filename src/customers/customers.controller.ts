@@ -78,13 +78,9 @@ export class CustomersController {
   }
 
   @Get(':id/balance')
-  @ApiOperation({ summary: 'Saldo do customer' })
-  async balance(@Req() req: AuthRequest, @Param('id') id: string) {
-    const customer = await this.customers.findById(id);
-    if (req.user!.role !== Role.ADMIN && req.user!.sub !== (customer as any).userId) {
-      throw new ForbiddenException('Acesso negado');
-    }
-    return this.balances.getBalanceByCustomerId(id);
+  @ApiOperation({ summary: 'Saldo Pix do customer (soma dos depósitos Pix)' })
+  async balance(@Param('id') id: string) {
+    return this.balances.getPixBalanceByCustomerId(id);
   }
 
   @Get(':id/statement')
