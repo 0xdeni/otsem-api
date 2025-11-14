@@ -11,8 +11,6 @@ import { StatementsModule } from './statements/statements.module';
 import { PixModule } from './pix/pix.module';
 import { PixLimitsModule } from './pix/limits/pix-limits.module';
 import { PixTransactionsModule } from './pix-transactions/pix-transactions.module';
-import { BrxPixModule } from './brx/brx-pix.module';
-import { BrxWebhooksModule } from './brx-webhooks/brx-webhooks.module';
 import { MailModule } from './mail/mail.module';
 import { AdminDashboardModule } from './admin-dashboard/admin-dashboard.module';
 import { InterModule } from './inter/inter.module';
@@ -30,8 +28,8 @@ import { TransactionsModule } from './transactions/transactions.module';
     PixModule,
     PixLimitsModule,
     PixTransactionsModule,
-    BrxPixModule,
-    BrxWebhooksModule,
+    // BrxPixModule,
+    // BrxWebhooksModule,
     MailModule,
     AdminDashboardModule,
     InterModule,
