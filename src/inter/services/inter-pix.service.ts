@@ -106,6 +106,10 @@ export class InterPixService {
             `💸 Enviando Pix: R$ ${dto.valor} para ${dto.chaveDestino}`,
         );
 
+        if (!customerId) {
+            throw new BadRequestException('customerId não informado');
+        }
+
         // ✅ 1. Validar saldo
         await this.validateBalance(customerId, dto.valor);
 

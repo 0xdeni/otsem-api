@@ -32,7 +32,7 @@ export class InterPixController {
 
     // ==================== ENVIAR PIX ====================
 
-    @Post('send')
+    @Post('send-pix')
     @Roles(Role.CUSTOMER, Role.ADMIN)
     @ApiOperation({ summary: '💸 Enviar Pix' })
     @ApiResponse({
@@ -45,7 +45,7 @@ export class InterPixController {
         description: 'Saldo insuficiente ou dados inválidos',
     })
     async sendPix(@Request() req: any, @Body() dto: SendPixDto) {
-        const customerId = req.user.customerId;
+        const customerId = req.user?.customerId; // ou dto.customerId
         return this.pixService.sendPix(customerId, dto);
     }
 
