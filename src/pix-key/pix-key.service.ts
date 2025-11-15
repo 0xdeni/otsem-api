@@ -34,4 +34,11 @@ export class PixKeyService {
             },
         });
     }
+
+    async listPixKeys(filter: { customerId?: string; status?: string }) {
+        const where: any = {};
+        if (filter.customerId) where.customerId = filter.customerId;
+        if (filter.status) where.status = filter.status as any;
+        return this.prisma.pixKey.findMany({ where });
+    }
 }

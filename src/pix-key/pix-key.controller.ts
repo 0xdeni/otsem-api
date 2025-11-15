@@ -16,8 +16,11 @@ export class PixKeyController {
     }
 
     @Get()
-    async listPixKeys(@Query('customerId') customerId: string) {
-        return this.pixKeyService.findByCustomerId(customerId);
+    async listPixKeys(
+        @Query('customerId') customerId?: string,
+        @Query('status') status?: string
+    ) {
+        return this.pixKeyService.listPixKeys({ customerId, status });
     }
 
     @Post()
