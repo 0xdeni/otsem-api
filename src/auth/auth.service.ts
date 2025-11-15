@@ -47,26 +47,32 @@ export class AuthService {
     if (exists) throw new BadRequestException('email_in_use');
 
     const hash = await bcrypt.hash(dto.password, SALT_ROUNDS);
-    // Cria o usuário
-    const user = await this.prisma.user.create({
-      data: {
-        email: dto.email,
-        passwordHash: hash,
-        name: dto.name,
-        role: Role.CUSTOMER,
-      },
-      select: { id: true, email: true, role: true },
-    });
 
-    // Cria o cliente vinculado ao usuário
-    const customer = await this.prisma.customer.create({
-      data: {
-        userId: user.id,
-        name: dto.name ?? '',
-        email: dto.email,
-        type: 'PF', // ou 'PJ' conforme sua lógica
-      },
-      select: { id: true },
+    const [user, customer] = await this.prisma.$transaction([
+      this.prisma.user.create({
+        data: {
+          email: dto.email,
+          passwordHash: hash,
+          name: dto.name,
+          role: Role.CUSTOMER,
+        },
+        select: { id: true, email: true, role: true },
+      }),
+      this.prisma.customer.create({
+        data: {
+          userId: undefined, // será preenchido depois
+          name: dto.name ?? '',
+          email: dto.email,
+          type: 'PF',
+        },
+        select: { id: true },
+      }),
+    ]);
+
+    // Atualiza o customer com o userId
+    await this.prisma.customer.update({
+      where: { id: customer.id },
+      data: { userId: user.id },
     });
 
     // Cria a conta vinculada ao cliente
@@ -75,7 +81,6 @@ export class AuthService {
         customerId: customer.id,
         balance: 0,
         status: 'active',
-        // outros campos padrão se quiser
       },
     });
 
