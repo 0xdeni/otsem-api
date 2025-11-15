@@ -18,6 +18,7 @@ import { TransactionsModule } from './transactions/transactions.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AccountsModule } from './accounts/accounts.module';
 import { PixKeyModule } from './pix-key/pix-key.module';
+import { PaymentsModule } from './payments/payments.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { PixKeyModule } from './pix-key/pix-key.module';
     AdminDashboardModule,
     InterModule,
     PixKeyModule,
+    PaymentsModule,
     TransactionsModule,
     ScheduleModule.forRoot(),
   ],
