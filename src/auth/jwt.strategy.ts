@@ -22,7 +22,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     return {
       sub: payload.sub,
       email: payload.email,
-      role: payload.role as Role, // ← certifique-se de fazer cast para enum
+      role: payload.role as Role,
+      customerId: payload.customerId, // ← certifique-se de fazer cast para enum
     };
   }
 }

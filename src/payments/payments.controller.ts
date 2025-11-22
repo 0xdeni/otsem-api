@@ -9,8 +9,6 @@ import {
     BadRequestException,
 } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
-import { PaymentListDto } from './dto/payment-list.dto';
-import { PaymentResponseDto } from './dto/payment-response.dto';
 import { InterPixService } from '../inter/services/inter-pix.service';
 import { SendPixDto } from '../inter/dto/send-pix.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -64,31 +62,23 @@ export class PaymentsController {
         });
     }
 
-    // @UseGuards(JwtAuthGuard)
-    // @Post('pix/send')
-    // async sendPix(@Body() dto: SendPixDto, @Req() req: Request) {
-    //     const user = req.user as User;
+    @UseGuards(JwtAuthGuard)
+    @Post('pix/send')
+    async sendPix(@Body() dto: SendPixDto, @Req() req: Request) {
+        console.log('DTO recebido no sendPix:', dto);
 
-    //     let customerId: string;
+        const user = req.user as User;
 
-    //     if (!user) {
-    //         throw new BadRequestException('Usuário não encontrado na requisição');
-    //     }
+        if (!user || user.role !== 'CUSTOMER') {
+            throw new BadRequestException('Apenas CUSTOMER pode enviar Pix');
+        }
 
-    //     if (user.role === 'CUSTOMER') {
-    //         if (!user.customerId) {
-    //             throw new BadRequestException('customerId não encontrado para o usuário CUSTOMER');
-    //         }
-    //         customerId = user.customerId;
-    //     } else if (user.role === 'ADMIN') {
-    //         if (!dto.customerId) {
-    //             throw new BadRequestException('customerId deve ser informado pelo ADMIN');
-    //         }
-    //         customerId = dto.customerId;
-    //     } else {
-    //         throw new BadRequestException('Usuário não autorizado para enviar Pix');
-    //     }
+        if (!user.customerId) {
+            throw new BadRequestException('customerId não encontrado para o usuário CUSTOMER');
+        }
 
-    //     return this.interPixService.sendPix(customerId, dto);
-    // }
+        console.log('customerId usado:', user.customerId);
+
+        return this.interPixService.sendPix(user.customerId, dto);
+    }
 }

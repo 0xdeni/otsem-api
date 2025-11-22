@@ -26,15 +26,32 @@ export class AuthService {
     if (!user) throw new UnauthorizedException('invalid_credentials');
     const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) throw new UnauthorizedException('invalid_credentials');
-    return user;
+
+    // Busca o customer vinculado ao usuário
+    const customer = await this.prisma.customer.findUnique({
+      where: { email: user.email },
+      select: { id: true }
+    });
+
+    return {
+      ...user,
+      customerId: customer?.id,
+    };
   }
 
   async login(email: string, password: string) {
     const user = await this.validateUser(email, password);
-    const payload: JwtPayload = {
+
+    const customer = await this.prisma.customer.findUnique({
+      where: { email: user.email },
+      select: { id: true }
+    });
+
+    const payload: JwtPayload & { customerId?: string } = {
       sub: user.id,
       email: user.email,
       role: user.role,
+      ...(customer && { customerId: customer.id }), // só inclui se existir
     };
     const access_token = await this.jwt.signAsync(payload);
     return { access_token, role: user.role };

@@ -1,6 +1,6 @@
 // src/inter/dto/send-pix.dto.ts
 
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiHideProperty, ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsString, IsNumber, IsOptional, Min, IsEnum, MaxLength } from 'class-validator';
 
 export enum PixKeyType {
@@ -9,6 +9,7 @@ export enum PixKeyType {
     EMAIL = 'EMAIL',
     TELEFONE = 'TELEFONE',
     CHAVE_ALEATORIA = 'CHAVE_ALEATORIA',
+    CHAVE = 'CHAVE', // <-- Adicione esta linha!
 }
 
 export class SendPixDto {
@@ -53,8 +54,6 @@ export class SendPixDto {
     @IsOptional()
     @IsString()
     nomeFavorecido?: string;
-
-    customerId?: string;
 }
 
 export class PixPaymentResponseDto {
