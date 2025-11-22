@@ -131,7 +131,7 @@ export class InterPixService {
 
             this.logger.debug('📤 Payload Inter:', JSON.stringify(payload, null, 2));
 
-            const response = await axios.post('/banking/v2/pix/pagamentos', payload);
+            const response = await axios.post('/banking/v2/pix', payload);
 
             const pixData = response.data;
 
