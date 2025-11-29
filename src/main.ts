@@ -3,14 +3,13 @@ import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import * as bodyParser from 'body-parser';
+import * as fs from 'fs';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Adicione antes dos outros middlewares
   app.use(bodyParser.json());
 
-  // Habilitar CORS
   app.enableCors({
     origin: (origin: string | undefined, cb: (err: Error | null, allow?: boolean) => void) => {
       const allowed: string[] = [
@@ -30,11 +29,10 @@ async function bootstrap() {
     maxAge: 3600
   });
 
-  // Habilitar validação global
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
-      forbidNonWhitelisted: true, // Garante rejeição de campos não permitidos
+      forbidNonWhitelisted: true,
       transform: true,
     }),
   );
@@ -74,6 +72,10 @@ async function bootstrap() {
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
+
+  // Gera o arquivo openapi.json para Scalar
+  fs.writeFileSync('./openapi.json', JSON.stringify(document, null, 2));
+
   SwaggerModule.setup('api/docs', app, document, {
     customSiteTitle: 'OTSEM Bank API - Documentação',
     customfavIcon: 'https://nestjs.com/img/logo-small.svg',
@@ -96,5 +98,6 @@ async function bootstrap() {
 
   console.log(`🚀 Application is running on: http://localhost:${port}`);
   console.log(`📚 Swagger docs available at: http://localhost:${port}/api/docs`);
+  console.log(`📦 OpenAPI file generated at: ./openapi.json`);
 }
 bootstrap();
