@@ -1,17 +1,14 @@
 import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 
 @Injectable()
 export class FdbankService {
-    constructor(private readonly config: ConfigService) { }
+    private apiUrl = process.env.FDBANK_API_URL || 'https://api-baas.fdbank.com.br/v1.0/';
 
-    getCredentials() {
-        return {
-            apiKey: this.config.get<string>('fdbank.apiKey'),
-            apiSecret: this.config.get<string>('fdbank.apiSecret'),
-            clientId: this.config.get<string>('fdbank.clientId'),
-        };
+    async systemHealth() {
+        const url = `${this.apiUrl}Meta/Health`;
+        const response = await axios.get(url);
+        return response.data;
     }
 
     // Métodos de integração FD Bank serão implementados aqui

@@ -19,4 +19,21 @@ export class OkxController {
     async buyAndCheckHistory(@Body('brlAmount') brlAmount: number) {
         return await this.okxService.buyAndCheckHistory(brlAmount);
     }
+
+    @Post('withdraw-usdt')
+    async withdrawUsdt(@Body() body: {
+        amount: string | number;
+        toAddress: string;
+        fundPwd: string;
+        fee: string | number;
+    }) {
+        // Rede fixa como SOL para Solana
+        return await this.okxService.withdrawUsdt({
+            amount: body.amount,
+            toAddress: body.toAddress,
+            network: 'Solana',
+            fundPwd: body.fundPwd,
+            fee: body.fee
+        });
+    }
 }

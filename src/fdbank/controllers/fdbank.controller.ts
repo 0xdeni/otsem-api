@@ -5,8 +5,8 @@ import { FdbankService } from '../services/fdbank.service';
 export class FdbankController {
     constructor(private readonly fdbankService: FdbankService) { }
 
-    @Get('test')
-    async test() {
-        return { status: 'FD Bank module is working!' };
+    @Get('system-health')
+    async systemHealth() {
+        return await this.fdbankService.systemHealth();
     }
 }

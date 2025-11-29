@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { OkxAuthService } from './okx-auth.service';
 import axios from 'axios';
+import { OkxAuthService } from './okx-auth.service';
 
 // Exemplo para extrair saldo USDT
 interface OkxBalanceDetail {
@@ -17,6 +17,14 @@ interface OkxBalanceResponse {
 interface OkxApiResponse {
     data: OkxBalanceResponse[];
     [key: string]: any;
+}
+
+interface WithdrawUsdtParams {
+    amount: string | number;
+    toAddress: string;
+    network: string; // exemplo: 'SOL', 'ERC20', 'TRC20'
+    fundPwd: string;
+    fee: string | number;
 }
 
 
@@ -126,5 +134,32 @@ export class OkxService {
             ordId,
             detalhes
         };
+    }
+
+    async withdrawUsdt({
+        amount,
+        toAddress,
+        network,
+        fundPwd,
+        fee
+    }: WithdrawUsdtParams) {
+        const method = 'POST';
+        const requestPath = '/api/v5/asset/withdrawal';
+        const bodyObj = {
+            ccy: 'USDT',
+            amt: amount,
+            dest: 4,
+            toAddr: toAddress,
+            chain: `USDT-${network}`,
+            fee: fee,
+            pwd: fundPwd
+        };
+        const body = JSON.stringify(bodyObj);
+
+        const headers = this.authService.getAuthHeaders(method, requestPath, body);
+
+        const url = `https://www.okx.com${requestPath}`;
+        const response = await axios.post(url, bodyObj, { headers });
+        return response.data;
     }
 }
