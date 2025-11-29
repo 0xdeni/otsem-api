@@ -1,63 +1,45 @@
 {
-  "openapi": "3.0.0",
+  "openapi": "3.1.0",
   "info": {
-    "title": "OTSEM Auth API",
-    "version": "1.0.0",
-    "description": "Documentação da rota de autenticação"
+    "title": "Exemplo de API",
+    "version": "1.0.0"
   },
-  "paths": {
-    "/auth/login": {
-      "post": {
-        "summary": "Autenticação do usuário",
-        "description": "Realiza login e retorna o token JWT.",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "username": { "type": "string" },
-                  "password": { "type": "string" }
-                },
-                "required": ["username", "password"]
-              },
-              "examples": {
-                "login": {
-                  "value": {
-                    "username": "usuario@email.com",
-                    "password": "senha123"
-                  }
-                }
-              }
-            }
+  "paths": {},
+  "components": {
+    "schemas": {
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
           },
-          "responses": {
-            "200": {
-              "description": "Login realizado com sucesso",
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "type": "object",
-                    "properties": {
-                      "token": { "type": "string" }
-                    }
-                  },
-                  "examples": {
-                    "success": {
-                      "value": {
-                        "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                      }
-                    }
-                  }
-                }
-              }
-            },
-            "401": {
-              "description": "Credenciais inválidas"
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "isActive": {
+            "type": "boolean",
+            "default": true
+          },
+          "age": {
+            "type": "number",
+            "format": "float"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
             }
           }
-        }
+        },
+        "required": [
+          "id",
+          "name"
+        ]
       }
     }
   }
