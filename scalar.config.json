@@ -8,6 +8,10 @@
         {
           "path": "docs/introduction.md",
           "type": "page"
+        },
+        {
+          "path": "docs/customer-create.md",
+          "type": "page"
         }
       ]
     }
