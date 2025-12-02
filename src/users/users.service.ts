@@ -138,7 +138,6 @@ export class UsersService {
           email: true,
           name: true,
           role: true,
-          isActive: true,
           createdAt: true,
           // ajuste o nome do campo conforme seu Prisma: `customers` ou `Customer`
           customers: {
@@ -166,14 +165,12 @@ export class UsersService {
     if (!user) throw new NotFoundException('user_not_found');
     const updated = await this.prisma.user.update({
       where: { id },
-      data: { name: dto.name, role: dto.role, isActive: dto.isActive },
+      data: { name: dto.name, role: dto.role },
       select: {
         id: true,
         email: true,
         name: true,
         role: true,
-        isActive: true,
-        updatedAt: true,
       },
     });
     return updated;
@@ -192,13 +189,13 @@ export class UsersService {
     if (!user) throw new NotFoundException('user_not_found');
 
     if (requestUser.role !== Role.ADMIN) {
-      const ok = await bcrypt.compare(currentPassword, user.passwordHash);
+      const ok = await bcrypt.compare(currentPassword, user.password ?? '');
       if (!ok) throw new BadRequestException('current_password_invalid');
     }
     const hash = await bcrypt.hash(newPassword, SALT_ROUNDS);
     await this.prisma.user.update({
       where: { id },
-      data: { passwordHash: hash },
+      data: { password: hash },
     });
     return { ok: true };
   }
@@ -217,7 +214,6 @@ export class UsersService {
         email: true,
         name: true,
         role: true,
-        isActive: true,
         createdAt: true,
         // ajuste o nome do campo conforme seu Prisma: `customers` ou `Customer`
         customers: {
