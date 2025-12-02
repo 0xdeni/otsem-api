@@ -42,19 +42,57 @@ export class AuthService {
   async login(email: string, password: string) {
     const user = await this.validateUser(email, password);
 
-    const customer = await this.prisma.customer.findUnique({
-      where: { email: user.email },
-      select: { id: true }
-    });
-
-    const payload: JwtPayload & { customerId?: string } = {
+    // Gera accessToken (curto prazo)
+    const payload: JwtPayload = {
       sub: user.id,
       email: user.email,
       role: user.role,
-      ...(customer && { customerId: customer.id }), // só inclui se existir
     };
-    const access_token = await this.jwt.signAsync(payload);
-    return { access_token, role: user.role };
+    const accessToken = await this.jwt.signAsync(payload, { expiresIn: '15m' });
+
+    // Gera refreshToken (longo prazo)
+    const refreshPayload = { userId: user.id, email: user.email, type: 'refresh' };
+    const refreshToken = await this.jwt.signAsync(refreshPayload, { expiresIn: '7d' });
+
+    await this.prisma.refreshToken.create({
+      data: {
+        userId: user.id,
+        token: refreshToken,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      },
+    });
+
+    // Busca dados completos do usuário (ajuste conforme seu schema)
+    const fullUser = await this.prisma.user.findUnique({
+      where: { id: user.id },
+      select: {
+        id: true,
+        email: true,
+        phone: true,
+        name: true,
+        profileImage: true,
+        address: true,
+        createdAt: true,
+        kycStatus: true,
+        has2FA: true,
+        hasBiometric: true,
+        hasPin: true,
+        preferredCurrency: true,
+        notificationsEnabled: true,
+      },
+    });
+
+    return {
+      success: true,
+      data: {
+        user: {
+          ...fullUser,
+          createdAt: fullUser?.createdAt?.getTime() ?? null,
+        },
+        accessToken,
+        refreshToken,
+      },
+    };
   }
 
   async register(dto: { email: string; password: string; name?: string }) {
