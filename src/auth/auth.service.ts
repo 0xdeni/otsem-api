@@ -24,7 +24,8 @@ export class AuthService {
   async validateUser(email: string, password: string) {
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user) throw new UnauthorizedException('invalid_credentials');
-    const ok = await bcrypt.compare(password, user.password);
+    if (!user.passwordHash) throw new UnauthorizedException('invalid_credentials');
+    const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) throw new UnauthorizedException('invalid_credentials');
 
     // Busca o customer vinculado ao usuário
@@ -107,7 +108,7 @@ export class AuthService {
     const user = await this.prisma.user.create({
       data: {
         email: dto.email,
-        password: hash,
+        passwordHash: hash,
         name: dto.name,
         role: Role.CUSTOMER,
         kycStatus: 'not_started',
@@ -241,7 +242,7 @@ export class AuthService {
     await this.prisma.$transaction([
       this.prisma.user.update({
         where: { id: rec.userId },
-        data: { password: hash }, // <--- AQUI estava o bug: antes era { password: newPassword }
+        data: { passwordHash: hash }, // <--- AQUI estava o bug: antes era { password: newPassword }
       }),
       this.prisma.passwordResetToken.update({
         where: { id: rec.id },
