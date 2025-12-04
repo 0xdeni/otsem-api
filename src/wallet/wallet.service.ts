@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Keypair, Connection, PublicKey } from '@solana/web3.js';
 import { PrismaService } from '../prisma/prisma.service'; // ajuste o import conforme seu projeto
 
+
 @Injectable()
 export class WalletService {
     constructor(private readonly prisma: PrismaService) { }
@@ -44,7 +45,6 @@ export class WalletService {
     async getSolanaUsdtBalance(address: string, customerId?: string): Promise<string> {
         try {
             const connection = new Connection('https://api.mainnet-beta.solana.com');
-            const usdtMint = new PublicKey('Es9vMFrzaCERcKjQ6tG1pQ6v5yF7z4d6h6t6z6t6z6t6');
             let owner: PublicKey;
             try {
                 owner = new PublicKey(address);
@@ -52,18 +52,23 @@ export class WalletService {
                 throw new Error('Endereço Solana inválido');
             }
 
-            const tokenAccounts = await connection.getTokenAccountsByOwner(owner, { mint: usdtMint });
-            let saldo = '0';
-            if (tokenAccounts.value.length > 0) {
-                const accountInfo = await connection.getParsedAccountInfo(tokenAccounts.value[0].pubkey);
-                const data = accountInfo.value?.data;
-                if (typeof data === 'object' && 'parsed' in data) {
-                    const parsed = (data as any).parsed?.info?.tokenAmount?.amount;
-                    if (parsed) saldo = (Number(parsed) / 1e6).toString();
+            // Busca todas as contas de token do endereço
+            const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
+                owner,
+                { programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA') }
+            );
+
+            let saldo = 0;
+            for (const acc of tokenAccounts.value) {
+                const info = acc.account.data.parsed.info;
+                // Mint USDT SPL
+                if (info.mint === 'Es9vMFrzaCERcKjQ6tG1pQ6v5yF7z4d6h6t6z6t6z6t6') {
+                    saldo += Number(info.tokenAmount.amount);
                 }
             }
+            const saldoUsdt = (saldo / 1e6).toString();
+            console.log('Saldo total USDT:', saldoUsdt);
 
-            // Atualiza o saldo no banco se customerId for informado
             if (customerId) {
                 await this.prisma.wallet.updateMany({
                     where: {
@@ -72,14 +77,15 @@ export class WalletService {
                         externalAddress: address
                     },
                     data: {
-                        balance: saldo
+                        balance: saldoUsdt
                     }
                 });
             }
 
-            return saldo;
+            return saldoUsdt;
         } catch (err) {
             if (err.message === 'Endereço Solana inválido') throw err;
+            console.error('Erro ao consultar saldo USDT:', err);
             return '0';
         }
     }

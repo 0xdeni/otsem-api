@@ -78,6 +78,7 @@ export class AuthService {
         has2FA: true,
         hasBiometric: true,
         hasPin: true,
+        role: true,
         preferredCurrency: true,
         notificationsEnabled: true,
       },
@@ -261,5 +262,18 @@ export class AuthService {
     ]);
 
     return { ok: true };
+  }
+
+  async logout(refreshToken: string) {
+    // Revoga o refreshToken no banco
+    await this.prisma.refreshToken.updateMany({
+      where: { token: refreshToken },
+      data: { revoked: true },
+    });
+
+    return {
+      success: true,
+      data: { message: 'Logged out successfully' },
+    };
   }
 }

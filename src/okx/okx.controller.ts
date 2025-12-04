@@ -21,7 +21,7 @@ export class OkxController {
     }
 
     @Post('withdraw-usdt')
-    async withdrawUsdt(@Body() body: {
+    async safeWithdrawUsdt(@Body() body: {
         amount: string | number;
         toAddress: string;
         fundPwd: string;

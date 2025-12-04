@@ -1,24 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import axios from 'axios';
-import { FdbankAuthService } from './fdbank-auth.service';
 
 @Injectable()
 export class FdbankUserService {
     private baseUrl = 'https://api.fdbank.com.br/v1.0/User/';
-    private apiKey = process.env.FDBANK_API_KEY;
-    private username = process.env.FDBANK_USERNAME;
-    private password = process.env.FDBANK_PASSWORD;
-
-    constructor(private readonly authService: FdbankAuthService) { }
+    private token = process.env.FDBANK_API_KEY;
 
     private async getHeaders() {
-        const token = await this.authService.getToken({
-            username: "this.username",
-            password: "this.password",
-        });
         return {
-            'x-api-key': this.apiKey,
-            'Authorization': `Bearer ${token}`,
+            'x-api-key': this.token,
         };
     }
 

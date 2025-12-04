@@ -1,24 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import axios from 'axios';
-import { FdbankAuthService } from './fdbank-auth.service';
 
 @Injectable()
 export class FdbankPixKeyService {
-    private baseUrl = 'https://api.fdbank.com.br/v1.0/PixKey/';
-    private apiKey = process.env.FDBANK_API_KEY;
-    private username = process.env.FDBANK_USERNAME;
-    private password = process.env.FDBANK_PASSWORD;
-
-    constructor(private readonly authService: FdbankAuthService) { }
+    private baseUrl = 'https://api-baas.fdbank.com.br/v1.0/PixKey/';
+    private token = process.env.FDBANK_API_KEY;
 
     private async getHeaders() {
-        const token = await this.authService.getToken({
-            username: "username",
-            password: "password",
-        });
         return {
-            'x-api-key': this.apiKey,
-            'Authorization': `Bearer ${token}`,
+            'x-api-key': this.token,
         };
     }
 
@@ -30,10 +20,38 @@ export class FdbankPixKeyService {
     }
 
     async createPixKey(data: any) {
-        const response = await axios.post(this.baseUrl, data, {
-            headers: await this.getHeaders(),
-        });
-        return response.data;
+        try {
+            const response = await axios.post(this.baseUrl, data, {
+                headers: await this.getHeaders(),
+            });
+            return {
+                isValid: true,
+                message: response.data.message || 'Pix key created',
+                result: response.data.result,
+                requestTraceId: response.data.requestTraceId || null,
+            };
+        } catch (error: any) {
+            const status = error.response?.status;
+            const message = error.response?.data?.message || error.message || 'Error';
+            const requestTraceId = error.response?.data?.requestTraceId || null;
+            const result = error.response?.data?.result || null;
+
+            if (status === 400 || status === 404) {
+                return {
+                    isValid: false,
+                    message,
+                    result,
+                    requestTraceId,
+                };
+            }
+            // 500 ou outros erros
+            return {
+                isValid: false,
+                message,
+                result,
+                requestTraceId,
+            };
+        }
     }
 
     async getPixKey(id: string) {

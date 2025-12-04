@@ -162,4 +162,79 @@ export class OkxService {
         const response = await axios.post(url, bodyObj, { headers });
         return response.data;
     }
+
+    async buyBrlAndReturnUsdtBalance(brlAmount: number) {
+        await this.buyUsdtWithBrl(brlAmount);
+        // Aguarda alguns segundos para a ordem ser processada
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        return this.getUsdtBalance();
+    }
+
+    async buyUsdtWithBrlIfEnough(brlAmount: number): Promise<any> {
+        const brlBalance = parseFloat(await this.getBrlBalance());
+        if (brlAmount > brlBalance) {
+            throw new Error(`Saldo insuficiente de BRL. Saldo disponível: ${brlBalance}`);
+        }
+        return this.buyUsdtWithBrl(brlAmount);
+    }
+
+    /**
+     * Transfere BRL da conta funding (principal) para a conta trading.
+     * @param amount Valor em BRL a transferir (string ou number)
+     */
+    async transferBrlToTrading(amount: string | number) {
+        const method = 'POST';
+        const requestPath = '/api/v5/asset/transfer';
+        const bodyObj = {
+            ccy: 'BRL',
+            amt: amount.toString(),
+            from: 6,   // 6 = funding
+            to: 18     // 18 = trading
+        };
+        const body = JSON.stringify(bodyObj);
+        const headers = this.authService.getAuthHeaders(method, requestPath, body);
+        const apiUrl = process.env.OKX_API_URL || 'https://www.okx.com';
+
+        const response = await axios.post(`${apiUrl}${requestPath}`, bodyObj, { headers });
+        return response.data;
+    }
+
+    async safeWithdrawUsdt(params: WithdrawUsdtParams) {
+        // 1. Transfere USDT da conta funding para trading
+        await this.transferUsdtToTrading(params.amount);
+
+        // 2. Aguarda alguns segundos para garantir o processamento
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        // 3. Realiza o saque normalmente
+        return this.withdrawUsdt(params);
+    }
+
+    /**
+     * Transfere USDT da conta funding para trading.
+     * @param amount Valor em USDT a transferir
+     */
+    async transferUsdtToTrading(amount: string | number) {
+        const method = 'POST';
+        const requestPath = '/api/v5/asset/transfer';
+        const bodyObj = {
+            ccy: 'USDT',
+            amt: amount.toString(),
+            from: 6,   // 6 = funding
+            to: 18     // 18 = trading
+        };
+        const body = JSON.stringify(bodyObj);
+        const headers = this.authService.getAuthHeaders(method, requestPath, body);
+        const apiUrl = process.env.OKX_API_URL || 'https://www.okx.com';
+
+        const response = await axios.post(`${apiUrl}${requestPath}`, bodyObj, { headers });
+        return response.data;
+    }
+
+    async getTradingBalanceByCurrency(currency: string) {
+        const response = await this.getAccountBalance();
+        const details = response.data[0]?.details || [];
+        const asset = details.find((d: any) => d.ccy === currency);
+        return asset ? asset.availBal : '0';
+    }
 }

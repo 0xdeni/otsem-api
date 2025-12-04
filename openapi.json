@@ -1054,6 +1054,151 @@
         ]
       }
     },
+    "/fdbank/pix-keys": {
+      "get": {
+        "operationId": "FdbankPixKeyController_listPixKeys",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "FdbankPixKey"
+        ]
+      },
+      "post": {
+        "operationId": "FdbankPixKeyController_createPixKey",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "FdbankPixKey"
+        ]
+      }
+    },
+    "/fdbank/pix-keys/{id}": {
+      "get": {
+        "operationId": "FdbankPixKeyController_getPixKey",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "FdbankPixKey"
+        ]
+      },
+      "delete": {
+        "operationId": "FdbankPixKeyController_deletePixKey",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "FdbankPixKey"
+        ]
+      }
+    },
+    "/fdbank/pix-keys/resolve-dict": {
+      "post": {
+        "operationId": "FdbankPixKeyController_resolveDict",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "FdbankPixKey"
+        ]
+      }
+    },
+    "/fdbank/bank-account/active": {
+      "get": {
+        "operationId": "FdbankBankAccountController_getActiveBankAccount",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "FdbankBankAccount"
+        ]
+      }
+    },
+    "/fdbank/bank-account/statement": {
+      "get": {
+        "operationId": "FdbankBankAccountController_getBankAccountStatement",
+        "parameters": [
+          {
+            "name": "startDate",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "endDate",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "perPage",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "FdbankBankAccount"
+        ]
+      }
+    },
     "/fdbank/customers": {
       "get": {
         "operationId": "FdbankCustomerController_listCustomers",
@@ -1297,7 +1442,7 @@
     },
     "/okx/withdraw-usdt": {
       "post": {
-        "operationId": "OkxController_withdrawUsdt",
+        "operationId": "OkxController_safeWithdrawUsdt",
         "parameters": [],
         "responses": {
           "201": {
