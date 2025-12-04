@@ -1,11 +1,18 @@
 import { Injectable } from '@nestjs/common';
 import { Keypair, Connection, PublicKey } from '@solana/web3.js';
-import { PrismaService } from '../prisma/prisma.service'; // ajuste o import conforme seu projeto
-
+import { PrismaService } from '../prisma/prisma.service';
+import { InterPixService } from '../inter/services/inter-pix.service'; // <-- adicione este import
+import { PixKeyType } from '../inter/dto/send-pix.dto';
+import { OkxService } from '../okx/services/okx.service'; // <-- adicione este import
 
 @Injectable()
 export class WalletService {
-    constructor(private readonly prisma: PrismaService) { }
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly interPixService: InterPixService, // <-- adicione aqui
+        private readonly okxService: OkxService // <-- adicione esta linha
+    ) { }
+
 
     async createSolanaWalletForCustomer(customerId: string) {
         const keypair = Keypair.generate();
@@ -98,5 +105,59 @@ export class WalletService {
                 currency: 'USDT'
             }
         });
+    }
+
+    async buyUsdtWithBrl(customerId: string, brlAmount: number) {
+
+        // 1. Verifica saldo BRL do cliente (mínimo R$10)
+        const account = await this.prisma.account.findFirst({
+            where: { customerId }
+        });
+
+        if (!account || Number(account.balance) < brlAmount || brlAmount < 10) {
+            throw new Error('Saldo insuficiente em BRL (mínimo R$10)');
+        }
+
+        // 3. Envia Pix do Inter para OKX
+        const pixResult = await this.interPixService.sendPix(customerId, {
+            valor: brlAmount,
+            chaveDestino: '50459025000126', // Chave Pix da OKX
+            tipoChave: PixKeyType.CHAVE,
+            descricao: customerId // Descrição é o id do cliente
+        });
+
+        // 4. Compra USDT na OKX
+        // Aguarda alguns segundos para o Pix ser processado
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        const okxBuyResult = await this.okxService.buyUsdtWithBrl(brlAmount);
+
+
+
+        // 5. Transfere USDT para a carteira Solana do cliente
+        // Busca a carteira principal USDT do cliente
+        const wallet = await this.prisma.wallet.findFirst({
+            where: { customerId, currency: 'USDT', isMain: true }
+        });
+        if (!wallet || !wallet.externalAddress) {
+            throw new Error('Carteira Solana principal não encontrada para o cliente');
+        }
+
+        // Realiza o saque de USDT para a carteira Solana
+        // Ajuste os parâmetros conforme sua integração OKX
+        const withdrawResult = await this.okxService.safeWithdrawUsdt({
+            currency: 'USDT', // <-- Adicione este campo
+            amount: okxBuyResult.amount || brlAmount,
+            toAddress: wallet.externalAddress,
+            network: 'Solana',
+            fundPwd: process.env.OKX_API_PASSPHRASE || 'not_found',
+            fee: '1'
+        });
+
+        return {
+            message: 'Compra e transferência de USDT concluída',
+            pixResult,
+            okxBuyResult,
+            withdrawResult
+        };
     }
 }

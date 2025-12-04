@@ -1375,199 +1375,17 @@
         ]
       }
     },
-    "/wallet/teste-balance": {
-      "get": {
-        "operationId": "WalletController_getBalance",
+    "/wallet/buy-usdt-with-brl": {
+      "post": {
+        "operationId": "WalletController_buyUsdtWithBrl",
         "parameters": [],
         "responses": {
-          "200": {
+          "201": {
             "description": ""
           }
         },
         "tags": [
           "Wallet"
-        ]
-      }
-    },
-    "/pix-keys/customer/{customerId}": {
-      "get": {
-        "operationId": "PixKeysController_getKeysByCustomer",
-        "parameters": [
-          {
-            "name": "customerId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "PixKeys"
-        ]
-      }
-    },
-    "/okx/balance-brl": {
-      "get": {
-        "operationId": "OkxController_getBrlBalance",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "Okx"
-        ]
-      }
-    },
-    "/okx/balance-usdt": {
-      "get": {
-        "operationId": "OkxController_getUsdtBalance",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "Okx"
-        ]
-      }
-    },
-    "/okx/buy-and-check-history": {
-      "post": {
-        "operationId": "OkxController_buyAndCheckHistory",
-        "parameters": [],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "Okx"
-        ]
-      }
-    },
-    "/okx/withdraw-usdt": {
-      "post": {
-        "operationId": "OkxController_safeWithdrawUsdt",
-        "parameters": [],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "Okx"
-        ]
-      }
-    },
-    "/admin/dashboard/stats": {
-      "get": {
-        "operationId": "AdminDashboardController_stats",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Dashboard completo",
-        "tags": [
-          "Admin Dashboard"
-        ]
-      }
-    },
-    "/admin/dashboard/summary": {
-      "get": {
-        "operationId": "AdminDashboardController_summary",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Resumo geral",
-        "tags": [
-          "Admin Dashboard"
-        ]
-      }
-    },
-    "/admin/dashboard/inter-balance": {
-      "get": {
-        "operationId": "AdminDashboardController_interBalance",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "OK"
-          },
-          "503": {
-            "description": "Serviço não disponível"
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Saldo Inter",
-        "tags": [
-          "Admin Dashboard"
-        ]
-      }
-    },
-    "/admin/dashboard/latest-users": {
-      "get": {
-        "operationId": "AdminDashboardController_latestUsers",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Últimos usuários",
-        "tags": [
-          "Admin Dashboard"
-        ]
-      }
-    },
-    "/admin/dashboard/latest-transactions": {
-      "get": {
-        "operationId": "AdminDashboardController_latestTransactions",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Últimas transações",
-        "tags": [
-          "Admin Dashboard"
         ]
       }
     },
@@ -2444,6 +2262,188 @@
         "summary": "🔬 Testar envio Pix (direto para Inter)",
         "tags": [
           "💸 Pix (Inter)"
+        ]
+      }
+    },
+    "/okx/balance-brl": {
+      "get": {
+        "operationId": "OkxController_getBrlBalance",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Okx"
+        ]
+      }
+    },
+    "/okx/balance-usdt": {
+      "get": {
+        "operationId": "OkxController_getUsdtBalance",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Okx"
+        ]
+      }
+    },
+    "/okx/buy-and-check-history": {
+      "post": {
+        "operationId": "OkxController_buyAndCheckHistory",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Okx"
+        ]
+      }
+    },
+    "/okx/withdraw-usdt": {
+      "post": {
+        "operationId": "OkxController_safeWithdrawUsdt",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Okx"
+        ]
+      }
+    },
+    "/pix-keys/customer/{customerId}": {
+      "get": {
+        "operationId": "PixKeysController_getKeysByCustomer",
+        "parameters": [
+          {
+            "name": "customerId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "PixKeys"
+        ]
+      }
+    },
+    "/admin/dashboard/stats": {
+      "get": {
+        "operationId": "AdminDashboardController_stats",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Dashboard completo",
+        "tags": [
+          "Admin Dashboard"
+        ]
+      }
+    },
+    "/admin/dashboard/summary": {
+      "get": {
+        "operationId": "AdminDashboardController_summary",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Resumo geral",
+        "tags": [
+          "Admin Dashboard"
+        ]
+      }
+    },
+    "/admin/dashboard/inter-balance": {
+      "get": {
+        "operationId": "AdminDashboardController_interBalance",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "503": {
+            "description": "Serviço não disponível"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Saldo Inter",
+        "tags": [
+          "Admin Dashboard"
+        ]
+      }
+    },
+    "/admin/dashboard/latest-users": {
+      "get": {
+        "operationId": "AdminDashboardController_latestUsers",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Últimos usuários",
+        "tags": [
+          "Admin Dashboard"
+        ]
+      }
+    },
+    "/admin/dashboard/latest-transactions": {
+      "get": {
+        "operationId": "AdminDashboardController_latestTransactions",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Últimas transações",
+        "tags": [
+          "Admin Dashboard"
         ]
       }
     },
