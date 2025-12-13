@@ -55,6 +55,13 @@ Available at `http://localhost:5000/api/docs` when running.
   - `fdbank/` - FDBank integration
   - `okx/` - OKX exchange integration
   - `payments/` - Payment processing
-  - `wallet/` - Wallet management
+  - `wallet/` - Multi-network wallet management (Solana, Ethereum, Polygon, BSC, Tron, etc.)
+  - `statements/` - Account statements
   - `prisma/` - Prisma service
 - `prisma/` - Database schema and migrations
+
+## Recent Changes (Dec 2025)
+- Wallet system now supports multiple wallets per customer across different blockchain networks
+- Added WalletNetwork enum: SOLANA, ETHEREUM, POLYGON, BSC, TRON, BITCOIN, AVALANCHE, ARBITRUM, OPTIMISM, BASE
+- New wallet endpoints: import, set-main, update label, delete
+- Unique constraint: [customerId, network, externalAddress]
