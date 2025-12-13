@@ -199,6 +199,10 @@ model Customer {
   externalClientId String?
   externalAccredId String?
 
+  // Didit KYC
+  diditSessionId       String?
+  diditVerificationUrl String?
+
   mainPixKey String? @unique
 
   // Extras

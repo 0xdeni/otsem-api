@@ -627,7 +627,36 @@
             "bearer": []
           }
         ],
-        "summary": "Solicitar KYC",
+        "summary": "Solicitar KYC - retorna URL de verificação Didit",
+        "tags": [
+          "Customers"
+        ]
+      }
+    },
+    "/customers/{id}/kyc/status": {
+      "get": {
+        "operationId": "CustomersController_kycStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Consultar status do KYC e decisão Didit",
         "tags": [
           "Customers"
         ]
@@ -1132,6 +1161,31 @@
         "summary": "Extrato por customerId (Admin)",
         "tags": [
           "Statements"
+        ]
+      }
+    },
+    "/didit/webhooks/verification": {
+      "post": {
+        "operationId": "DiditController_handleVerificationWebhook",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiditWebhookPayloadDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Webhook processado com sucesso"
+          }
+        },
+        "summary": "Webhook para receber notificações de verificação Didit",
+        "tags": [
+          "Didit Webhooks"
         ]
       }
     },
@@ -2859,6 +2913,43 @@
             ]
           }
         }
+      },
+      "DiditWebhookPayloadDto": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "description": "ID da sessão de verificação"
+          },
+          "status": {
+            "type": "string",
+            "description": "Status da sessão"
+          },
+          "decision": {
+            "type": "string",
+            "description": "Decisão da verificação: Approved, Declined, Review"
+          },
+          "vendor_data": {
+            "type": "string",
+            "description": "Dados do vendor passados na criação"
+          },
+          "document_data": {
+            "type": "object"
+          },
+          "face_data": {
+            "type": "object"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "status"
+        ]
       },
       "CreateCustomerDto": {
         "type": "object",

@@ -31,6 +31,7 @@ This is a backend-only NestJS API that provides:
 - `INTER_CERT_PATH`, `INTER_KEY_PATH` - Banco Inter certificate paths
 - `FDBANK_API_KEY`, `FDBANK_API_SECRET` - FDBank API credentials
 - `OKX_API_KEY`, `OKX_API_SECRET`, `OKX_API_PASSPHRASE` - OKX exchange credentials
+- `DIDIT_API_KEY`, `DIDIT_WORKFLOW_ID` - Didit KYC verification API
 
 ## Running Locally
 
@@ -51,6 +52,7 @@ Available at `http://localhost:5000/api/docs` when running.
   - `auth/` - Authentication module
   - `users/` - User management
   - `customers/` - Customer management with KYC
+  - `didit/` - Didit KYC verification integration
   - `inter/` - Banco Inter integration
   - `fdbank/` - FDBank integration
   - `okx/` - OKX exchange integration
@@ -61,6 +63,12 @@ Available at `http://localhost:5000/api/docs` when running.
 - `prisma/` - Database schema and migrations
 
 ## Recent Changes (Dec 2025)
+- **Didit KYC Integration**: Integrated Didit API for identity verification
+  - New `didit/` module with service, controller, DTOs
+  - Customer model extended with `diditSessionId` and `diditVerificationUrl`
+  - KYC request creates Didit session and returns verification URL
+  - Webhook endpoint at `POST /didit/webhooks/verification` receives verification results
+  - KYC status endpoint at `GET /customers/:id/kyc/status` fetches Didit decision
 - Wallet system now supports multiple wallets per customer across different blockchain networks
 - Added WalletNetwork enum: SOLANA, ETHEREUM, POLYGON, BSC, TRON, BITCOIN, AVALANCHE, ARBITRUM, OPTIMISM, BASE
 - New wallet endpoints: import, set-main, update label, delete

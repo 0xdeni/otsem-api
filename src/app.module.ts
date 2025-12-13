@@ -18,6 +18,7 @@ import { OkxModule } from './okx/okx.module';
 import { FdbankModule } from './fdbank/fdbank.module';
 import { WalletModule } from './wallet/wallet.module';
 import { PixKeysModule } from './pix-keys/pix-keys.module';
+import { DiditModule } from './didit/didit.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { PixKeysModule } from './pix-keys/pix-keys.module';
     FdbankModule,
     WalletModule,
     PixKeysModule,
+    DiditModule,
     OkxModule,
     MailModule,
     AdminDashboardModule,

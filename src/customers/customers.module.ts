@@ -5,11 +5,13 @@ import { CustomerBalanceService } from './customer-balance.service';
 import { CustomerKycService } from './customer-kyc.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { StatementsModule } from '../statements/statements.module';
+import { DiditModule } from '../didit/didit.module';
 
 @Module({
   imports: [
     PrismaModule,
     forwardRef(() => StatementsModule),
+    DiditModule,
   ],
   controllers: [CustomersController],
   providers: [

@@ -98,13 +98,23 @@ export class CustomersController {
 
   // KYC flows
   @Post(':id/kyc/request')
-  @ApiOperation({ summary: 'Solicitar KYC' })
+  @ApiOperation({ summary: 'Solicitar KYC - retorna URL de verificação Didit' })
   async requestKyc(@Req() req: AuthRequest, @Param('id') id: string) {
     const customer = await this.customers.findById(id);
     if (req.user!.role !== Role.ADMIN && req.user!.sub !== (customer as any).userId) {
       throw new ForbiddenException('Acesso negado');
     }
     return this.kyc.requestKyc(id);
+  }
+
+  @Get(':id/kyc/status')
+  @ApiOperation({ summary: 'Consultar status do KYC e decisão Didit' })
+  async kycStatus(@Req() req: AuthRequest, @Param('id') id: string) {
+    const customer = await this.customers.findById(id);
+    if (req.user!.role !== Role.ADMIN && req.user!.sub !== (customer as any).userId) {
+      throw new ForbiddenException('Acesso negado');
+    }
+    return this.kyc.getKycStatus(id);
   }
 
   @Patch(':id/kyc/review')
