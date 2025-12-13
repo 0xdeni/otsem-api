@@ -1,0 +1,55 @@
+[20:11:38] Starting compilation in watch mode...
+
+src/customers/customer-kyc.service.ts:20:26 - error TS2339: Property 'diditVerificationUrl' does not exist on type '{ id: string; email: string; name: string; phone: string | null; createdAt: Date; cpf: string | null; cnpj: string | null; mainPixKey: string | null; userId: string | null; type: CustomerType; ... 10 more ...; updatedAt: Date; }'.
+
+20             if (customer.diditVerificationUrl) {
+                            ~~~~~~~~~~~~~~~~~~~~
+
+src/customers/customer-kyc.service.ts:24:47 - error TS2339: Property 'diditVerificationUrl' does not exist on type '{ id: string; email: string; name: string; phone: string | null; createdAt: Date; cpf: string | null; cnpj: string | null; mainPixKey: string | null; userId: string | null; type: CustomerType; ... 10 more ...; updatedAt: Date; }'.
+
+24                     verificationUrl: customer.diditVerificationUrl,
+                                                 ~~~~~~~~~~~~~~~~~~~~
+
+src/customers/customer-kyc.service.ts:25:41 - error TS2339: Property 'diditSessionId' does not exist on type '{ id: string; email: string; name: string; phone: string | null; createdAt: Date; cpf: string | null; cnpj: string | null; mainPixKey: string | null; userId: string | null; type: CustomerType; ... 10 more ...; updatedAt: Date; }'.
+
+25                     sessionId: customer.diditSessionId,
+                                           ~~~~~~~~~~~~~~
+
+src/customers/customer-kyc.service.ts:38:17 - error TS2353: Object literal may only specify known properties, and 'diditSessionId' does not exist in type '(Without<CustomerUpdateInput, CustomerUncheckedUpdateInput> & CustomerUncheckedUpdateInput) | (Without<...> & CustomerUpdateInput)'.
+
+38                 diditSessionId: session.sessionId,
+                   ~~~~~~~~~~~~~~
+
+  node_modules/.prisma/client/index.d.ts:7503:5
+    7503     data: XOR<CustomerUpdateInput, CustomerUncheckedUpdateInput>
+             ~~~~
+    The expected type comes from property 'data' which is declared here on type '{ select?: CustomerSelect<DefaultArgs> | null | undefined; omit?: CustomerOmit<DefaultArgs> | null | undefined; include?: CustomerInclude<...> | ... 1 more ... | undefined; data: (Without<...> & CustomerUncheckedUpdateInput) | (Without<...> & CustomerUpdateInput); where: CustomerWhereUniqueInput; }'
+
+src/customers/customer-kyc.service.ts:59:22 - error TS2339: Property 'diditSessionId' does not exist on type '{ id: string; email: string; name: string; phone: string | null; createdAt: Date; cpf: string | null; cnpj: string | null; mainPixKey: string | null; userId: string | null; type: CustomerType; ... 10 more ...; updatedAt: Date; }'.
+
+59         if (customer.diditSessionId) {
+                        ~~~~~~~~~~~~~~
+
+src/customers/customer-kyc.service.ts:61:85 - error TS2339: Property 'diditSessionId' does not exist on type '{ id: string; email: string; name: string; phone: string | null; createdAt: Date; cpf: string | null; cnpj: string | null; mainPixKey: string | null; userId: string | null; type: CustomerType; ... 10 more ...; updatedAt: Date; }'.
+
+61                 diditDecision = await this.diditService.getSessionDecision(customer.diditSessionId);
+                                                                                       ~~~~~~~~~~~~~~
+
+src/customers/customer-kyc.service.ts:70:38 - error TS2339: Property 'diditSessionId' does not exist on type '{ id: string; email: string; name: string; phone: string | null; createdAt: Date; cpf: string | null; cnpj: string | null; mainPixKey: string | null; userId: string | null; type: CustomerType; ... 10 more ...; updatedAt: Date; }'.
+
+70             diditSessionId: customer.diditSessionId,
+                                        ~~~~~~~~~~~~~~
+
+src/customers/customer-kyc.service.ts:71:44 - error TS2339: Property 'diditVerificationUrl' does not exist on type '{ id: string; email: string; name: string; phone: string | null; createdAt: Date; cpf: string | null; cnpj: string | null; mainPixKey: string | null; userId: string | null; type: CustomerType; ... 10 more ...; updatedAt: Date; }'.
+
+71             diditVerificationUrl: customer.diditVerificationUrl,
+                                              ~~~~~~~~~~~~~~~~~~~~
+
+src/didit/didit.controller.ts:36:16 - error TS2353: Object literal may only specify known properties, and 'diditSessionId' does not exist in type 'CustomerWhereInput'.
+
+36       where: { diditSessionId: payload.session_id },
+                  ~~~~~~~~~~~~~~
+
+[20:11:41] Found 9 errors. Watching for file changes.
+
+
