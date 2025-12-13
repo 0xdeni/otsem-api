@@ -11,6 +11,7 @@ async function bootstrap() {
   app.enableCors({
     origin: (origin: string | undefined, cb: (err: Error | null, allow?: boolean) => void) => {
       const allowed: string[] = [
+        'https://otsem-gzv6z8fm6-airlogs.vercel.app/',
         'https://otsem-web.vercel.app',
         'https://app.otsempay.com',
         'https://app.otsempay.com.br',
