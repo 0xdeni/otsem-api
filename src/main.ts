@@ -9,19 +9,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   app.enableCors({
-    origin: (origin: string | undefined, cb: (err: Error | null, allow?: boolean) => void) => {
-      const allowed: string[] = [
-        'https://0a982c3a-3382-4b9c-bea3-d0188fd5863f-00-2xden0cue9y8d.riker.replit.dev',
-        'https://otsem-gzv6z8fm6-airlogs.vercel.app',
-        'https://otsem-web.vercel.app',
-        'https://app.otsempay.com',
-        'https://app.otsempay.com.br',
-        'http://localhost:3000',
-        'http://localhost:3001',
-      ];
-      if (!origin || allowed.includes(origin)) return cb(null, true);
-      return cb(new Error('CORS blocked'), false);
-    },
+    origin: true,
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     exposedHeaders: ['Authorization'],
@@ -51,8 +39,8 @@ async function bootstrap() {
   // Gera o arquivo openapi.json com todas as rotas
   fs.writeFileSync('./openapi.json', JSON.stringify(document, null, 2));
 
-  const port = process.env.PORT || 3333;
-  await app.listen(port);
+  const port = process.env.PORT || 5000;
+  await app.listen(port, '0.0.0.0');
 
   console.log(`🚀 Application is running on: http://localhost:${port}`);
   console.log(`📚 Swagger docs available at: http://localhost:${port}/api/docs`);

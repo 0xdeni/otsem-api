@@ -22,13 +22,19 @@ export class InterAuthService {
 
     private accessToken: string | null = null;
     private tokenExpiry: Date | null = null;
-    private httpsAgent: https.Agent;
-    private axiosInstance: AxiosInstance;
+    private httpsAgent: https.Agent | null = null;
+    private axiosInstance: AxiosInstance | null = null;
+    private isConfigured = false;
 
     constructor() {
-        this.resolveCertPaths();
-        this.initializeHttpsAgent();
-        this.initializeAxiosInstance();
+        try {
+            this.resolveCertPaths();
+            this.initializeHttpsAgent();
+            this.initializeAxiosInstance();
+            this.isConfigured = true;
+        } catch (error) {
+            this.logger.warn('Inter API not configured - certificates not found. Inter banking features disabled.');
+        }
     }
 
     /**
@@ -143,6 +149,9 @@ export class InterAuthService {
     }
 
     async getToken(): Promise<string> {
+        if (!this.isConfigured) {
+            throw new Error('Inter API not configured - certificates not found');
+        }
         // Verificar se token ainda é válido (com margem de 5 minutos)
         if (this.accessToken && this.tokenExpiry && new Date() < new Date(this.tokenExpiry.getTime() - 5 * 60 * 1000)) {
             return this.accessToken;
@@ -158,7 +167,7 @@ export class InterAuthService {
                     scope: 'extrato.read boleto-cobranca.read boleto-cobranca.write pix.read pix.write webhook.read webhook.write pagamento-pix.write',
                 }),
                 {
-                    httpsAgent: this.httpsAgent,
+                    httpsAgent: this.httpsAgent!,
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 }
             );
@@ -172,6 +181,20 @@ export class InterAuthService {
         }
     }
 
-    getAxiosInstance() { return this.axiosInstance; }
-    getHttpsAgent() { return this.httpsAgent; }
+    isServiceConfigured(): boolean {
+        return this.isConfigured;
+    }
+
+    getAxiosInstance() { 
+        if (!this.isConfigured) {
+            throw new Error('Inter API not configured - certificates not found');
+        }
+        return this.axiosInstance!; 
+    }
+    getHttpsAgent() { 
+        if (!this.isConfigured) {
+            throw new Error('Inter API not configured - certificates not found');
+        }
+        return this.httpsAgent!; 
+    }
 }
