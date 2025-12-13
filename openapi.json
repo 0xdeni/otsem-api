@@ -405,6 +405,46 @@
         ]
       }
     },
+    "/customers/me/kyc/request": {
+      "post": {
+        "operationId": "CustomersController_requestMyKyc",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Solicitar KYC do meu customer",
+        "tags": [
+          "Customers"
+        ]
+      }
+    },
+    "/customers/me/kyc/status": {
+      "get": {
+        "operationId": "CustomersController_myKycStatus",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Status do KYC do meu customer",
+        "tags": [
+          "Customers"
+        ]
+      }
+    },
     "/customers/{id}": {
       "get": {
         "operationId": "CustomersController_get",

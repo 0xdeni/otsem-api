@@ -61,6 +61,20 @@ export class CustomersController {
     return this.customers.update(customer.id, dto);
   }
 
+  @Post('me/kyc/request')
+  @ApiOperation({ summary: 'Solicitar KYC do meu customer' })
+  async requestMyKyc(@Req() req: AuthRequest) {
+    const customer = await this.customers.findByUserId(req.user!.sub);
+    return this.kyc.requestKyc(customer.id);
+  }
+
+  @Get('me/kyc/status')
+  @ApiOperation({ summary: 'Status do KYC do meu customer' })
+  async myKycStatus(@Req() req: AuthRequest) {
+    const customer = await this.customers.findByUserId(req.user!.sub);
+    return this.kyc.getKycStatus(customer.id);
+  }
+
   @Post()
   @ApiOperation({ summary: 'Criar customer' })
   async create(@Req() req: AuthRequest, @Body() dto: CreateCustomerLocalDto) {
