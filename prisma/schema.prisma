@@ -393,7 +393,7 @@ model Wallet {
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
   payouts  Payout[]
 
-  @@unique([customerId, externalAddress])
+  @@unique([customerId, network, externalAddress])
   @@index([customerId])
   @@index([customerId, network])
   @@index([customerId, currency])

@@ -1419,15 +1419,196 @@
         ]
       }
     },
+    "/wallet": {
+      "get": {
+        "operationId": "WalletController_listWallets",
+        "parameters": [
+          {
+            "name": "network",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "SOLANA",
+                "ETHEREUM",
+                "POLYGON",
+                "BSC",
+                "TRON",
+                "BITCOIN",
+                "AVALANCHE",
+                "ARBITRUM",
+                "OPTIMISM",
+                "BASE"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listar todas as wallets do customer",
+        "tags": [
+          "Wallet"
+        ]
+      }
+    },
+    "/wallet/{id}": {
+      "get": {
+        "operationId": "WalletController_getWallet",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Obter wallet por ID",
+        "tags": [
+          "Wallet"
+        ]
+      },
+      "delete": {
+        "operationId": "WalletController_deleteWallet",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Remover wallet (não pode ser a principal)",
+        "tags": [
+          "Wallet"
+        ]
+      }
+    },
     "/wallet/create-solana": {
       "post": {
-        "operationId": "WalletController_createSolanaWalletForCustomer",
+        "operationId": "WalletController_createSolanaWallet",
         "parameters": [],
         "responses": {
           "201": {
             "description": ""
           }
         },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Criar nova wallet Solana (gera keypair)",
+        "tags": [
+          "Wallet"
+        ]
+      }
+    },
+    "/wallet/import": {
+      "post": {
+        "operationId": "WalletController_importWallet",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Importar wallet externa",
+        "tags": [
+          "Wallet"
+        ]
+      }
+    },
+    "/wallet/{id}/set-main": {
+      "patch": {
+        "operationId": "WalletController_setMainWallet",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Definir wallet como principal para a rede",
+        "tags": [
+          "Wallet"
+        ]
+      }
+    },
+    "/wallet/{id}/label": {
+      "patch": {
+        "operationId": "WalletController_updateLabel",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Atualizar label da wallet",
         "tags": [
           "Wallet"
         ]
@@ -1451,6 +1632,12 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Consultar saldo USDT em endereço Solana",
         "tags": [
           "Wallet"
         ]
@@ -1458,13 +1645,19 @@
     },
     "/wallet/usdt": {
       "get": {
-        "operationId": "WalletController_getAllUsdtWalletsForCustomer",
+        "operationId": "WalletController_getAllUsdtWallets",
         "parameters": [],
         "responses": {
           "200": {
             "description": ""
           }
         },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listar todas as wallets USDT do customer",
         "tags": [
           "Wallet"
         ]
@@ -1479,6 +1672,12 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Comprar USDT com BRL e transferir para wallet",
         "tags": [
           "Wallet"
         ]

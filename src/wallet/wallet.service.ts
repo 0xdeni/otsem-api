@@ -1,163 +1,232 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { Keypair, Connection, PublicKey } from '@solana/web3.js';
 import { PrismaService } from '../prisma/prisma.service';
-import { InterPixService } from '../inter/services/inter-pix.service'; // <-- adicione este import
+import { InterPixService } from '../inter/services/inter-pix.service';
 import { PixKeyType } from '../inter/dto/send-pix.dto';
-import { OkxService } from '../okx/services/okx.service'; // <-- adicione este import
+import { OkxService } from '../okx/services/okx.service';
+import { WalletNetwork } from '@prisma/client';
 
 @Injectable()
 export class WalletService {
-    constructor(
-        private readonly prisma: PrismaService,
-        private readonly interPixService: InterPixService, // <-- adicione aqui
-        private readonly okxService: OkxService // <-- adicione esta linha
-    ) { }
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly interPixService: InterPixService,
+    private readonly okxService: OkxService,
+  ) {}
 
+  async createWallet(
+    customerId: string,
+    network: WalletNetwork,
+    externalAddress: string,
+    options?: { currency?: string; label?: string; isMain?: boolean },
+  ) {
+    const existing = await this.prisma.wallet.findUnique({
+      where: { customerId_network_externalAddress: { customerId, network, externalAddress } },
+    });
+    if (existing) {
+      throw new BadRequestException('Wallet com este endereço já existe nesta rede');
+    }
 
-    async createSolanaWalletForCustomer(customerId: string) {
-        const keypair = Keypair.generate();
-        const publicKey = keypair.publicKey.toBase58();
-        const secretKey = Buffer.from(keypair.secretKey).toString('hex');
+    if (options?.isMain) {
+      await this.prisma.wallet.updateMany({
+        where: { customerId, network, isMain: true },
+        data: { isMain: false },
+      });
+    }
 
-        // Desmarca todas as wallets USDT do cliente como principal
+    return this.prisma.wallet.create({
+      data: {
+        customerId,
+        network,
+        externalAddress,
+        currency: options?.currency || 'USDT',
+        label: options?.label,
+        isMain: options?.isMain ?? false,
+        balance: 0,
+      },
+    });
+  }
+
+  async createSolanaWallet(customerId: string, label?: string) {
+    const keypair = Keypair.generate();
+    const publicKey = keypair.publicKey.toBase58();
+    const secretKey = Buffer.from(keypair.secretKey).toString('hex');
+
+    const existingMain = await this.prisma.wallet.findFirst({
+      where: { customerId, network: 'SOLANA', isMain: true },
+    });
+
+    const wallet = await this.createWallet(customerId, 'SOLANA', publicKey, {
+      currency: 'USDT',
+      label: label || 'Solana Wallet',
+      isMain: !existingMain,
+    });
+
+    return { publicKey, secretKey, wallet };
+  }
+
+  async createSolanaWalletForCustomer(customerId: string) {
+    return this.createSolanaWallet(customerId);
+  }
+
+  async importWallet(
+    customerId: string,
+    network: WalletNetwork,
+    externalAddress: string,
+    label?: string,
+  ) {
+    const existingMain = await this.prisma.wallet.findFirst({
+      where: { customerId, network, isMain: true },
+    });
+
+    return this.createWallet(customerId, network, externalAddress, {
+      currency: 'USDT',
+      label: label || `${network} Wallet`,
+      isMain: !existingMain,
+    });
+  }
+
+  async getWalletsByCustomer(customerId: string, network?: WalletNetwork) {
+    const where: any = { customerId };
+    if (network) where.network = network;
+    return this.prisma.wallet.findMany({
+      where,
+      orderBy: [{ isMain: 'desc' }, { createdAt: 'desc' }],
+    });
+  }
+
+  async getWalletById(walletId: string, customerId?: string) {
+    const wallet = await this.prisma.wallet.findUnique({ where: { id: walletId } });
+    if (!wallet) throw new NotFoundException('Wallet não encontrada');
+    if (customerId && wallet.customerId !== customerId) {
+      throw new BadRequestException('Wallet não pertence a este customer');
+    }
+    return wallet;
+  }
+
+  async setMainWallet(walletId: string, customerId: string) {
+    const wallet = await this.getWalletById(walletId, customerId);
+
+    await this.prisma.wallet.updateMany({
+      where: { customerId, network: wallet.network, isMain: true },
+      data: { isMain: false },
+    });
+
+    return this.prisma.wallet.update({
+      where: { id: walletId },
+      data: { isMain: true },
+    });
+  }
+
+  async updateWalletLabel(walletId: string, customerId: string, label: string) {
+    await this.getWalletById(walletId, customerId);
+    return this.prisma.wallet.update({
+      where: { id: walletId },
+      data: { label },
+    });
+  }
+
+  async deleteWallet(walletId: string, customerId: string) {
+    const wallet = await this.getWalletById(walletId, customerId);
+    if (wallet.isMain) {
+      throw new BadRequestException('Não é possível deletar a wallet principal');
+    }
+    return this.prisma.wallet.delete({ where: { id: walletId } });
+  }
+
+  async getMainWallet(customerId: string, network: WalletNetwork) {
+    return this.prisma.wallet.findFirst({
+      where: { customerId, network, isMain: true },
+    });
+  }
+
+  async getSolanaUsdtBalance(address: string, customerId?: string): Promise<string> {
+    try {
+      const connection = new Connection('https://api.mainnet-beta.solana.com');
+      let owner: PublicKey;
+      try {
+        owner = new PublicKey(address);
+      } catch {
+        throw new Error('Endereço Solana inválido');
+      }
+
+      const tokenAccounts = await connection.getParsedTokenAccountsByOwner(owner, {
+        programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'),
+      });
+
+      let saldo = 0;
+      for (const acc of tokenAccounts.value) {
+        const info = acc.account.data.parsed.info;
+        if (info.mint === 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB') {
+          saldo += Number(info.tokenAmount.amount);
+        }
+      }
+      const saldoUsdt = (saldo / 1e6).toString();
+
+      if (customerId) {
         await this.prisma.wallet.updateMany({
-            where: { customerId, currency: 'USDT', isMain: true },
-            data: { isMain: false }
+          where: { customerId, externalAddress: address },
+          data: { balance: saldoUsdt },
         });
+      }
 
-        // Cria ou atualiza a wallet principal
-        const wallet = await this.prisma.wallet.upsert({
-            where: { customerId_currency: { customerId, currency: 'USDT' } },
-            update: {
-                externalAddress: publicKey,
-                isMain: true,
-                balance: 0
-            },
-            create: {
-                customerId,
-                currency: 'USDT',
-                balance: 0,
-                externalAddress: publicKey,
-                isMain: true
-            }
-        });
+      return saldoUsdt;
+    } catch (err: any) {
+      if (err.message === 'Endereço Solana inválido') throw err;
+      console.error('Erro ao consultar saldo USDT:', err);
+      return '0';
+    }
+  }
 
-        return {
-            publicKey,
-            secretKey,
-            wallet
-        };
+  async getAllUsdtWalletsForCustomer(customerId: string) {
+    return this.prisma.wallet.findMany({
+      where: { customerId, currency: 'USDT' },
+      orderBy: [{ network: 'asc' }, { isMain: 'desc' }],
+    });
+  }
+
+  async buyUsdtWithBrl(customerId: string, brlAmount: number, walletId?: string) {
+    const account = await this.prisma.account.findFirst({ where: { customerId } });
+    if (!account || Number(account.balance) < brlAmount || brlAmount < 10) {
+      throw new Error('Saldo insuficiente em BRL (mínimo R$10)');
     }
 
-    async getSolanaUsdtBalance(address: string, customerId?: string): Promise<string> {
-        try {
-            const connection = new Connection('https://api.mainnet-beta.solana.com');
-            let owner: PublicKey;
-            try {
-                owner = new PublicKey(address);
-            } catch {
-                throw new Error('Endereço Solana inválido');
-            }
+    const pixResult = await this.interPixService.sendPix(customerId, {
+      valor: brlAmount,
+      chaveDestino: '50459025000126',
+      tipoChave: PixKeyType.CHAVE,
+      descricao: customerId,
+    });
 
-            // Busca todas as contas de token do endereço
-            const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
-                owner,
-                { programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA') }
-            );
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+    const okxBuyResult = await this.okxService.buyUsdtWithBrl(brlAmount);
 
-            let saldo = 0;
-            for (const acc of tokenAccounts.value) {
-                const info = acc.account.data.parsed.info;
-                console.log('Token encontrado:', info.mint, 'Saldo:', info.tokenAmount.amount);
-                // Mint USDT SPL (corrigido para o mint completo)
-                if (info.mint === 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB') {
-                    saldo += Number(info.tokenAmount.amount);
-                }
-            }
-            const saldoUsdt = (saldo / 1e6).toString();
-            console.log('Saldo total USDT:', saldoUsdt);
-
-            if (customerId) {
-                await this.prisma.wallet.updateMany({
-                    where: {
-                        customerId,
-                        currency: 'USDT',
-                        externalAddress: address
-                    },
-                    data: {
-                        balance: saldoUsdt
-                    }
-                });
-            }
-
-            return saldoUsdt;
-        } catch (err) {
-            if (err.message === 'Endereço Solana inválido') throw err;
-            console.error('Erro ao consultar saldo USDT:', err);
-            return '0';
-        }
+    let wallet;
+    if (walletId) {
+      wallet = await this.getWalletById(walletId, customerId);
+    } else {
+      wallet = await this.getMainWallet(customerId, 'SOLANA');
     }
 
-    async getAllUsdtWalletsForCustomer(customerId: string) {
-        return await this.prisma.wallet.findMany({
-            where: {
-                customerId,
-                currency: 'USDT'
-            }
-        });
+    if (!wallet || !wallet.externalAddress) {
+      throw new Error('Carteira Solana não encontrada para o cliente');
     }
 
-    async buyUsdtWithBrl(customerId: string, brlAmount: number) {
+    const withdrawResult = await this.okxService.safeWithdrawUsdt({
+      currency: 'USDT',
+      amount: okxBuyResult.amount || brlAmount,
+      toAddress: wallet.externalAddress,
+      network: 'Solana',
+      fundPwd: process.env.OKX_API_PASSPHRASE || 'not_found',
+      fee: '1',
+    });
 
-        // 1. Verifica saldo BRL do cliente (mínimo R$10)
-        const account = await this.prisma.account.findFirst({
-            where: { customerId }
-        });
-
-        if (!account || Number(account.balance) < brlAmount || brlAmount < 10) {
-            throw new Error('Saldo insuficiente em BRL (mínimo R$10)');
-        }
-
-        // 3. Envia Pix do Inter para OKX
-        const pixResult = await this.interPixService.sendPix(customerId, {
-            valor: brlAmount,
-            chaveDestino: '50459025000126', // Chave Pix da OKX
-            tipoChave: PixKeyType.CHAVE,
-            descricao: customerId // Descrição é o id do cliente
-        });
-
-        // 4. Compra USDT na OKX
-        // Aguarda alguns segundos para o Pix ser processado
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        const okxBuyResult = await this.okxService.buyUsdtWithBrl(brlAmount);
-
-
-
-        // 5. Transfere USDT para a carteira Solana do cliente
-        // Busca a carteira principal USDT do cliente
-        const wallet = await this.prisma.wallet.findFirst({
-            where: { customerId, currency: 'USDT', isMain: true }
-        });
-        if (!wallet || !wallet.externalAddress) {
-            throw new Error('Carteira Solana principal não encontrada para o cliente');
-        }
-
-        // Realiza o saque de USDT para a carteira Solana
-        // Ajuste os parâmetros conforme sua integração OKX
-        const withdrawResult = await this.okxService.safeWithdrawUsdt({
-            currency: 'USDT', // <-- Adicione este campo
-            amount: okxBuyResult.amount || brlAmount,
-            toAddress: wallet.externalAddress,
-            network: 'Solana',
-            fundPwd: process.env.OKX_API_PASSPHRASE || 'not_found',
-            fee: '1'
-        });
-
-        return {
-            message: 'Compra e transferência de USDT concluída',
-            pixResult,
-            okxBuyResult,
-            withdrawResult
-        };
-    }
+    return {
+      message: 'Compra e transferência de USDT concluída',
+      pixResult,
+      okxBuyResult,
+      withdrawResult,
+      wallet: { id: wallet.id, network: wallet.network, address: wallet.externalAddress },
+    };
+  }
 }
