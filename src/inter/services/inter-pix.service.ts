@@ -51,7 +51,7 @@ export class InterPixService {
 
         try {
             const axios = this.authService.getAxiosInstance();
-            const response = await axios.post('/banking/v2/pix/cobrancas', {
+            const response = await axios.post('/pix/v2/cob', {
                 calendario: {
                     expiracao: dto.expiracao || 3600, // 1 hora
                 },
@@ -86,7 +86,7 @@ export class InterPixService {
 
         try {
             const axios = this.authService.getAxiosInstance();
-            const response = await axios.get(`/banking/v2/pix/cobrancas/${txid}`);
+            const response = await axios.get(`/pix/v2/cob/${txid}`);
 
             this.logger.log(`✅ Status: ${response.data.status}`);
             return response.data;
