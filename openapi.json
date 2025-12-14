@@ -3001,14 +3001,27 @@
             "type": "string",
             "description": "Dados do vendor passados na criação"
           },
+          "webhook_type": {
+            "type": "string",
+            "description": "Tipo do webhook"
+          },
+          "workflow_id": {
+            "type": "string",
+            "description": "ID do workflow"
+          },
+          "timestamp": {
+            "type": "number",
+            "description": "Timestamp do evento"
+          },
+          "created_at": {
+            "type": "number",
+            "description": "Data de criação"
+          },
           "document_data": {
             "type": "object"
           },
           "face_data": {
             "type": "object"
-          },
-          "created_at": {
-            "type": "string"
           },
           "updated_at": {
             "type": "string"
