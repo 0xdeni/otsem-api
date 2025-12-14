@@ -40,6 +40,20 @@ export class WalletController {
     return this.walletService.getWalletsByCustomer(customerId, network);
   }
 
+  @Get('solana-usdt-balance')
+  @ApiOperation({ summary: 'Consultar saldo USDT em endereço Solana' })
+  async getSolanaUsdtBalance(@Query('address') address: string, @Req() req: AuthRequest) {
+    const customerId = this.getCustomerId(req);
+    return this.walletService.getSolanaUsdtBalance(address, customerId);
+  }
+
+  @Get('usdt')
+  @ApiOperation({ summary: 'Listar todas as wallets USDT do customer' })
+  async getAllUsdtWallets(@Req() req: AuthRequest) {
+    const customerId = this.getCustomerId(req);
+    return this.walletService.getAllUsdtWalletsForCustomer(customerId);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Obter wallet por ID' })
   async getWallet(@Req() req: AuthRequest, @Param('id') id: string) {
@@ -89,20 +103,6 @@ export class WalletController {
   async deleteWallet(@Req() req: AuthRequest, @Param('id') id: string) {
     const customerId = this.getCustomerId(req);
     return this.walletService.deleteWallet(id, customerId);
-  }
-
-  @Get('solana-usdt-balance')
-  @ApiOperation({ summary: 'Consultar saldo USDT em endereço Solana' })
-  async getSolanaUsdtBalance(@Query('address') address: string, @Req() req: AuthRequest) {
-    const customerId = this.getCustomerId(req);
-    return this.walletService.getSolanaUsdtBalance(address, customerId);
-  }
-
-  @Get('usdt')
-  @ApiOperation({ summary: 'Listar todas as wallets USDT do customer' })
-  async getAllUsdtWallets(@Req() req: AuthRequest) {
-    const customerId = this.getCustomerId(req);
-    return this.walletService.getAllUsdtWalletsForCustomer(customerId);
   }
 
   @Post('buy-usdt-with-brl')

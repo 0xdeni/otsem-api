@@ -1582,6 +1582,55 @@
         ]
       }
     },
+    "/wallet/solana-usdt-balance": {
+      "get": {
+        "operationId": "WalletController_getSolanaUsdtBalance",
+        "parameters": [
+          {
+            "name": "address",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Consultar saldo USDT em endereço Solana",
+        "tags": [
+          "Wallet"
+        ]
+      }
+    },
+    "/wallet/usdt": {
+      "get": {
+        "operationId": "WalletController_getAllUsdtWallets",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listar todas as wallets USDT do customer",
+        "tags": [
+          "Wallet"
+        ]
+      }
+    },
     "/wallet/{id}": {
       "get": {
         "operationId": "WalletController_getWallet",
@@ -1731,55 +1780,6 @@
           }
         ],
         "summary": "Atualizar label da wallet",
-        "tags": [
-          "Wallet"
-        ]
-      }
-    },
-    "/wallet/solana-usdt-balance": {
-      "get": {
-        "operationId": "WalletController_getSolanaUsdtBalance",
-        "parameters": [
-          {
-            "name": "address",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Consultar saldo USDT em endereço Solana",
-        "tags": [
-          "Wallet"
-        ]
-      }
-    },
-    "/wallet/usdt": {
-      "get": {
-        "operationId": "WalletController_getAllUsdtWallets",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Listar todas as wallets USDT do customer",
         "tags": [
           "Wallet"
         ]
