@@ -1,21 +1,21 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsNumber } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsObject } from 'class-validator';
 
 export class DiditWebhookPayloadDto {
   @ApiProperty({ description: 'ID da sessão de verificação' })
   @IsString()
   session_id: string;
 
-  @ApiProperty({ description: 'Status da sessão' })
+  @ApiProperty({ description: 'Status da sessão: Approved, Declined, In Progress' })
   @IsString()
   status: string;
 
-  @ApiPropertyOptional({ description: 'Decisão da verificação: Approved, Declined, Review' })
+  @ApiPropertyOptional({ description: 'Objeto com detalhes da decisão' })
   @IsOptional()
-  @IsString()
-  decision?: string;
+  @IsObject()
+  decision?: Record<string, any>;
 
-  @ApiPropertyOptional({ description: 'Dados do vendor passados na criação' })
+  @ApiPropertyOptional({ description: 'Dados do vendor passados na criação (customerId)' })
   @IsOptional()
   @IsString()
   vendor_data?: string;
@@ -39,16 +39,4 @@ export class DiditWebhookPayloadDto {
   @IsOptional()
   @IsNumber()
   created_at?: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  document_data?: Record<string, any>;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  face_data?: Record<string, any>;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  updated_at?: string;
 }

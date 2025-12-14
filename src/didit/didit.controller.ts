@@ -16,7 +16,7 @@ export class DiditController {
   @ApiOperation({ summary: 'Webhook para receber notificações de verificação Didit' })
   @ApiResponse({ status: 200, description: 'Webhook processado com sucesso' })
   async handleVerificationWebhook(@Body() payload: DiditWebhookPayloadDto) {
-    this.logger.log(`Webhook Didit recebido: sessionId=${payload.session_id}, decision=${payload.decision}`);
+    this.logger.log(`Webhook Didit recebido: sessionId=${payload.session_id}, status=${payload.status}`);
 
     await this.prisma.webhookLog.create({
       data: {
@@ -38,17 +38,22 @@ export class DiditController {
 
     if (!customer) {
       this.logger.warn(`Session ID não encontrado no banco: ${payload.session_id}`);
-      throw new UnauthorizedException('Session ID não reconhecido');
+      return { received: true, warning: 'Session ID não encontrado' };
     }
 
     let newStatus: AccountStatus | null = null;
+    const statusLower = payload.status?.toLowerCase();
 
-    switch (payload.decision?.toLowerCase()) {
+    switch (statusLower) {
       case 'approved':
         newStatus = AccountStatus.approved;
         break;
       case 'declined':
         newStatus = AccountStatus.rejected;
+        break;
+      case 'in progress':
+      case 'in_progress':
+        newStatus = AccountStatus.in_review;
         break;
       case 'review':
         newStatus = AccountStatus.in_review;

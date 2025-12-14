@@ -2991,15 +2991,15 @@
           },
           "status": {
             "type": "string",
-            "description": "Status da sessão"
+            "description": "Status da sessão: Approved, Declined, In Progress"
           },
           "decision": {
-            "type": "string",
-            "description": "Decisão da verificação: Approved, Declined, Review"
+            "type": "object",
+            "description": "Objeto com detalhes da decisão"
           },
           "vendor_data": {
             "type": "string",
-            "description": "Dados do vendor passados na criação"
+            "description": "Dados do vendor passados na criação (customerId)"
           },
           "webhook_type": {
             "type": "string",
@@ -3016,15 +3016,6 @@
           "created_at": {
             "type": "number",
             "description": "Data de criação"
-          },
-          "document_data": {
-            "type": "object"
-          },
-          "face_data": {
-            "type": "object"
-          },
-          "updated_at": {
-            "type": "string"
           }
         },
         "required": [
