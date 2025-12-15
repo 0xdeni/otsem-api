@@ -640,7 +640,7 @@ export class InterPixService {
         txid?: string;
         infoAdicional?: string;
     }): string {
-        const { chave, merchantName, merchantCity, valor, txid, infoAdicional } = params;
+        const { chave, merchantName, merchantCity, valor, txid } = params;
 
         // Função auxiliar para formatar TLV (Tag-Length-Value)
         const tlv = (tag: string, value: string): string => {
@@ -648,18 +648,20 @@ export class InterPixService {
             return `${tag}${length}${value}`;
         };
 
-        // Montar Merchant Account Information (ID 26)
+        // Remover acentos e caracteres especiais (exigido pelo padrão EMV)
+        const removeAccents = (str: string): string => {
+            return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9 ]/g, '');
+        };
+
+        // Montar Merchant Account Information (ID 26) - apenas GUI + chave
         let merchantAccountInfo = '';
-        merchantAccountInfo += tlv('00', 'br.gov.bcb.pix'); // GUI
-        merchantAccountInfo += tlv('01', chave); // Chave PIX
-        if (infoAdicional) {
-            merchantAccountInfo += tlv('02', infoAdicional); // Info adicional
-        }
+        merchantAccountInfo += tlv('00', 'br.gov.bcb.pix'); // GUI obrigatório
+        merchantAccountInfo += tlv('01', chave.toLowerCase()); // Chave PIX (EVP em minúsculas)
 
         // Montar payload base
         let payload = '';
         payload += tlv('00', '01'); // Payload Format Indicator
-        payload += tlv('01', '11'); // Point of Initiation Method: 11 = estático (reutilizável)
+        payload += tlv('01', '11'); // Point of Initiation Method: 11 = estático
         payload += tlv('26', merchantAccountInfo); // Merchant Account Information
         payload += tlv('52', '0000'); // Merchant Category Code
         payload += tlv('53', '986'); // Transaction Currency (BRL)
@@ -669,16 +671,15 @@ export class InterPixService {
         }
         
         payload += tlv('58', 'BR'); // Country Code
-        payload += tlv('59', merchantName.toUpperCase()); // Merchant Name
-        payload += tlv('60', merchantCity.toUpperCase()); // Merchant City
+        payload += tlv('59', removeAccents(merchantName).toUpperCase().substring(0, 25)); // Merchant Name (max 25)
+        payload += tlv('60', removeAccents(merchantCity).toUpperCase().substring(0, 15)); // Merchant City (max 15)
         
-        // Additional Data Field Template (ID 62)
-        if (txid) {
-            const additionalData = tlv('05', txid); // Reference Label
-            payload += tlv('62', additionalData);
-        }
+        // Additional Data Field Template (ID 62) - obrigatório com txid ou ***
+        const referenceLabel = txid ? txid.substring(0, 25) : '***';
+        const additionalData = tlv('05', referenceLabel); // Reference Label
+        payload += tlv('62', additionalData);
 
-        // CRC16 (ID 63)
+        // CRC16 (ID 63) - adicionar placeholder antes de calcular
         payload += '6304';
         const crc = this.calculateCRC16(payload);
         payload += crc;
