@@ -659,6 +659,7 @@ export class InterPixService {
         // Montar payload base
         let payload = '';
         payload += tlv('00', '01'); // Payload Format Indicator
+        payload += tlv('01', '11'); // Point of Initiation Method: 11 = estático (reutilizável)
         payload += tlv('26', merchantAccountInfo); // Merchant Account Information
         payload += tlv('52', '0000'); // Merchant Category Code
         payload += tlv('53', '986'); // Transaction Currency (BRL)
