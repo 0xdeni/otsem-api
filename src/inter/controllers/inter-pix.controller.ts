@@ -19,6 +19,7 @@ import {
 import { InterPixService } from '../services/inter-pix.service';
 import { SendPixDto, PixPaymentResponseDto } from '../dto/send-pix.dto';
 import { CreatePixChargeDto } from '../dto/create-pix-charge.dto';
+import { CreateStaticQrCodeDto } from '../dto/create-static-qrcode.dto';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { RolesGuard } from '../../auth/roles.guard';
 import { Roles } from '../../auth/roles.decorator';
@@ -82,6 +83,19 @@ export class InterPixController {
     @ApiOperation({ summary: '🔍 Consultar cobrança Pix' })
     async getCobranca(@Param('txid') txid: string) {
         return this.pixService.getCobranca(txid);
+    }
+
+    // ==================== QR CODE ESTÁTICO ====================
+
+    @Post('qrcode-estatico')
+    @Roles(Role.CUSTOMER, Role.ADMIN)
+    @ApiOperation({ 
+        summary: '📱 Gerar QR Code Estático (sem expiração)',
+        description: 'Gera QR Code PIX estático que não expira e pode receber múltiplos pagamentos. Ideal para pontos de venda fixos.'
+    })
+    async createStaticQrCode(@Request() req: any, @Body() dto: CreateStaticQrCodeDto) {
+        const customerId = req.user?.customerId;
+        return this.pixService.createStaticQrCode(dto, customerId);
     }
 
     @Post('testar-envio')

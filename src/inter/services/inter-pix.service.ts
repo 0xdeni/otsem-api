@@ -12,6 +12,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { Prisma, TransactionType } from '@prisma/client';
 import { SendPixDto, PixPaymentResponseDto } from '../dto/send-pix.dto';
 import { CreatePixChargeDto } from '../dto/create-pix-charge.dto';
+import { CreateStaticQrCodeDto } from '../dto/create-static-qrcode.dto';
 
 @Injectable()
 export class InterPixService {
@@ -571,5 +572,138 @@ export class InterPixService {
                 this.logger.error('Detalhes:', JSON.stringify(error.response.data));
             }
         }
+    }
+
+    // ==================== QR CODE ESTÁTICO ====================
+
+    /**
+     * 📱 Gerar QR Code Estático (sem expiração)
+     * - Segue padrão EMV/BRCode do Banco Central
+     * - Não expira enquanto a chave PIX estiver ativa
+     * - Pode receber múltiplos pagamentos
+     */
+    async createStaticQrCode(dto: CreateStaticQrCodeDto, customerId?: string): Promise<any> {
+        this.logger.log(`📱 Gerando QR Code estático ${dto.valor ? `de R$ ${dto.valor}` : '(valor aberto)'}...`);
+
+        const { chave } = this.getMainPixKey();
+        const merchantName = this.configService.get<string>('MERCHANT_NAME', 'OTSEM BANK');
+        const merchantCity = this.configService.get<string>('MERCHANT_CITY', 'SAO PAULO');
+
+        // Buscar nome do customer se disponível
+        let description = dto.descricao || 'Pagamento PIX';
+        if (customerId && !dto.descricao) {
+            const customer = await this.prisma.customer.findUnique({
+                where: { id: customerId },
+                select: { name: true },
+            });
+            if (customer?.name) {
+                description = `Pagamento ${customer.name}`;
+            }
+        }
+
+        // Gerar payload EMV (BRCode) estático
+        const payload = this.generateEmvPayload({
+            chave,
+            merchantName: merchantName.substring(0, 25),
+            merchantCity: merchantCity.substring(0, 15),
+            valor: dto.valor,
+            txid: dto.identificador?.substring(0, 25) || '',
+            infoAdicional: description.substring(0, 72),
+        });
+
+        // Gerar código copia-e-cola
+        const pixCopiaECola = payload;
+
+        this.logger.log(`✅ QR Code estático gerado | Chave: ${chave}`);
+
+        return {
+            chave,
+            valor: dto.valor || null,
+            valorAberto: !dto.valor,
+            descricao: description,
+            identificador: dto.identificador || null,
+            pixCopiaECola,
+            expiracao: null,
+            message: 'QR Code estático gerado. Não expira e pode receber múltiplos pagamentos.',
+        };
+    }
+
+    /**
+     * 🔧 Gerar payload EMV (BRCode) para QR Code estático
+     * Segue especificação do Banco Central do Brasil
+     */
+    private generateEmvPayload(params: {
+        chave: string;
+        merchantName: string;
+        merchantCity: string;
+        valor?: number;
+        txid?: string;
+        infoAdicional?: string;
+    }): string {
+        const { chave, merchantName, merchantCity, valor, txid, infoAdicional } = params;
+
+        // Função auxiliar para formatar TLV (Tag-Length-Value)
+        const tlv = (tag: string, value: string): string => {
+            const length = value.length.toString().padStart(2, '0');
+            return `${tag}${length}${value}`;
+        };
+
+        // Montar Merchant Account Information (ID 26)
+        let merchantAccountInfo = '';
+        merchantAccountInfo += tlv('00', 'br.gov.bcb.pix'); // GUI
+        merchantAccountInfo += tlv('01', chave); // Chave PIX
+        if (infoAdicional) {
+            merchantAccountInfo += tlv('02', infoAdicional); // Info adicional
+        }
+
+        // Montar payload base
+        let payload = '';
+        payload += tlv('00', '01'); // Payload Format Indicator
+        payload += tlv('26', merchantAccountInfo); // Merchant Account Information
+        payload += tlv('52', '0000'); // Merchant Category Code
+        payload += tlv('53', '986'); // Transaction Currency (BRL)
+        
+        if (valor && valor > 0) {
+            payload += tlv('54', valor.toFixed(2)); // Transaction Amount
+        }
+        
+        payload += tlv('58', 'BR'); // Country Code
+        payload += tlv('59', merchantName.toUpperCase()); // Merchant Name
+        payload += tlv('60', merchantCity.toUpperCase()); // Merchant City
+        
+        // Additional Data Field Template (ID 62)
+        if (txid) {
+            const additionalData = tlv('05', txid); // Reference Label
+            payload += tlv('62', additionalData);
+        }
+
+        // CRC16 (ID 63)
+        payload += '6304';
+        const crc = this.calculateCRC16(payload);
+        payload += crc;
+
+        return payload;
+    }
+
+    /**
+     * 🔢 Calcular CRC16-CCITT para validação do BRCode
+     */
+    private calculateCRC16(payload: string): string {
+        let crc = 0xFFFF;
+        const polynomial = 0x1021;
+
+        for (let i = 0; i < payload.length; i++) {
+            crc ^= payload.charCodeAt(i) << 8;
+            for (let j = 0; j < 8; j++) {
+                if (crc & 0x8000) {
+                    crc = (crc << 1) ^ polynomial;
+                } else {
+                    crc = crc << 1;
+                }
+            }
+            crc &= 0xFFFF;
+        }
+
+        return crc.toString(16).toUpperCase().padStart(4, '0');
     }
 }

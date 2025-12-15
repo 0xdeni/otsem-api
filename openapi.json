@@ -2550,6 +2550,37 @@
         ]
       }
     },
+    "/inter/pix/qrcode-estatico": {
+      "post": {
+        "description": "Gera QR Code PIX estático que não expira e pode receber múltiplos pagamentos. Ideal para pontos de venda fixos.",
+        "operationId": "InterPixController_createStaticQrCode",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateStaticQrCodeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "📱 Gerar QR Code Estático (sem expiração)",
+        "tags": [
+          "💸 Pix (Inter)"
+        ]
+      }
+    },
     "/inter/pix/testar-envio": {
       "post": {
         "operationId": "InterPixController_testarEnvioPix",
@@ -3265,6 +3296,26 @@
             "type": "string",
             "example": "572aac8c-949e-40d5-8b87-66cc164e9000",
             "description": "ID do customer (opcional - usa do token JWT se não informado)"
+          }
+        }
+      },
+      "CreateStaticQrCodeDto": {
+        "type": "object",
+        "properties": {
+          "valor": {
+            "type": "number",
+            "example": 100.5,
+            "description": "Valor fixo (opcional - se não informado, gera QR Code com valor aberto)"
+          },
+          "descricao": {
+            "type": "string",
+            "example": "Loja Centro",
+            "description": "Descrição/identificador do ponto de venda"
+          },
+          "identificador": {
+            "type": "string",
+            "example": "LOJA01",
+            "description": "Identificador único para rastrear pagamentos (máx 25 caracteres)"
           }
         }
       }
