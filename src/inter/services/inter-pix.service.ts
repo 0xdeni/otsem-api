@@ -631,6 +631,7 @@ export class InterPixService {
     /**
      * 🔧 Gerar payload EMV (BRCode) para QR Code estático
      * Segue especificação do Banco Central do Brasil
+     * Referência: https://github.com/renatomb/php_qrcode_pix
      */
     private generateEmvPayload(params: {
         chave: string;
@@ -643,69 +644,71 @@ export class InterPixService {
         const { chave, merchantName, merchantCity, valor, txid } = params;
 
         // Função auxiliar para formatar TLV (Tag-Length-Value)
-        const tlv = (tag: string, value: string): string => {
+        const tlv = (id: number, value: string): string => {
+            const idStr = id.toString().padStart(2, '0');
             const length = value.length.toString().padStart(2, '0');
-            return `${tag}${length}${value}`;
+            return `${idStr}${length}${value}`;
         };
 
         // Remover acentos e caracteres especiais (exigido pelo padrão EMV)
-        const removeAccents = (str: string): string => {
-            return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9 ]/g, '');
+        const sanitize = (str: string): string => {
+            return str
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '') // Remove acentos
+                .replace(/[^A-Za-z0-9 ]/g, ''); // Mantém apenas alfanuméricos e espaços
         };
 
-        // Montar Merchant Account Information (ID 26) - apenas GUI + chave
-        let merchantAccountInfo = '';
-        merchantAccountInfo += tlv('00', 'BR.GOV.BCB.PIX'); // GUI obrigatório (MAIÚSCULAS)
-        merchantAccountInfo += tlv('01', chave.toLowerCase()); // Chave PIX (EVP em minúsculas)
+        // Montar Merchant Account Information (ID 26) - GUI + chave
+        const gui = tlv(0, 'br.gov.bcb.pix'); // GUI em minúsculas conforme padrão
+        const chavePix = tlv(1, chave.toLowerCase()); // Chave EVP em minúsculas
+        const merchantAccountInfo = gui + chavePix;
 
         // Montar payload base
         let payload = '';
-        payload += tlv('00', '01'); // Payload Format Indicator
-        payload += tlv('01', '11'); // Point of Initiation Method: 11 = estático
-        payload += tlv('26', merchantAccountInfo); // Merchant Account Information
-        payload += tlv('52', '0000'); // Merchant Category Code
-        payload += tlv('53', '986'); // Transaction Currency (BRL)
+        payload += tlv(0, '01'); // Payload Format Indicator
+        payload += tlv(26, merchantAccountInfo); // Merchant Account Information
+        payload += tlv(52, '0000'); // Merchant Category Code
+        payload += tlv(53, '986'); // Transaction Currency (BRL)
         
         if (valor && valor > 0) {
-            payload += tlv('54', valor.toFixed(2)); // Transaction Amount
+            payload += tlv(54, valor.toFixed(2)); // Transaction Amount
         }
         
-        payload += tlv('58', 'BR'); // Country Code
-        payload += tlv('59', removeAccents(merchantName).toUpperCase().substring(0, 25)); // Merchant Name (max 25)
-        payload += tlv('60', removeAccents(merchantCity).toUpperCase().substring(0, 15)); // Merchant City (max 15)
+        payload += tlv(58, 'BR'); // Country Code
+        payload += tlv(59, sanitize(merchantName).toUpperCase().substring(0, 25)); // Merchant Name (max 25)
+        payload += tlv(60, sanitize(merchantCity).toUpperCase().substring(0, 15)); // Merchant City (max 15)
         
-        // Additional Data Field Template (ID 62) - obrigatório com txid ou ***
+        // Additional Data Field Template (ID 62) com txid ou ***
         const referenceLabel = txid ? txid.substring(0, 25) : '***';
-        const additionalData = tlv('05', referenceLabel); // Reference Label
-        payload += tlv('62', additionalData);
+        const additionalData = tlv(5, referenceLabel); // Reference Label (subcampo 05)
+        payload += tlv(62, additionalData);
 
-        // CRC16 (ID 63) - adicionar placeholder antes de calcular
+        // CRC16 (ID 63) - adicionar "6304" antes de calcular
         payload += '6304';
         const crc = this.calculateCRC16(payload);
-        payload += crc;
 
-        return payload;
+        return payload + crc;
     }
 
     /**
-     * 🔢 Calcular CRC16-CCITT para validação do BRCode
+     * 🔢 Calcular CRC16-CCITT-FALSE para validação do BRCode
+     * Implementação baseada na referência do Banco Central
      */
-    private calculateCRC16(payload: string): string {
+    private calculateCRC16(str: string): string {
         let crc = 0xFFFF;
-        const polynomial = 0x1021;
 
-        for (let i = 0; i < payload.length; i++) {
-            crc ^= payload.charCodeAt(i) << 8;
-            for (let j = 0; j < 8; j++) {
+        for (let c = 0; c < str.length; c++) {
+            crc ^= str.charCodeAt(c) << 8;
+            for (let i = 0; i < 8; i++) {
                 if (crc & 0x8000) {
-                    crc = (crc << 1) ^ polynomial;
+                    crc = (crc << 1) ^ 0x1021;
                 } else {
                     crc = crc << 1;
                 }
             }
-            crc &= 0xFFFF;
         }
 
-        return crc.toString(16).toUpperCase().padStart(4, '0');
+        const hex = crc & 0xFFFF;
+        return hex.toString(16).toUpperCase().padStart(4, '0');
     }
 }
