@@ -47,13 +47,21 @@ export class InterPixService {
      * Max 35 caracteres alfanuméricos (exigência do PIX)
      */
     private generateTxid(customerId?: string): string {
-        const timestamp = Date.now().toString(36);
+        // Inter exige: [A-Z0-9]{26,35} - maiúsculas e números, 26-35 caracteres
+        const timestamp = Date.now().toString(36).toUpperCase();
+        const randomPart = Math.random().toString(36).substring(2, 8).toUpperCase();
+        
         if (customerId) {
-            const shortId = customerId.replace(/-/g, '').substring(0, 12);
-            return `otsem${shortId}${timestamp}`.toLowerCase();
+            // Remove caracteres não alfanuméricos e pega os primeiros 12
+            const shortId = customerId.replace(/[^a-zA-Z0-9]/g, '').substring(0, 12).toUpperCase();
+            const txid = `OTSEM${shortId}${timestamp}${randomPart}`;
+            // Garantir entre 26 e 35 caracteres
+            return txid.substring(0, 35).padEnd(26, 'X');
         }
-        const random = Math.random().toString(36).substring(2, 14);
-        return `otsem${random}${timestamp}`.toLowerCase();
+        
+        const random = Math.random().toString(36).substring(2, 14).toUpperCase();
+        const txid = `OTSEM${random}${timestamp}${randomPart}`;
+        return txid.substring(0, 35).padEnd(26, 'X');
     }
 
     /**
