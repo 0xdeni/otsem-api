@@ -31,6 +31,7 @@ import { Request as ExpressRequest } from 'express';
 export class TransactionsController {
     constructor(private readonly service: TransactionsService) { }
 
+    @Get()
     @ApiOperation({ summary: 'Listar transações do customer logado' })
     @ApiQuery({ name: 'limit', required: false, example: 50 })
     async findAll(@Request() req: ExpressRequest & { user: { customerId: string } }, @Query('limit') limit?: string) {
