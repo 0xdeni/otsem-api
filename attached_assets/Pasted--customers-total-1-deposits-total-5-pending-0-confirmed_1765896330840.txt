@@ -1,0 +1,94 @@
+{
+	"customers": {
+		"total": 1
+	},
+	"deposits": {
+		"total": 5,
+		"pending": 0,
+		"confirmed": 5,
+		"totalValue": 0
+	},
+	"payouts": {
+		"total": 0,
+		"totalValue": 0
+	},
+	"banking": {
+		"saldo": {
+			"bloqueadoCheque": 0,
+			"disponivel": 2.85,
+			"bloqueadoJudicialmente": 0,
+			"bloqueadoAdministrativo": 0,
+			"limite": 0
+		},
+		"extrato": {
+			"transacoes": [
+				{
+					"dataEntrada": "2025-11-13",
+					"tipoTransacao": "PIX",
+					"tipoOperacao": "C",
+					"valor": "0.01",
+					"titulo": "Pix recebido",
+					"descricao": "PIX RECEBIDO - Cp :18236120-Gustavo Altevir da Costa"
+				},
+				{
+					"dataEntrada": "2025-11-13",
+					"tipoTransacao": "PIX",
+					"tipoOperacao": "C",
+					"valor": "0.13",
+					"titulo": "Pix recebido",
+					"descricao": "PIX RECEBIDO - Cp :18236120-Gustavo Altevir da Costa"
+				},
+				{
+					"dataEntrada": "2025-11-13",
+					"tipoTransacao": "PIX",
+					"tipoOperacao": "C",
+					"valor": "1.0",
+					"titulo": "Pix recebido",
+					"descricao": "PIX RECEBIDO - Cp :60746948-GUSTAVO ALTEVIR DA COSTA"
+				},
+				{
+					"dataEntrada": "2025-11-14",
+					"tipoTransacao": "PIX",
+					"tipoOperacao": "C",
+					"valor": "0.12",
+					"titulo": "Pix recebido",
+					"descricao": "PIX RECEBIDO - Cp :18236120-Gustavo Altevir da Costa"
+				},
+				{
+					"dataEntrada": "2025-11-14",
+					"tipoTransacao": "PIX",
+					"tipoOperacao": "C",
+					"valor": "0.22",
+					"titulo": "Pix recebido",
+					"descricao": "PIX RECEBIDO - Cp :18236120-Gustavo Altevir da Costa"
+				},
+				{
+					"dataEntrada": "2025-11-14",
+					"tipoTransacao": "PIX",
+					"tipoOperacao": "C",
+					"valor": "0.21",
+					"titulo": "Pix recebido",
+					"descricao": "PIX RECEBIDO - Cp :18236120-Gustavo Altevir da Costa"
+				},
+				{
+					"dataEntrada": "2025-11-14",
+					"tipoTransacao": "PIX",
+					"tipoOperacao": "C",
+					"valor": "0.02",
+					"titulo": "Pix recebido",
+					"descricao": "PIX RECEBIDO - Cp :18236120-Gustavo Altevir da Costa"
+				},
+				{
+					"dataEntrada": "2025-11-14",
+					"tipoTransacao": "PIX",
+					"tipoOperacao": "C",
+					"valor": "0.16",
+					"titulo": "Pix recebido",
+					"descricao": "PIX RECEBIDO - Cp :60746948-GUSTAVO ALTEVIR DA COSTA"
+				}
+			]
+		},
+		"timestamp": "2025-11-14T20:50:37.645Z"
+	},
+	"timestamp": "2025-11-14T20:50:37.645Z"
+}
