@@ -240,13 +240,9 @@ export class InterPixService {
                 ...(dto.descricao && { descricao: dto.descricao }),
             };
 
-            this.logger.debug('📤 Payload Inter:', JSON.stringify(payload, null, 2));
-
             const response = await axios.post('/banking/v2/pix', payload);
 
             const pixData = response.data;
-
-            this.logger.debug('🔎 Resposta completa do Inter:', JSON.stringify(pixData, null, 2));
 
             this.logger.log(
                 `✅ Pix enviado: ${pixData.endToEndId || pixData.e2eId}`,
@@ -1196,8 +1192,6 @@ export class InterPixService {
 
             const idIdempotente = crypto.randomUUID();
 
-            this.logger.debug('📤 Payload validação:', JSON.stringify(payload, null, 2));
-
             const response = await axios.post('/banking/v2/pix', payload, {
                 headers: {
                     'x-id-idempotente': idIdempotente,
@@ -1207,7 +1201,6 @@ export class InterPixService {
             const codigoSolicitacao = pixData.codigoSolicitacao;
 
             this.logger.log(`✅ Micro-transferência enviada: codigoSolicitacao=${codigoSolicitacao}`);
-            this.logger.debug(`📦 Resposta completa da API Inter:`, JSON.stringify(pixData, null, 2));
 
             // 6. Consultar status do pagamento para obter dados do destinatário
             let destinatario: any = {};
@@ -1220,8 +1213,6 @@ export class InterPixService {
             try {
                 const statusResponse = await axios.get(`/banking/v2/pix/${codigoSolicitacao}`);
                 const statusData = statusResponse.data;
-                this.logger.debug(`📦 Status do pagamento:`, JSON.stringify(statusData, null, 2));
-                this.logger.debug(`📦 Status (objeto bruto) recebido do Inter:`, statusData);
 
                 txPix = statusData.transacaoPix || {};
 
