@@ -4,14 +4,23 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { Role, PixKeyType } from '@prisma/client';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody, ApiResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiProperty, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { IsString, IsEnum, IsNotEmpty } from 'class-validator';
 
-class CreatePixKeyDto {
+export class CreatePixKeyDto {
+    @ApiProperty({
+        enum: ['CPF', 'CNPJ', 'EMAIL', 'PHONE', 'RANDOM'],
+        example: 'CPF',
+        description: 'Tipo da chave PIX',
+    })
     @IsEnum(PixKeyType)
     @IsNotEmpty()
     keyType: PixKeyType;
 
+    @ApiProperty({
+        example: '12345678901',
+        description: 'Valor da chave (CPF, CNPJ, email, telefone ou UUID)',
+    })
     @IsString()
     @IsNotEmpty()
     keyValue: string;
@@ -43,23 +52,6 @@ export class PixKeysController {
     @Post()
     @Roles(Role.CUSTOMER, Role.ADMIN)
     @ApiOperation({ summary: 'Cadastrar nova chave PIX' })
-    @ApiBody({
-        schema: {
-            type: 'object',
-            required: ['keyType', 'keyValue'],
-            properties: {
-                keyType: { 
-                    type: 'string', 
-                    enum: ['CPF', 'CNPJ', 'EMAIL', 'PHONE', 'RANDOM'],
-                    description: 'Tipo da chave PIX'
-                },
-                keyValue: { 
-                    type: 'string', 
-                    description: 'Valor da chave (CPF, CNPJ, email, telefone ou UUID)'
-                },
-            },
-        },
-    })
     @ApiResponse({ 
         status: 201, 
         description: 'Chave criada. Campo validated indica se pertence ao CPF/CNPJ do titular' 

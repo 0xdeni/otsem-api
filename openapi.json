@@ -2750,28 +2750,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "required": [
-                  "keyType",
-                  "keyValue"
-                ],
-                "properties": {
-                  "keyType": {
-                    "type": "string",
-                    "enum": [
-                      "CPF",
-                      "CNPJ",
-                      "EMAIL",
-                      "PHONE",
-                      "RANDOM"
-                    ],
-                    "description": "Tipo da chave PIX"
-                  },
-                  "keyValue": {
-                    "type": "string",
-                    "description": "Valor da chave (CPF, CNPJ, email, telefone ou UUID)"
-                  }
-                }
+                "$ref": "#/components/schemas/CreatePixKeyDto"
               }
             }
           }
@@ -3560,6 +3539,32 @@
             "description": "Identificador único para rastrear pagamentos (máx 25 caracteres)"
           }
         }
+      },
+      "CreatePixKeyDto": {
+        "type": "object",
+        "properties": {
+          "keyType": {
+            "type": "string",
+            "enum": [
+              "CPF",
+              "CNPJ",
+              "EMAIL",
+              "PHONE",
+              "RANDOM"
+            ],
+            "example": "CPF",
+            "description": "Tipo da chave PIX"
+          },
+          "keyValue": {
+            "type": "string",
+            "example": "12345678901",
+            "description": "Valor da chave (CPF, CNPJ, email, telefone ou UUID)"
+          }
+        },
+        "required": [
+          "keyType",
+          "keyValue"
+        ]
       }
     }
   }
