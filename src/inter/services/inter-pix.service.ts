@@ -1172,15 +1172,23 @@ export class InterPixService {
 
             // 5. Fazer micro-transferência de R$ 0,01
             const payload = {
-                chaveDestino: pixKey.keyValue,
                 valor: 0.01,
-                tipoChave: 'CHAVE',
-                descricao: 'Validando chave PIX OTSEM',
+                descricao: 'Validacao chave PIX OTSEM',
+                destinatario: {
+                    tipo: 'CHAVE',
+                    chave: pixKey.keyValue,
+                },
             };
 
+            const idIdempotente = `val-${pixKeyId}-${Date.now()}`;
+            
             this.logger.debug('📤 Payload validação:', JSON.stringify(payload, null, 2));
 
-            const response = await axios.post('/banking/v2/pix', payload);
+            const response = await axios.post('/banking/v2/pix', payload, {
+                headers: {
+                    'x-id-idempotente': idIdempotente,
+                },
+            });
             const pixData = response.data;
 
             const endToEndId = pixData.endToEndId || pixData.e2eId;
