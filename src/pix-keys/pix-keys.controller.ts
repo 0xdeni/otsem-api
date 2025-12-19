@@ -3,12 +3,17 @@ import { PixKeysService } from './pix-keys.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
-import { Role } from '@prisma/client';
+import { Role, PixKeyType } from '@prisma/client';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody, ApiResponse } from '@nestjs/swagger';
-import { PixKeyType } from '@prisma/client';
+import { IsString, IsEnum, IsNotEmpty } from 'class-validator';
 
 class CreatePixKeyDto {
+    @IsEnum(PixKeyType)
+    @IsNotEmpty()
     keyType: PixKeyType;
+
+    @IsString()
+    @IsNotEmpty()
     keyValue: string;
 }
 
