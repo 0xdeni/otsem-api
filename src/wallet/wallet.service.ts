@@ -222,10 +222,21 @@ export class WalletService {
       });
       stages.pixTransfer = 'done';
 
-      // 2) Compra USDT na OKX
+      // 2) Compra USDT na OKX e verifica quantidade comprada
       await new Promise((resolve) => setTimeout(resolve, 5000));
-      okxBuyResult = await this.okxService.buyUsdtWithBrl(brlToExchange);
+      okxBuyResult = await this.okxService.buyAndCheckHistory(brlToExchange);
       stages.conversion = 'done';
+
+      // Calcular quantidade de USDT comprada a partir dos fills
+      let usdtAmount = 0;
+      if (okxBuyResult.detalhes && okxBuyResult.detalhes.length > 0) {
+        usdtAmount = okxBuyResult.detalhes.reduce((sum: number, fill: any) => {
+          return sum + parseFloat(fill.fillSz || '0');
+        }, 0);
+      }
+      if (usdtAmount <= 0) {
+        throw new Error('Não foi possível determinar a quantidade de USDT comprada');
+      }
 
       // 3) Registrar transação CONVERSION separada
       const balanceBefore = account.balance;
@@ -237,11 +248,12 @@ export class WalletService {
           amount: brlAmount,
           balanceBefore,
           balanceAfter: balanceBefore,
-          description: `Conversão BRL→USDT: R$ ${brlAmount.toFixed(2)}`,
+          description: `Conversão BRL→USDT: R$ ${brlAmount.toFixed(2)} → ${usdtAmount.toFixed(2)} USDT`,
           externalId: pixResult?.endToEndId || `CONV-${Date.now()}`,
           externalData: {
             pixEndToEnd: pixResult?.endToEndId,
             okxBuyResult,
+            usdtAmount,
             spread: { chargedBrl: brlAmount, exchangedBrl: brlToExchange, spreadBrl: spreadAmount, spreadRate },
           },
           completedAt: new Date(),
@@ -305,13 +317,20 @@ export class WalletService {
         throw new Error('Carteira Solana não encontrada para o cliente');
       }
 
+      // Sacar USDT considerando taxa de rede (1 USDT para Solana)
+      const networkFee = 1;
+      const usdtToWithdraw = usdtAmount - networkFee;
+      if (usdtToWithdraw <= 0) {
+        throw new Error(`Quantidade de USDT insuficiente para saque. Comprado: ${usdtAmount}, taxa: ${networkFee}`);
+      }
+
       withdrawResult = await this.okxService.safeWithdrawUsdt({
         currency: 'USDT',
-        amount: okxBuyResult.amount || brlAmount,
+        amount: usdtToWithdraw.toFixed(2),
         toAddress: wallet.externalAddress,
         network: 'Solana',
         fundPwd: process.env.OKX_API_PASSPHRASE || 'not_found',
-        fee: '1',
+        fee: networkFee.toString(),
       });
       stages.usdtTransfer = 'done';
 
@@ -341,6 +360,9 @@ export class WalletService {
         pixResult,
         okxBuyResult,
         withdrawResult,
+        usdtBought: usdtAmount,
+        usdtWithdrawn: usdtToWithdraw,
+        networkFee,
         spread: {
           chargedBrl: brlAmount,
           exchangedBrl: brlToExchange,
