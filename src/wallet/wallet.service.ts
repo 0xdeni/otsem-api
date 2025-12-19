@@ -213,13 +213,12 @@ export class WalletService {
     let withdrawResult: any = null;
 
     try {
-      // 1) PIX para conta OKX (com tipo CONVERSION)
+      // 1) PIX para conta OKX
       pixResult = await this.interPixService.sendPix(customerId, {
         valor: brlAmount,
         chaveDestino: '50459025000126',
         tipoChave: PixKeyType.CHAVE,
-        descricao: `Conversão BRL→USDT - ${customerId}`,
-        transactionType: TransactionType.CONVERSION,
+        descricao: customerId,
       });
       stages.pixTransfer = 'done';
 
@@ -227,6 +226,27 @@ export class WalletService {
       await new Promise((resolve) => setTimeout(resolve, 5000));
       okxBuyResult = await this.okxService.buyUsdtWithBrl(brlToExchange);
       stages.conversion = 'done';
+
+      // 3) Registrar transação CONVERSION separada
+      const balanceBefore = account.balance;
+      await this.prisma.transaction.create({
+        data: {
+          accountId: account.id,
+          type: TransactionType.CONVERSION,
+          status: 'COMPLETED',
+          amount: brlAmount,
+          balanceBefore,
+          balanceAfter: balanceBefore,
+          description: `Conversão BRL→USDT: R$ ${brlAmount.toFixed(2)}`,
+          externalId: pixResult?.endToEndId || `CONV-${Date.now()}`,
+          externalData: {
+            pixEndToEnd: pixResult?.endToEndId,
+            okxBuyResult,
+            spread: { chargedBrl: brlAmount, exchangedBrl: brlToExchange, spreadBrl: spreadAmount, spreadRate },
+          },
+          completedAt: new Date(),
+        },
+      });
 
       // Persist spread + etapas em Payment/Transaction (se houver endToEnd)
       if (pixResult?.endToEndId) {
