@@ -399,4 +399,106 @@ export class WalletService {
       throw error;
     }
   }
+
+  /**
+   * Vende USDT e credita BRL na conta do cliente
+   * 
+   * Fluxo:
+   * 1. Verifica saldo USDT disponível na OKX
+   * 2. Vende USDT na OKX, recebe BRL
+   * 3. Aplica spread reverso (cliente recebe menos)
+   * 4. Credita BRL na conta do cliente
+   */
+  async sellUsdtForBrl(customerId: string, usdtAmount: number) {
+    if (usdtAmount < 1) {
+      throw new Error('Quantidade mínima é 1 USDT');
+    }
+
+    const account = await this.prisma.account.findFirst({ where: { customerId } });
+    if (!account) {
+      throw new Error('Conta não encontrada para o cliente');
+    }
+
+    // Spread configurável por usuário (default: 1.0 = sem spread)
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { user: { select: { spreadValue: true } } },
+    });
+    const spreadRateRaw = customer?.user?.spreadValue ? Number(customer.user.spreadValue) : 1;
+    const spreadRate = Number.isFinite(spreadRateRaw) && spreadRateRaw > 0 ? spreadRateRaw : 1;
+
+    let okxSellResult: any = null;
+
+    try {
+      // 1) Transferir USDT da conta funding para trading
+      await this.okxService.transferUsdtToTrading(usdtAmount);
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      // 2) Vender USDT na OKX e verificar BRL recebido
+      okxSellResult = await this.okxService.sellAndCheckHistory(usdtAmount);
+
+      const brlFromExchange = okxSellResult.brlReceived;
+      if (brlFromExchange <= 0) {
+        throw new Error('Não foi possível determinar o valor em BRL recebido');
+      }
+
+      // 3) Aplicar spread (cliente recebe menos)
+      const brlToCredit = Number((brlFromExchange * spreadRate).toFixed(2));
+      const spreadAmount = Number((brlFromExchange - brlToCredit).toFixed(2));
+
+      // 4) Creditar BRL na conta do cliente
+      const balanceBefore = Number(account.balance);
+      const balanceAfter = balanceBefore + brlToCredit;
+
+      await this.prisma.account.update({
+        where: { id: account.id },
+        data: { balance: balanceAfter.toFixed(2) },
+      });
+
+      // 5) Registrar transação CONVERSION (USDT→BRL)
+      await this.prisma.transaction.create({
+        data: {
+          accountId: account.id,
+          type: TransactionType.CONVERSION,
+          status: 'COMPLETED',
+          amount: brlToCredit,
+          balanceBefore: balanceBefore.toFixed(2),
+          balanceAfter: balanceAfter.toFixed(2),
+          description: `Conversão USDT→BRL: ${usdtAmount.toFixed(2)} USDT → R$ ${brlToCredit.toFixed(2)}`,
+          externalId: `CONV-SELL-${Date.now()}`,
+          externalData: {
+            direction: 'USDT_TO_BRL',
+            usdtSold: usdtAmount,
+            brlFromExchange,
+            brlCredited: brlToCredit,
+            okxSellResult,
+            spread: { 
+              exchangedBrl: brlFromExchange, 
+              creditedBrl: brlToCredit, 
+              spreadBrl: spreadAmount, 
+              spreadRate 
+            },
+          },
+          completedAt: new Date(),
+        },
+      });
+
+      return {
+        message: 'Venda de USDT concluída',
+        usdtSold: usdtAmount,
+        brlFromExchange,
+        brlCredited: brlToCredit,
+        spread: {
+          exchangedBrl: brlFromExchange,
+          creditedBrl: brlToCredit,
+          spreadBrl: spreadAmount,
+          spreadRate,
+        },
+        okxSellResult,
+        newBalance: balanceAfter.toFixed(2),
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
 }

@@ -255,4 +255,80 @@ export class OkxService {
         const response = await axios.post(`${apiUrl}${requestPath}`, bodyObj, { headers });
         return response.data;
     }
+
+    /**
+     * Vende USDT por BRL (ordem de mercado)
+     */
+    async sellUsdtForBrl(usdtAmount: number): Promise<any> {
+        const method = 'POST';
+        const requestPath = '/api/v5/trade/order';
+        const bodyObj = {
+            instId: 'USDT-BRL',
+            tdMode: 'cash',
+            side: 'sell',
+            ordType: 'market',
+            sz: usdtAmount.toString()
+        };
+        const body = JSON.stringify(bodyObj);
+        const headers = this.authService.getAuthHeaders(method, requestPath, body);
+
+        const apiUrl = process.env.OKX_API_URL || 'https://www.okx.com';
+
+        const response = await axios.post(
+            `${apiUrl}${requestPath}`,
+            bodyObj,
+            { headers }
+        );
+        return response.data;
+    }
+
+    /**
+     * Busca histórico de vendas de USDT
+     */
+    async getUsdtSellHistory(): Promise<any> {
+        const method = 'GET';
+        const requestPath = '/api/v5/trade/fills';
+        const body = '';
+        const headers = this.authService.getAuthHeaders(method, requestPath, body);
+        const apiUrl = process.env.OKX_API_URL || 'https://www.okx.com';
+
+        return axios.get(`${apiUrl}${requestPath}`, {
+            headers,
+        });
+    }
+
+    /**
+     * Vende USDT e retorna detalhes da ordem (BRL recebido)
+     */
+    async sellAndCheckHistory(usdtAmount: number): Promise<{ ordId: string; detalhes: any[]; brlReceived: number }> {
+        // 1. Vender USDT por BRL
+        const sellResponse = await this.sellUsdtForBrl(usdtAmount);
+        const ordId = sellResponse.data[0]?.ordId;
+        if (!ordId) {
+            throw new Error('Ordem de venda não criada');
+        }
+
+        // 2. Aguardar processamento
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        // 3. Buscar histórico de fills
+        const fillsResponse = await this.getUsdtSellHistory();
+        const fills = fillsResponse.data?.data || [];
+
+        // 4. Filtrar pelo ordId e calcular BRL recebido
+        const detalhes = fills.filter((f: any) => f.ordId === ordId);
+        let brlReceived = 0;
+        for (const fill of detalhes) {
+            // fillSz = quantidade USDT vendida, fillPx = preço por USDT
+            const fillSz = parseFloat(fill.fillSz || '0');
+            const fillPx = parseFloat(fill.fillPx || '0');
+            brlReceived += fillSz * fillPx;
+        }
+
+        return {
+            ordId,
+            detalhes,
+            brlReceived
+        };
+    }
 }

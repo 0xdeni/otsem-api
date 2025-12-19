@@ -115,4 +115,14 @@ export class WalletController {
     const customerId = this.getCustomerId(req);
     return this.walletService.buyUsdtWithBrl(customerId, brlAmount, walletId);
   }
+
+  @Post('sell-usdt-for-brl')
+  @ApiOperation({ summary: 'Vender USDT e creditar BRL na conta' })
+  async sellUsdtForBrl(
+    @Req() req: AuthRequest,
+    @Body('usdtAmount') usdtAmount: number,
+  ) {
+    const customerId = this.getCustomerId(req);
+    return this.walletService.sellUsdtForBrl(customerId, usdtAmount);
+  }
 }

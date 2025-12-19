@@ -1867,6 +1867,26 @@
         ]
       }
     },
+    "/wallet/sell-usdt-for-brl": {
+      "post": {
+        "operationId": "WalletController_sellUsdtForBrl",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Vender USDT e creditar BRL na conta",
+        "tags": [
+          "Wallet"
+        ]
+      }
+    },
     "/inter/webhooks/{tipoWebhook}/callbacks": {
       "get": {
         "operationId": "InterWebhookController_getCallbacks",
