@@ -51,7 +51,7 @@ export class InterPixService {
         // Inter exige: [A-Z0-9]{26,35} - maiúsculas e números, 26-35 caracteres
         const timestamp = Date.now().toString(36).toUpperCase();
         const randomPart = Math.random().toString(36).substring(2, 8).toUpperCase();
-        
+
         if (customerId) {
             // Remove caracteres não alfanuméricos e pega os primeiros 12
             const shortId = customerId.replace(/[^a-zA-Z0-9]/g, '').substring(0, 12).toUpperCase();
@@ -59,7 +59,7 @@ export class InterPixService {
             // Garantir entre 26 e 35 caracteres
             return txid.substring(0, 35).padEnd(26, 'X');
         }
-        
+
         const random = Math.random().toString(36).substring(2, 14).toUpperCase();
         const txid = `OTSEM${random}${timestamp}${randomPart}`;
         return txid.substring(0, 35).padEnd(26, 'X');
@@ -91,7 +91,7 @@ export class InterPixService {
 
         try {
             const axios = this.authService.getAxiosInstance();
-            
+
             // Payload base
             const payload: any = {
                 calendario: {
@@ -100,14 +100,14 @@ export class InterPixService {
                 chave,
                 solicitacaoPagador: dto.descricao || `Depósito para ${customerName}`,
             };
-            
+
             // Adicionar valor apenas se informado (QR Code com valor fixo)
             if (dto.valor) {
                 payload.valor = {
                     original: dto.valor.toFixed(2),
                 };
             }
-            
+
             const response = await axios.put(`/pix/v2/cob/${txid}`, payload);
 
             const cobData = response.data;
@@ -144,8 +144,8 @@ export class InterPixService {
             return {
                 ...cobData,
                 customerId,
-                message: customerId 
-                    ? 'Cobrança criada. Quando paga, o valor será creditado automaticamente.' 
+                message: customerId
+                    ? 'Cobrança criada. Quando paga, o valor será creditado automaticamente.'
                     : 'Cobrança criada. Sem customer vinculado - crédito manual necessário.',
             };
         } catch (error: any) {
@@ -153,7 +153,7 @@ export class InterPixService {
             const errorStatus = error.response?.status;
             this.logger.error(`❌ Erro ao criar cobrança (${errorStatus}):`, JSON.stringify(errorData, null, 2));
             this.logger.error(`❌ txid usado: ${txid} | chave: ${chave} | valor: ${dto.valor}`);
-            
+
             // Inter retorna violações em um array
             let errorMessage = 'Cobrança inválida.';
             if (errorData?.violacoes && Array.isArray(errorData.violacoes)) {
@@ -167,7 +167,7 @@ export class InterPixService {
             } else if (typeof errorData === 'string') {
                 errorMessage = errorData;
             }
-            
+
             throw new BadRequestException(errorMessage);
         }
     }
@@ -720,7 +720,7 @@ export class InterPixService {
 
         try {
             const axios = this.authService.getAxiosInstance();
-            
+
             // Payload com expiração de 1 ano (31536000 segundos)
             const payload: any = {
                 calendario: {
@@ -729,17 +729,17 @@ export class InterPixService {
                 chave,
                 solicitacaoPagador: dto.descricao || `Pagamento ${customerName}`,
             };
-            
+
             // Adicionar valor apenas se informado
             if (dto.valor) {
                 payload.valor = {
                     original: dto.valor.toFixed(2),
                 };
             }
-            
+
             const response = await axios.put(`/pix/v2/cob/${txid}`, payload);
             const cobData = response.data;
-            
+
             this.logger.log(`✅ QR Code de longa duração criado: ${cobData.txid}`);
 
             // Criar deposit se tiver customer
@@ -821,15 +821,15 @@ export class InterPixService {
         payload += tlv(26, merchantAccountInfo); // Merchant Account Information
         payload += tlv(52, '0000'); // Merchant Category Code
         payload += tlv(53, '986'); // Transaction Currency (BRL)
-        
+
         if (valor && valor > 0) {
             payload += tlv(54, valor.toFixed(2)); // Transaction Amount
         }
-        
+
         payload += tlv(58, 'BR'); // Country Code
         payload += tlv(59, sanitize(merchantName).toUpperCase().substring(0, 25)); // Merchant Name (max 25)
         payload += tlv(60, sanitize(merchantCity).toUpperCase().substring(0, 15)); // Merchant City (max 15)
-        
+
         // Additional Data Field Template (ID 62) com txid ou ***
         const referenceLabel = txid ? txid.substring(0, 25) : '***';
         const additionalData = tlv(5, referenceLabel); // Reference Label (subcampo 05)
@@ -853,18 +853,18 @@ export class InterPixService {
 
         try {
             const axios = this.authService.getAxiosInstance();
-            
+
             const dataFim = new Date();
             const dataInicio = new Date();
             dataInicio.setDate(dataInicio.getDate() - dias);
-            
+
             const params = {
                 inicio: dataInicio.toISOString(),
                 fim: dataFim.toISOString(),
             };
 
             const response = await axios.get('/pix/v2/cob', { params });
-            
+
             this.logger.log(`✅ Encontradas ${response.data.cobs?.length || 0} cobranças`);
             return response.data;
         } catch (error: any) {
@@ -936,10 +936,10 @@ export class InterPixService {
                 // Buscar detalhes da cobrança para obter dados do pagador
                 try {
                     const cobDetalhes = await this.getCobranca(txid);
-                    
+
                     // Extrair customerId do txid (formato: OTSEM + customerId curto + timestamp)
                     let customerId: string | null = null;
-                    
+
                     // Método 1: Buscar pelo shortId no txid (formato antigo: CMJ8NOPVV000)
                     if (txid.startsWith('OTSEM') && txid.length >= 17) {
                         const shortId = txid.substring(5, 17);
@@ -968,18 +968,18 @@ export class InterPixService {
 
                         if (pendingTx?.account?.customerId) {
                             customerId = pendingTx.account.customerId;
-                            
+
                             // Atualizar a transaction existente em vez de criar nova
                             const pix = cobDetalhes.pix?.[0];
                             const pagadorNome = pix?.pagador?.nome || cobDetalhes.devedor?.nome || 'Pagador não identificado';
                             const pagadorCpf = pix?.pagador?.cpf || cobDetalhes.devedor?.cpf || '';
                             const endToEnd = pix?.endToEndId || '';
                             const valor = parseFloat(cobDetalhes.valor?.original || '0');
-                            
+
                             const account = pendingTx.account;
                             const balanceBefore = account.balance;
                             const balanceAfter = balanceBefore.add(new Prisma.Decimal(valor));
-                            
+
                             await this.prisma.$transaction([
                                 this.prisma.account.update({
                                     where: { id: account.id },
@@ -999,7 +999,7 @@ export class InterPixService {
                                     },
                                 }),
                             ]);
-                            
+
                             resultado.processadas++;
                             resultado.detalhes.push({
                                 txid,
@@ -1009,19 +1009,19 @@ export class InterPixService {
                                 valor,
                                 pagadorNome,
                             });
-                            
+
                             this.logger.log(`✅ Atualizado: ${txid} - R$ ${valor} para ${customerId}`);
                             continue;
                         }
                     }
-                    
+
                     // Método 3: Se há apenas 1 customer ativo, atribuir automaticamente
                     if (!customerId) {
                         const customers = await this.prisma.customer.findMany({
                             take: 2,
                             select: { id: true },
                         });
-                        
+
                         if (customers.length === 1) {
                             customerId = customers[0].id;
                             this.logger.log(`🔗 Customer único encontrado: ${customerId}`);
@@ -1195,7 +1195,7 @@ export class InterPixService {
             };
 
             const idIdempotente = crypto.randomUUID();
-            
+
             this.logger.debug('📤 Payload validação:', JSON.stringify(payload, null, 2));
 
             const response = await axios.post('/banking/v2/pix', payload, {
@@ -1212,39 +1212,66 @@ export class InterPixService {
             // 6. Consultar status do pagamento para obter dados do destinatário
             let destinatario: any = {};
             let endToEndId = '';
-            
+            let txPix: any = {};
+
             // Aguardar 2 segundos para processamento
             await new Promise(resolve => setTimeout(resolve, 2000));
-            
+
             try {
                 const statusResponse = await axios.get(`/banking/v2/pix/${codigoSolicitacao}`);
                 const statusData = statusResponse.data;
                 this.logger.debug(`📦 Status do pagamento:`, JSON.stringify(statusData, null, 2));
                 this.logger.debug(`📦 Status (objeto bruto) recebido do Inter:`, statusData);
-                
-                destinatario = statusData.destinatario || statusData.recebedor || {};
-                endToEndId = statusData.endToEndId || statusData.e2eId || codigoSolicitacao;
+
+                txPix = statusData.transacaoPix || {};
+
+                // Captura destinatário em quaisquer formatos retornados pela API
+                destinatario = statusData.destinatario
+                    || statusData.recebedor
+                    || txPix.recebedor
+                    || txPix.destinatario
+                    || {};
+
+                // Captura o identificador do pagamento em diferentes campos
+                endToEndId = statusData.endToEndId
+                    || statusData.e2eId
+                    || txPix.endToEnd
+                    || txPix.endToEndId
+                    || txPix.e2eId
+                    || codigoSolicitacao;
             } catch (statusError: any) {
                 this.logger.warn(`⚠️ Não foi possível consultar status: ${statusError.message}`);
                 endToEndId = codigoSolicitacao;
             }
-            
+
             this.logger.debug(`👤 Dados do destinatário:`, JSON.stringify(destinatario, null, 2));
-            
+
             const cpfDestinatario = destinatario.cpfCnpj || destinatario.cpf || destinatario.documento || '';
             const cnpjDestinatario = destinatario.cnpj || '';
 
-            // Normalizar para comparação
-            const cpfCliente = pixKey.customer.cpf?.replace(/[.\-]/g, '') || '';
-            const cnpjCliente = pixKey.customer.cnpj?.replace(/[.\-\/]/g, '') || '';
-            const cpfDestNorm = cpfDestinatario.replace(/[.\-]/g, '');
-            const cnpjDestNorm = cnpjDestinatario.replace(/[.\-\/]/g, '');
-            
+            // Normalizar para comparação (somente dígitos, remove *, .,-,/ etc)
+            const cpfCliente = pixKey.customer.cpf?.replace(/\D/g, '') || '';
+            const cnpjCliente = pixKey.customer.cnpj?.replace(/\D/g, '') || '';
+            const cpfDestNorm = cpfDestinatario.replace(/\D/g, '');
+            const cnpjDestNorm = cnpjDestinatario.replace(/\D/g, '');
+
             this.logger.debug(`🔍 Comparação: cpfCliente=${cpfCliente} vs cpfDest=${cpfDestNorm} | cnpjCliente=${cnpjCliente} vs cnpjDest=${cnpjDestNorm}`);
 
+            // Match exato (quando não mascarado)
             const cpfMatch = !!(cpfCliente && cpfDestNorm && cpfCliente === cpfDestNorm);
             const cnpjMatch = !!(cnpjCliente && cnpjDestNorm && cnpjCliente === cnpjDestNorm);
-            const validated = cpfMatch || cnpjMatch;
+
+            // Relaxado: chave bate e há nome do recebedor
+            const chaveStatus = txPix.chave || destinatario.chave || '';
+            const chaveMatches = !!(chaveStatus && chaveStatus === pixKey.keyValue);
+            const hasRecipientName = !!(destinatario.nome || txPix.recebedor?.nome);
+
+            // Relaxado: dígitos visíveis (3+ dígitos) do doc do recebedor estão contidos no CPF/CNPJ do cliente
+            const destDigits = cpfDestNorm || cnpjDestNorm;
+            const clientDocDigits = cpfCliente || cnpjCliente;
+            const partialDocMatch = !!(destDigits && destDigits.length >= 3 && clientDocDigits && clientDocDigits.includes(destDigits));
+
+            const validated = cpfMatch || cnpjMatch || (chaveMatches && hasRecipientName) || partialDocMatch;
 
             // 7. Atualizar a chave PIX
             await this.prisma.pixKey.update({
@@ -1282,10 +1309,10 @@ export class InterPixService {
             const errorData = error.response?.data;
             const errorMessage = errorData?.message || errorData?.title || error.message;
             const errorDetail = JSON.stringify(errorData, null, 2);
-            
+
             this.logger.error(`❌ Erro na validação: ${errorMessage}`);
             this.logger.error(`❌ Detalhes do erro: ${errorDetail}`);
-            
+
             // Marcar que tentou validação e falhou
             await this.prisma.pixKey.update({
                 where: { id: pixKeyId },
@@ -1295,7 +1322,7 @@ export class InterPixService {
                     validationError: `Erro na transferência: ${errorMessage}`,
                 },
             });
-            
+
             return {
                 success: false,
                 validated: false,
