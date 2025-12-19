@@ -3017,6 +3017,26 @@
         ]
       }
     },
+    "/admin/dashboard/spread-report": {
+      "get": {
+        "operationId": "AdminDashboardController_spreadReport",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Relatório de spread"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Relatório de spread ganho nas conversões BRL→USDT",
+        "tags": [
+          "Admin Dashboard"
+        ]
+      }
+    },
     "/payments": {
       "get": {
         "operationId": "PaymentsController_listPayments",

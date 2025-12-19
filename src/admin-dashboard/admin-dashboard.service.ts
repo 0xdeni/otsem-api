@@ -168,4 +168,81 @@ export class AdminDashboardService {
   private toNumber(decOrNull: any) {
     return decOrNull ? Number(decOrNull) : 0;
   }
+
+  /**
+   * Relatório de spread ganho nas conversões BRL→USDT
+   */
+  async getSpreadReport() {
+    this.logger.log('Gerando relatório de spread...');
+
+    try {
+      const conversions = await this.prisma.transaction.findMany({
+        where: { type: 'CONVERSION' },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          amount: true,
+          description: true,
+          externalData: true,
+          createdAt: true,
+          account: {
+            select: {
+              customer: {
+                select: { id: true, name: true, email: true }
+              }
+            }
+          }
+        }
+      });
+
+      let totalChargedBrl = 0;
+      let totalExchangedBrl = 0;
+      let totalSpreadBrl = 0;
+      let totalUsdtBought = 0;
+
+      const details = conversions.map(tx => {
+        const data = tx.externalData as any;
+        const spread = data?.spread || {};
+        const chargedBrl = spread.chargedBrl || this.toNumber(tx.amount);
+        const exchangedBrl = spread.exchangedBrl || chargedBrl;
+        const spreadBrl = spread.spreadBrl || 0;
+        const usdtAmount = data?.usdtAmount || 0;
+
+        totalChargedBrl += chargedBrl;
+        totalExchangedBrl += exchangedBrl;
+        totalSpreadBrl += spreadBrl;
+        totalUsdtBought += usdtAmount;
+
+        return {
+          id: tx.id,
+          customer: tx.account?.customer?.name || 'N/A',
+          customerId: tx.account?.customer?.id,
+          chargedBrl,
+          exchangedBrl,
+          spreadBrl,
+          spreadPercent: chargedBrl > 0 ? ((spreadBrl / chargedBrl) * 100).toFixed(2) + '%' : '0%',
+          usdtBought: usdtAmount,
+          createdAt: tx.createdAt,
+        };
+      });
+
+      return {
+        summary: {
+          totalConversions: conversions.length,
+          totalChargedBrl: totalChargedBrl.toFixed(2),
+          totalExchangedBrl: totalExchangedBrl.toFixed(2),
+          totalSpreadBrl: totalSpreadBrl.toFixed(2),
+          totalUsdtBought: totalUsdtBought.toFixed(2),
+          averageSpreadPercent: totalChargedBrl > 0 
+            ? ((totalSpreadBrl / totalChargedBrl) * 100).toFixed(2) + '%' 
+            : '0%',
+        },
+        conversions: details,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error: any) {
+      this.logger.error('Erro ao gerar relatório de spread:', error.message);
+      throw error;
+    }
+  }
 }

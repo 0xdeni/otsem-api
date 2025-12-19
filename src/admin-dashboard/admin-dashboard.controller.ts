@@ -53,4 +53,11 @@ export class AdminDashboardController {
   async latestTransactions() {
     return this.service.getLatestTransactions();
   }
+
+  @Get('spread-report')
+  @ApiOperation({ summary: 'Relatório de spread ganho nas conversões BRL→USDT' })
+  @ApiResponse({ status: 200, description: 'Relatório de spread' })
+  async spreadReport() {
+    return this.service.getSpreadReport();
+  }
 }
