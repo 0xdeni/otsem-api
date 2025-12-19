@@ -1204,10 +1204,13 @@ export class InterPixService {
 
             const endToEndId = pixData.endToEndId || pixData.e2eId;
             this.logger.log(`✅ Micro-transferência enviada: ${endToEndId}`);
+            this.logger.debug(`📦 Resposta completa da API Inter:`, JSON.stringify(pixData, null, 2));
 
             // 6. Verificar dados do destinatário retornados pelo banco
             const destinatario = pixData.destinatario || pixData.recebedor || {};
-            const cpfDestinatario = destinatario.cpf || destinatario.documento || '';
+            this.logger.debug(`👤 Dados do destinatário:`, JSON.stringify(destinatario, null, 2));
+            
+            const cpfDestinatario = destinatario.cpfCnpj || destinatario.cpf || destinatario.documento || '';
             const cnpjDestinatario = destinatario.cnpj || '';
 
             // Normalizar para comparação
@@ -1215,6 +1218,8 @@ export class InterPixService {
             const cnpjCliente = pixKey.customer.cnpj?.replace(/[.\-\/]/g, '') || '';
             const cpfDestNorm = cpfDestinatario.replace(/[.\-]/g, '');
             const cnpjDestNorm = cnpjDestinatario.replace(/[.\-\/]/g, '');
+            
+            this.logger.debug(`🔍 Comparação: cpfCliente=${cpfCliente} vs cpfDest=${cpfDestNorm} | cnpjCliente=${cnpjCliente} vs cnpjDest=${cnpjDestNorm}`);
 
             const cpfMatch = !!(cpfCliente && cpfDestNorm && cpfCliente === cpfDestNorm);
             const cnpjMatch = !!(cnpjCliente && cnpjDestNorm && cnpjCliente === cnpjDestNorm);
