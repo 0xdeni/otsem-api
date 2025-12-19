@@ -2667,6 +2667,36 @@
         ]
       }
     },
+    "/inter/pix/validar-chave/{pixKeyId}": {
+      "post": {
+        "description": "Envia R$ 0,01 para a chave PIX. Se o CPF/CNPJ do destinatário corresponder ao seu cadastro, a chave é validada. Esta operação só pode ser feita UMA VEZ por chave.",
+        "operationId": "InterPixController_validatePixKey",
+        "parameters": [
+          {
+            "name": "pixKeyId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resultado da validação"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "🔑 Validar chave PIX via micro-transferência (R$ 0,01)",
+        "tags": [
+          "💸 Pix (Inter)"
+        ]
+      }
+    },
     "/okx/balance-brl": {
       "get": {
         "operationId": "OkxController_getBrlBalance",

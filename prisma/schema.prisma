@@ -281,6 +281,12 @@ model PixKey {
   // Campo de validação: true se a chave pertence ao CPF/CNPJ do customer
   validated   Boolean   @default(false)
   validatedAt DateTime?
+  
+  // Controle de tentativa de validação por micro-transferência (R$ 0,01)
+  validationAttempted   Boolean   @default(false)
+  validationAttemptedAt DateTime?
+  validationTxId        String?   // endToEnd da transferência de teste
+  validationError       String?   // Mensagem de erro se falhou
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

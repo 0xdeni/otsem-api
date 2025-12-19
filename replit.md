@@ -101,6 +101,22 @@ Legacy models (Deposit, Payment) are kept for backward compatibility.
 - `GET /transactions?limit=6` - List customer transactions with optional limit
 - Returns type (PIX_IN/PIX_OUT), amount, description, payerName, createdAt
 
+### PIX Key Validation via Micro-Transfer (Dec 19)
+New endpoint to validate PIX keys by sending R$ 0,01:
+- `POST /inter/pix/validar-chave/:pixKeyId` - Validates a PIX key by micro-transfer
+
+Validation flow:
+1. Sends R$ 0,01 to the PIX key via Banco Inter
+2. If successful, checks if destination CPF/CNPJ matches customer's registration
+3. If matches, marks the key as `validated = true`
+4. This operation can only be done **ONCE per key**
+
+PixKey model now includes additional validation fields:
+- `validationAttempted` (boolean) - true if micro-transfer was attempted
+- `validationAttemptedAt` (DateTime) - when validation was attempted
+- `validationTxId` (string) - endToEnd ID of the validation transfer
+- `validationError` (string) - error message if validation failed
+
 ### PIX Key Management with Auto-Validation (Dec 19)
 New endpoints for managing PIX keys with automatic validation:
 - `GET /pix-keys` - List customer's PIX keys with validation status

@@ -128,4 +128,24 @@ export class InterPixController {
         const numDias = dias ? parseInt(dias, 10) : 7;
         return this.pixService.reconciliarCobrancas(numDias);
     }
+
+    // ==================== VALIDAÇÃO DE CHAVE PIX ====================
+
+    @Post('validar-chave/:pixKeyId')
+    @Roles(Role.CUSTOMER, Role.ADMIN)
+    @ApiOperation({ 
+        summary: '🔑 Validar chave PIX via micro-transferência (R$ 0,01)',
+        description: 'Envia R$ 0,01 para a chave PIX. Se o CPF/CNPJ do destinatário corresponder ao seu cadastro, a chave é validada. Esta operação só pode ser feita UMA VEZ por chave.'
+    })
+    @ApiResponse({
+        status: 200,
+        description: 'Resultado da validação',
+    })
+    async validatePixKey(
+        @Request() req: any,
+        @Param('pixKeyId') pixKeyId: string,
+    ) {
+        const customerId = req.user?.customerId;
+        return this.pixService.validatePixKeyByMicroTransfer(customerId, pixKeyId);
+    }
 }

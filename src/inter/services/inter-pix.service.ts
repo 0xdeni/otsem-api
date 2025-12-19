@@ -1109,6 +1109,155 @@ export class InterPixService {
         }
     }
 
+    // ==================== VALIDAÇÃO DE CHAVE PIX ====================
+
+    /**
+     * 🔑 Validar chave PIX via micro-transferência de R$ 0,01
+     * - Só pode ser feita uma vez por chave
+     * - Se sucesso e CPF/CNPJ do destinatário bate com o customer, marca como validated
+     */
+    async validatePixKeyByMicroTransfer(
+        customerId: string,
+        pixKeyId: string,
+    ): Promise<{
+        success: boolean;
+        validated: boolean;
+        message: string;
+        endToEndId?: string;
+        destinatario?: any;
+    }> {
+        this.logger.log(`🔑 Validando chave PIX ${pixKeyId} via micro-transferência para customer ${customerId}`);
+
+        // 1. Buscar a chave PIX
+        const pixKey = await this.prisma.pixKey.findFirst({
+            where: { id: pixKeyId, customerId },
+            include: { customer: { select: { cpf: true, cnpj: true, name: true } } },
+        });
+
+        if (!pixKey) {
+            throw new BadRequestException('Chave PIX não encontrada');
+        }
+
+        // 2. Verificar se já foi validada automaticamente
+        if (pixKey.validated) {
+            return {
+                success: true,
+                validated: true,
+                message: 'Esta chave já está validada automaticamente (corresponde ao seu CPF/CNPJ/Email/Telefone)',
+            };
+        }
+
+        // 3. Verificar se já tentou validação por micro-transferência
+        if (pixKey.validationAttempted) {
+            return {
+                success: false,
+                validated: pixKey.validated,
+                message: `Validação por micro-transferência já foi tentada em ${pixKey.validationAttemptedAt?.toISOString()}. ${pixKey.validationError || ''}`,
+                endToEndId: pixKey.validationTxId || undefined,
+            };
+        }
+
+        // 4. Mapear tipo da chave para formato da Inter
+        const tipoChaveMap: Record<string, string> = {
+            'CPF': 'CPF',
+            'CNPJ': 'CNPJ',
+            'EMAIL': 'EMAIL',
+            'PHONE': 'TELEFONE',
+            'RANDOM': 'CHAVE_ALEATORIA',
+        };
+        const tipoChave = tipoChaveMap[pixKey.keyType] || 'CHAVE';
+
+        try {
+            const axios = this.authService.getAxiosInstance();
+
+            // 5. Fazer micro-transferência de R$ 0,01
+            const payload = {
+                valor: '0.01',
+                destinatario: {
+                    tipo: tipoChave,
+                    chave: pixKey.keyValue,
+                },
+                descricao: 'Validacao chave PIX OTSEM',
+            };
+
+            this.logger.debug('📤 Payload validação:', JSON.stringify(payload, null, 2));
+
+            const response = await axios.post('/banking/v2/pix', payload);
+            const pixData = response.data;
+
+            const endToEndId = pixData.endToEndId || pixData.e2eId;
+            this.logger.log(`✅ Micro-transferência enviada: ${endToEndId}`);
+
+            // 6. Verificar dados do destinatário retornados pelo banco
+            const destinatario = pixData.destinatario || pixData.recebedor || {};
+            const cpfDestinatario = destinatario.cpf || destinatario.documento || '';
+            const cnpjDestinatario = destinatario.cnpj || '';
+
+            // Normalizar para comparação
+            const cpfCliente = pixKey.customer.cpf?.replace(/[.\-]/g, '') || '';
+            const cnpjCliente = pixKey.customer.cnpj?.replace(/[.\-\/]/g, '') || '';
+            const cpfDestNorm = cpfDestinatario.replace(/[.\-]/g, '');
+            const cnpjDestNorm = cnpjDestinatario.replace(/[.\-\/]/g, '');
+
+            const cpfMatch = cpfCliente && cpfDestNorm && cpfCliente === cpfDestNorm;
+            const cnpjMatch = cnpjCliente && cnpjDestNorm && cnpjCliente === cnpjDestNorm;
+            const validated = cpfMatch || cnpjMatch;
+
+            // 7. Atualizar a chave PIX
+            await this.prisma.pixKey.update({
+                where: { id: pixKeyId },
+                data: {
+                    validationAttempted: true,
+                    validationAttemptedAt: new Date(),
+                    validationTxId: endToEndId,
+                    validated,
+                    validatedAt: validated ? new Date() : null,
+                    validationError: validated ? null : 'CPF/CNPJ do destinatário não corresponde ao seu cadastro',
+                },
+            });
+
+            if (validated) {
+                this.logger.log(`✅ Chave validada com sucesso: ${pixKey.keyValue}`);
+                return {
+                    success: true,
+                    validated: true,
+                    message: 'Chave validada com sucesso! O CPF/CNPJ do destinatário corresponde ao seu cadastro.',
+                    endToEndId,
+                    destinatario,
+                };
+            } else {
+                this.logger.warn(`⚠️ Chave não validada: CPF/CNPJ não corresponde`);
+                return {
+                    success: true,
+                    validated: false,
+                    message: 'Transferência realizada, mas o CPF/CNPJ do destinatário não corresponde ao seu cadastro. Esta chave não pode ser usada para envio de PIX.',
+                    endToEndId,
+                    destinatario,
+                };
+            }
+        } catch (error: any) {
+            const errorMessage = error.response?.data?.message || error.message;
+            
+            // Marcar que tentou validação e falhou
+            await this.prisma.pixKey.update({
+                where: { id: pixKeyId },
+                data: {
+                    validationAttempted: true,
+                    validationAttemptedAt: new Date(),
+                    validationError: `Erro na transferência: ${errorMessage}`,
+                },
+            });
+
+            this.logger.error(`❌ Erro na validação: ${errorMessage}`);
+            
+            return {
+                success: false,
+                validated: false,
+                message: `Erro na transferência de validação: ${errorMessage}. A chave não pode ser validada.`,
+            };
+        }
+    }
+
     /**
      * 🔢 Calcular CRC16-CCITT-FALSE para validação do BRCode
      * Implementação baseada na referência do Banco Central
