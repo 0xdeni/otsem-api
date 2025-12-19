@@ -71,4 +71,14 @@ export class PixPaymentResponseDto {
 
     @ApiProperty({ example: 'abc123' })
     transacaoId?: string;
+
+    @ApiPropertyOptional({
+        description: 'Dados do destinatário retornados pelo banco, quando disponíveis',
+        example: {
+            tipo: 'CPF',
+            chave: '12345678900',
+            nome: 'João da Silva',
+        },
+    })
+    destinatario?: any;
 }

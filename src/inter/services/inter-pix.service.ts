@@ -246,6 +246,8 @@ export class InterPixService {
 
             const pixData = response.data;
 
+            this.logger.debug('🔎 Resposta completa do Inter:', JSON.stringify(pixData, null, 2));
+
             this.logger.log(
                 `✅ Pix enviado: ${pixData.endToEndId || pixData.e2eId}`,
             );
@@ -259,6 +261,7 @@ export class InterPixService {
                 horario: pixData.horario || new Date().toISOString(),
                 status: pixData.status || 'PROCESSANDO',
                 transacaoId: pixData.transacaoId,
+                destinatario: pixData.destinatario || pixData.favorecido || pixData.beneficiario,
             };
         } catch (error: any) {
             const status = error.response?.status;
