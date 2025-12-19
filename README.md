@@ -1022,7 +1022,7 @@ MIT.
 
 ## 👥 Contato
 
-- **Email**: suporte@otsembank.com
+- **Email**: suporte@otsembank.co
 - **Documentação BRX**: https://integrator-docs.brxbank.com.br
 
 ---
