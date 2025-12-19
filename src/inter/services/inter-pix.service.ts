@@ -1191,7 +1191,7 @@ export class InterPixService {
                 },
             };
 
-            const idIdempotente = `val-${pixKeyId}-${Date.now()}`;
+            const idIdempotente = crypto.randomUUID();
             
             this.logger.debug('📤 Payload validação:', JSON.stringify(payload, null, 2));
 
