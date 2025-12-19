@@ -1170,13 +1170,24 @@ export class InterPixService {
         try {
             const axios = this.authService.getAxiosInstance();
 
-            // 5. Fazer micro-transferência de R$ 0,01
+            // 5. Mapear tipo da chave para tipoChave do Inter
+            const tipoChaveInterMap: Record<string, string> = {
+                'CPF': 'CPF',
+                'CNPJ': 'CNPJ',
+                'EMAIL': 'EMAIL',
+                'PHONE': 'TELEFONE',
+                'RANDOM': 'EVP',
+            };
+            const tipoChaveInter = tipoChaveInterMap[pixKey.keyType] || 'EVP';
+
+            // 6. Fazer micro-transferência de R$ 0,01
             const payload = {
                 valor: 0.01,
                 descricao: 'Validacao chave PIX OTSEM',
                 destinatario: {
                     tipo: 'CHAVE',
                     chave: pixKey.keyValue,
+                    tipoChave: tipoChaveInter,
                 },
             };
 
