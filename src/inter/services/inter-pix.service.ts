@@ -832,9 +832,10 @@ export class InterPixService {
                     
                     // Extrair customerId do txid (formato: OTSEM + customerId curto + timestamp)
                     let customerId: string | null = null;
+                    
+                    // Método 1: Buscar pelo shortId no txid (formato antigo: CMJ8NOPVV000)
                     if (txid.startsWith('OTSEM') && txid.length >= 17) {
                         const shortId = txid.substring(5, 17);
-                        // Buscar customer pelo ID que começa com esse shortId
                         const customer = await this.prisma.customer.findFirst({
                             where: {
                                 id: { startsWith: shortId.toLowerCase() },
@@ -845,7 +846,7 @@ export class InterPixService {
                         }
                     }
 
-                    // Se não encontrou pelo txid, tentar buscar transaction PENDING existente
+                    // Método 2: Buscar transaction PENDING existente pelo txid
                     if (!customerId) {
                         const pendingTx = await this.prisma.transaction.findFirst({
                             where: {
@@ -860,6 +861,63 @@ export class InterPixService {
 
                         if (pendingTx?.account?.customerId) {
                             customerId = pendingTx.account.customerId;
+                            
+                            // Atualizar a transaction existente em vez de criar nova
+                            const pix = cobDetalhes.pix?.[0];
+                            const pagadorNome = pix?.pagador?.nome || cobDetalhes.devedor?.nome || 'Pagador não identificado';
+                            const pagadorCpf = pix?.pagador?.cpf || cobDetalhes.devedor?.cpf || '';
+                            const endToEnd = pix?.endToEndId || '';
+                            const valor = parseFloat(cobDetalhes.valor?.original || '0');
+                            
+                            const account = pendingTx.account;
+                            const balanceBefore = account.balance;
+                            const balanceAfter = balanceBefore.add(new Prisma.Decimal(valor));
+                            
+                            await this.prisma.$transaction([
+                                this.prisma.account.update({
+                                    where: { id: account.id },
+                                    data: { balance: balanceAfter },
+                                }),
+                                this.prisma.transaction.update({
+                                    where: { id: pendingTx.id },
+                                    data: {
+                                        status: 'COMPLETED',
+                                        endToEnd,
+                                        description: `Depósito PIX de ${pagadorNome}`,
+                                        payerName: pagadorNome,
+                                        payerTaxNumber: pagadorCpf,
+                                        balanceBefore,
+                                        balanceAfter,
+                                        externalData: cobDetalhes as any,
+                                    },
+                                }),
+                            ]);
+                            
+                            resultado.processadas++;
+                            resultado.detalhes.push({
+                                txid,
+                                status: 'ATUALIZADA',
+                                transactionId: pendingTx.id,
+                                customerId,
+                                valor,
+                                pagadorNome,
+                            });
+                            
+                            this.logger.log(`✅ Atualizado: ${txid} - R$ ${valor} para ${customerId}`);
+                            continue;
+                        }
+                    }
+                    
+                    // Método 3: Se há apenas 1 customer ativo, atribuir automaticamente
+                    if (!customerId) {
+                        const customers = await this.prisma.customer.findMany({
+                            take: 2,
+                            select: { id: true },
+                        });
+                        
+                        if (customers.length === 1) {
+                            customerId = customers[0].id;
+                            this.logger.log(`🔗 Customer único encontrado: ${customerId}`);
                         }
                     }
 

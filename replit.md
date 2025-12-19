@@ -86,6 +86,21 @@ Legacy models (Deposit, Payment) are kept for backward compatibility.
 
 ## Recent Changes (Dec 2025)
 
+### PIX Polling & Automatic Reconciliation (Dec 19)
+- **Automatic polling every 1 minute**: Checks Inter API for paid PIX charges
+- **Smart customer identification**: 3 methods to find the customer:
+  1. Extract shortId from txid (format: OTSEM + customerId + timestamp)
+  2. Find existing PENDING transaction by txid
+  3. If only 1 customer exists, assign automatically
+- **Reconciliation endpoints** (Admin only):
+  - `GET /inter/pix/cobrancas?dias=7` - List PIX charges from last N days
+  - `POST /inter/pix/reconciliar?dias=7` - Process unpaid charges and credit accounts
+- Updates existing PENDING transactions instead of creating duplicates
+
+### Transactions API Endpoint (Dec 19)
+- `GET /transactions?limit=6` - List customer transactions with optional limit
+- Returns type (PIX_IN/PIX_OUT), amount, description, payerName, createdAt
+
 ### Unified Transaction Model Refactoring (Dec 16)
 - Migrated from separate Deposit/Payment models to unified Transaction model
 - New fields: payerName, payerTaxNumber, receiverName, receiverPixKey, endToEnd, txid
