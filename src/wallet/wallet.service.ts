@@ -202,92 +202,158 @@ export class WalletService {
     const brlToExchange = Number((brlAmount * spreadRate).toFixed(2));
     const spreadAmount = Number((brlAmount - brlToExchange).toFixed(2));
 
-    const pixResult = await this.interPixService.sendPix(customerId, {
-      valor: brlAmount,
-      chaveDestino: '50459025000126',
-      tipoChave: PixKeyType.CHAVE,
-      descricao: customerId,
-    });
-
-    await new Promise((resolve) => setTimeout(resolve, 5000));
-    const okxBuyResult = await this.okxService.buyUsdtWithBrl(brlToExchange);
-
-    // Anexa informações de spread no Payment relacionado ao endToEnd da saída PIX
-    if (pixResult?.endToEndId) {
-      const payment = await this.prisma.payment.findUnique({ where: { endToEnd: pixResult.endToEndId } });
-      if (payment) {
-        const bankPayload = (payment.bankPayload as any) || {};
-        await this.prisma.payment.update({
-          where: { id: payment.id },
-          data: {
-            bankPayload: {
-              ...bankPayload,
-              spread: {
-                chargedBrl: brlAmount,
-                exchangedBrl: brlToExchange,
-                spreadBrl: spreadAmount,
-                spreadRate,
-              },
-              okxBuyResult,
-            },
-          },
-        });
-      }
-
-      // Atualiza Transaction associada (externalId = endToEnd) com spread/compra
-      const tx = await this.prisma.transaction.findFirst({ where: { externalId: pixResult.endToEndId } });
-      if (tx) {
-        const metadata = (tx.metadata as any) || {};
-        await this.prisma.transaction.update({
-          where: { id: tx.id },
-          data: {
-            metadata: {
-              ...metadata,
-              spread: {
-                chargedBrl: brlAmount,
-                exchangedBrl: brlToExchange,
-                spreadBrl: spreadAmount,
-                spreadRate,
-              },
-              okxBuyResult,
-            },
-          },
-        });
-      }
-    }
-
-    let wallet;
-    if (walletId) {
-      wallet = await this.getWalletById(walletId, customerId);
-    } else {
-      wallet = await this.getMainWallet(customerId, 'SOLANA');
-    }
-
-    if (!wallet || !wallet.externalAddress) {
-      throw new Error('Carteira Solana não encontrada para o cliente');
-    }
-
-    const withdrawResult = await this.okxService.safeWithdrawUsdt({
-      currency: 'USDT',
-      amount: okxBuyResult.amount || brlAmount,
-      toAddress: wallet.externalAddress,
-      network: 'Solana',
-      fundPwd: process.env.OKX_API_PASSPHRASE || 'not_found',
-      fee: '1',
-    });
-
-    return {
-      message: 'Compra e transferência de USDT concluída',
-      pixResult,
-      okxBuyResult,
-      withdrawResult,
-      spread: {
-        chargedBrl: brlAmount,
-        exchangedBrl: brlToExchange,
-        spreadBrl: spreadAmount,
-        spreadRate,
-      },
-      wallet: { id: wallet.id, network: wallet.network, address: wallet.externalAddress },
+    const stages: { pixTransfer: string; conversion: string; usdtTransfer: string } = {
+      pixTransfer: 'pending', // 1 - transferindo reais via PIX para OKX
+      conversion: 'pending', // 2 - comprando USDT na OKX
+      usdtTransfer: 'pending', // 3 - enviando USDT para carteira do cliente
     };
+
+    let pixResult: any = null;
+    let okxBuyResult: any = null;
+    let withdrawResult: any = null;
+
+    try {
+      // 1) PIX para conta OKX
+      pixResult = await this.interPixService.sendPix(customerId, {
+        valor: brlAmount,
+        chaveDestino: '50459025000126',
+        tipoChave: PixKeyType.CHAVE,
+        descricao: customerId,
+      });
+      stages.pixTransfer = 'done';
+
+      // 2) Compra USDT na OKX
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      okxBuyResult = await this.okxService.buyUsdtWithBrl(brlToExchange);
+      stages.conversion = 'done';
+
+      // Persist spread + etapas em Payment/Transaction (se houver endToEnd)
+      if (pixResult?.endToEndId) {
+        const payment = await this.prisma.payment.findUnique({ where: { endToEnd: pixResult.endToEndId } });
+        if (payment) {
+          const bankPayload = (payment.bankPayload as any) || {};
+          await this.prisma.payment.update({
+            where: { id: payment.id },
+            data: {
+              bankPayload: {
+                ...bankPayload,
+                spread: {
+                  chargedBrl: brlAmount,
+                  exchangedBrl: brlToExchange,
+                  spreadBrl: spreadAmount,
+                  spreadRate,
+                },
+                okxBuyResult,
+                stages,
+              },
+            },
+          });
+        }
+
+        const tx = await this.prisma.transaction.findFirst({ where: { externalId: pixResult.endToEndId } });
+        if (tx) {
+          const metadata = (tx.metadata as any) || {};
+          await this.prisma.transaction.update({
+            where: { id: tx.id },
+            data: {
+              metadata: {
+                ...metadata,
+                spread: {
+                  chargedBrl: brlAmount,
+                  exchangedBrl: brlToExchange,
+                  spreadBrl: spreadAmount,
+                  spreadRate,
+                },
+                okxBuyResult,
+                stages,
+              },
+            },
+          });
+        }
+      }
+
+      // 3) Transferência USDT para carteira do cliente
+      let wallet;
+      if (walletId) {
+        wallet = await this.getWalletById(walletId, customerId);
+      } else {
+        wallet = await this.getMainWallet(customerId, 'SOLANA');
+      }
+
+      if (!wallet || !wallet.externalAddress) {
+        throw new Error('Carteira Solana não encontrada para o cliente');
+      }
+
+      withdrawResult = await this.okxService.safeWithdrawUsdt({
+        currency: 'USDT',
+        amount: okxBuyResult.amount || brlAmount,
+        toAddress: wallet.externalAddress,
+        network: 'Solana',
+        fundPwd: process.env.OKX_API_PASSPHRASE || 'not_found',
+        fee: '1',
+      });
+      stages.usdtTransfer = 'done';
+
+      // Persist estágio final
+      if (pixResult?.endToEndId) {
+        const payment = await this.prisma.payment.findUnique({ where: { endToEnd: pixResult.endToEndId } });
+        if (payment) {
+          const bankPayload = (payment.bankPayload as any) || {};
+          await this.prisma.payment.update({
+            where: { id: payment.id },
+            data: { bankPayload: { ...bankPayload, stages } },
+          });
+        }
+
+        const tx = await this.prisma.transaction.findFirst({ where: { externalId: pixResult.endToEndId } });
+        if (tx) {
+          const metadata = (tx.metadata as any) || {};
+          await this.prisma.transaction.update({
+            where: { id: tx.id },
+            data: { metadata: { ...metadata, stages } },
+          });
+        }
+      }
+
+      return {
+        message: 'Compra e transferência de USDT concluída',
+        pixResult,
+        okxBuyResult,
+        withdrawResult,
+        spread: {
+          chargedBrl: brlAmount,
+          exchangedBrl: brlToExchange,
+          spreadBrl: spreadAmount,
+          spreadRate,
+        },
+        stages,
+        wallet: { id: wallet.id, network: wallet.network, address: wallet.externalAddress },
+      };
+    } catch (error) {
+      // Persist estágio em erro, se possível
+      if (pixResult?.endToEndId) {
+        const payment = await this.prisma.payment.findUnique({ where: { endToEnd: pixResult.endToEndId } });
+        const tx = await this.prisma.transaction.findFirst({ where: { externalId: pixResult.endToEndId } });
+        const errorMsg = error instanceof Error ? error.message : 'Erro na compra/transferência USDT';
+
+        if (payment) {
+          const bankPayload = (payment.bankPayload as any) || {};
+          await this.prisma.payment.update({
+            where: { id: payment.id },
+            data: { bankPayload: { ...bankPayload, stages, error: errorMsg } },
+          });
+        }
+
+        if (tx) {
+          const metadata = (tx.metadata as any) || {};
+          await this.prisma.transaction.update({
+            where: { id: tx.id },
+            data: { metadata: { ...metadata, stages, error: errorMsg } },
+          });
+        }
+      }
+
+      throw error;
+    }
   }
 }
