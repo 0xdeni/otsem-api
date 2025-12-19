@@ -23,6 +23,7 @@ FDBANK_API_URL = "https://api-baas.fdbank.com.br/v1.0/"
 FDBANK_API_WEBHOOK = "https://api.otsembank.com/webhook-fd"
 INTER_CERT_PATH = "/home/runner/workspace/inter-keys/certificado.crt"
 INTER_KEY_PATH = "/home/runner/workspace/inter-keys/chave_privada.key"
+OKX_TRON_DEPOSIT_ADDRESS = "TLtccxekdFJ6Qjy8yAEBuiv5BM7uk4iepr"
 
 [workflows]
 runButton = "Project"
