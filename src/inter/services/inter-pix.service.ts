@@ -1172,12 +1172,10 @@ export class InterPixService {
 
             // 5. Fazer micro-transferência de R$ 0,01
             const payload = {
-                valor: '0.01',
-                destinatario: {
-                    tipo: tipoChave,
-                    chave: pixKey.keyValue,
-                },
-                descricao: 'Validacao chave PIX OTSEM',
+                chaveDestino: pixKey.keyValue,
+                valor: 0.01,
+                tipoChave: 'CHAVE',
+                descricao: 'Validando chave PIX OTSEM',
             };
 
             this.logger.debug('📤 Payload validação:', JSON.stringify(payload, null, 2));
