@@ -3515,6 +3515,15 @@
           "transacaoId": {
             "type": "string",
             "example": "abc123"
+          },
+          "destinatario": {
+            "type": "object",
+            "description": "Dados do destinatário retornados pelo banco, quando disponíveis",
+            "example": {
+              "tipo": "CPF",
+              "chave": "12345678900",
+              "nome": "João da Silva"
+            }
           }
         },
         "required": [

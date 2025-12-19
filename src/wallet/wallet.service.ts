@@ -12,7 +12,7 @@ export class WalletService {
     private readonly prisma: PrismaService,
     private readonly interPixService: InterPixService,
     private readonly okxService: OkxService,
-  ) {}
+  ) { }
 
   async createWallet(
     customerId: string,
