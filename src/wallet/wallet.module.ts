@@ -4,10 +4,11 @@ import { WalletController } from './wallet.controller';
 import { PrismaService } from '../prisma/prisma.service';
 import { InterPixService } from '../inter/services/inter-pix.service';
 import { InterModule } from '../inter/inter.module';
-import { OkxModule } from '../okx/okx.module'; // <-- importe o módulo Okx
+import { OkxModule } from '../okx/okx.module';
+import { TronModule } from '../tron/tron.module';
 
 @Module({
-    imports: [InterModule, OkxModule], // <-- adicione aqui
+    imports: [InterModule, OkxModule, TronModule],
     providers: [WalletService, PrismaService, InterPixService],
     controllers: [WalletController],
 })

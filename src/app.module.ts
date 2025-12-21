@@ -19,6 +19,7 @@ import { FdbankModule } from './fdbank/fdbank.module';
 import { WalletModule } from './wallet/wallet.module';
 import { PixKeysModule } from './pix-keys/pix-keys.module';
 import { DiditModule } from './didit/didit.module';
+import { TronModule } from './tron/tron.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { DiditModule } from './didit/didit.module';
     PixKeysModule,
     DiditModule,
     OkxModule,
+    TronModule,
     MailModule,
     AdminDashboardModule,
     InterModule,

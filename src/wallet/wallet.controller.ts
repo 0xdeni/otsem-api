@@ -68,6 +68,13 @@ export class WalletController {
     return this.walletService.createSolanaWallet(customerId, label);
   }
 
+  @Post('create-tron')
+  @ApiOperation({ summary: 'Criar nova wallet Tron (gera keypair)' })
+  async createTronWallet(@Req() req: AuthRequest, @Body('label') label?: string) {
+    const customerId = this.getCustomerId(req);
+    return this.walletService.createTronWallet(customerId, label);
+  }
+
   @Post('import')
   @ApiOperation({ summary: 'Importar wallet externa' })
   async importWallet(

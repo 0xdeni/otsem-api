@@ -1769,6 +1769,26 @@
         ]
       }
     },
+    "/wallet/create-tron": {
+      "post": {
+        "operationId": "WalletController_createTronWallet",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Criar nova wallet Tron (gera keypair)",
+        "tags": [
+          "Wallet"
+        ]
+      }
+    },
     "/wallet/import": {
       "post": {
         "operationId": "WalletController_importWallet",
@@ -2821,6 +2841,99 @@
         "summary": "Lista depósitos recentes de USDT",
         "tags": [
           "OKX"
+        ]
+      }
+    },
+    "/tron/hot-wallet": {
+      "get": {
+        "operationId": "TronController_getHotWalletInfo",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Endereço e saldos da hot wallet Tron",
+        "tags": [
+          "Tron"
+        ]
+      }
+    },
+    "/tron/balance": {
+      "get": {
+        "operationId": "TronController_getBalance",
+        "parameters": [
+          {
+            "name": "address",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Saldo USDT de uma carteira Tron",
+        "tags": [
+          "Tron"
+        ]
+      }
+    },
+    "/tron/create-wallet": {
+      "post": {
+        "operationId": "TronController_createWallet",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Criar nova carteira Tron",
+        "tags": [
+          "Tron"
+        ]
+      }
+    },
+    "/tron/send-usdt": {
+      "post": {
+        "operationId": "TronController_sendUsdt",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Enviar USDT da hot wallet para endereço",
+        "tags": [
+          "Tron"
+        ]
+      }
+    },
+    "/tron/validate-address": {
+      "get": {
+        "operationId": "TronController_validateAddress",
+        "parameters": [
+          {
+            "name": "address",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Validar endereço Tron",
+        "tags": [
+          "Tron"
         ]
       }
     },
