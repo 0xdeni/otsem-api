@@ -378,4 +378,32 @@ export class OkxService {
         const response = await axios.get(`${apiUrl}${requestPath}`, { headers });
         return response.data?.data || [];
     }
+
+    /**
+     * Lista saques recentes de USDT
+     */
+    async getRecentWithdrawals(): Promise<any[]> {
+        const method = 'GET';
+        const requestPath = '/api/v5/asset/withdrawal-history?ccy=USDT';
+        const body = '';
+        const headers = this.authService.getAuthHeaders(method, requestPath, body);
+        const apiUrl = process.env.OKX_API_URL || 'https://www.okx.com';
+
+        const response = await axios.get(`${apiUrl}${requestPath}`, { headers });
+        return response.data?.data || [];
+    }
+
+    /**
+     * Obtém histórico completo de trades (fills)
+     */
+    async getTradeHistory(): Promise<any[]> {
+        const method = 'GET';
+        const requestPath = '/api/v5/trade/fills';
+        const body = '';
+        const headers = this.authService.getAuthHeaders(method, requestPath, body);
+        const apiUrl = process.env.OKX_API_URL || 'https://www.okx.com';
+
+        const response = await axios.get(`${apiUrl}${requestPath}`, { headers });
+        return response.data?.data || [];
+    }
 }

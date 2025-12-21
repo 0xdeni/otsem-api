@@ -2844,6 +2844,36 @@
         ]
       }
     },
+    "/okx/withdrawals": {
+      "get": {
+        "operationId": "OkxController_getRecentWithdrawals",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Lista saques recentes de USDT",
+        "tags": [
+          "OKX"
+        ]
+      }
+    },
+    "/okx/trades": {
+      "get": {
+        "operationId": "OkxController_getTradeHistory",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Histórico de trades (compras/vendas)",
+        "tags": [
+          "OKX"
+        ]
+      }
+    },
     "/tron/hot-wallet": {
       "get": {
         "operationId": "TronController_getHotWalletInfo",

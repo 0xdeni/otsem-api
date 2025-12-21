@@ -55,4 +55,16 @@ export class OkxController {
     async getRecentDeposits() {
         return await this.okxService.getRecentDeposits();
     }
+
+    @Get('withdrawals')
+    @ApiOperation({ summary: 'Lista saques recentes de USDT' })
+    async getRecentWithdrawals() {
+        return await this.okxService.getRecentWithdrawals();
+    }
+
+    @Get('trades')
+    @ApiOperation({ summary: 'Histórico de trades (compras/vendas)' })
+    async getTradeHistory() {
+        return await this.okxService.getTradeHistory();
+    }
 }
