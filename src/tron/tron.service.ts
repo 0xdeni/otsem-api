@@ -88,9 +88,27 @@ export class TronService implements OnModuleInit {
     }
 
     async getUsdtBalance(address: string): Promise<number> {
+        // Method 1: Use Tronscan API (most reliable)
+        try {
+            const response = await fetch(`https://apilist.tronscan.org/api/account?address=${address}`);
+            if (response.ok) {
+                const data = await response.json() as { trc20token_balances?: any[] };
+                if (data.trc20token_balances) {
+                    const usdt = data.trc20token_balances.find(
+                        (t: any) => t.tokenId === USDT_TRC20_CONTRACT || t.tokenAbbr === 'USDT'
+                    );
+                    if (usdt) {
+                        return Number(usdt.balance) / Math.pow(10, usdt.tokenDecimal || 6);
+                    }
+                }
+                return 0;
+            }
+        } catch (error: any) {
+            this.logger.warn(`Tronscan API falhou: ${error.message}, tentando TronGrid...`);
+        }
+
+        // Method 2: Fallback to TronGrid triggerconstantcontract
         await this.ensureInitialized();
-        
-        // Method 1: Use TronGrid triggerconstantcontract API (most reliable)
         try {
             const addressHex = this.tronWeb.address.toHex(address).replace(/^41/, '');
             const parameter = '0000000000000000000000' + addressHex;
@@ -119,7 +137,7 @@ export class TronService implements OnModuleInit {
             this.logger.warn(`TronGrid API falhou: ${error.message}, tentando TronWeb...`);
         }
 
-        // Method 2: Fallback to TronWeb contract call
+        // Method 3: Fallback to TronWeb contract call
         try {
             const contract = await this.tronWeb.contract().at(USDT_TRC20_CONTRACT);
             const balance = await contract.balanceOf(address).call();
