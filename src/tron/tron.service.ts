@@ -54,11 +54,26 @@ export class TronService implements OnModuleInit {
 
     async createWallet(): Promise<{ address: string; privateKey: string }> {
         await this.ensureInitialized();
-        const account = await this.tronWeb.createAccount();
-        return {
-            address: account.address.base58,
-            privateKey: account.privateKey
-        };
+        try {
+            // TronWeb 6.x usa utils.accounts.generateAccount()
+            if (this.tronWeb.utils && this.tronWeb.utils.accounts && this.tronWeb.utils.accounts.generateAccount) {
+                const account = this.tronWeb.utils.accounts.generateAccount();
+                return {
+                    address: account.address.base58,
+                    privateKey: account.privateKey
+                };
+            }
+            
+            // Fallback: método antigo createAccount()
+            const account = await this.tronWeb.createAccount();
+            return {
+                address: account.address?.base58 || account.address,
+                privateKey: account.privateKey
+            };
+        } catch (error: any) {
+            this.logger.error(`Erro ao criar carteira Tron: ${error.message}`);
+            throw new Error(`Falha ao criar carteira Tron: ${error.message}`);
+        }
     }
 
     async isValidAddress(address: string): Promise<boolean> {
