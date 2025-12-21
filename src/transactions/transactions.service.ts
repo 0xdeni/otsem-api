@@ -232,14 +232,36 @@ export class TransactionsService {
     }
 
     /**
-     * Listar transações de uma conta
+     * Listar transações de uma conta com paginação
      */
-    async findByAccount(accountId: string, limit = 50) {
-        return this.prisma.transaction.findMany({
-            where: { accountId },
-            orderBy: { createdAt: 'desc' },
-            take: limit,
-        });
+    async findByAccount(accountId: string, page = 1, limit = 20) {
+        const skip = (page - 1) * limit;
+
+        const [data, total] = await Promise.all([
+            this.prisma.transaction.findMany({
+                where: { accountId },
+                orderBy: { createdAt: 'desc' },
+                skip,
+                take: limit,
+            }),
+            this.prisma.transaction.count({
+                where: { accountId },
+            }),
+        ]);
+
+        const totalPages = Math.ceil(total / limit);
+
+        return {
+            data,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages,
+                hasNext: page < totalPages,
+                hasPrev: page > 1,
+            },
+        };
     }
 
     /**

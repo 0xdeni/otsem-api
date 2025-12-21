@@ -3449,11 +3449,22 @@
         "operationId": "TransactionsController_findAll",
         "parameters": [
           {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Página (default: 1)",
+            "schema": {
+              "example": 1,
+              "type": "string"
+            }
+          },
+          {
             "name": "limit",
             "required": false,
             "in": "query",
+            "description": "Itens por página (default: 20, max: 100)",
             "schema": {
-              "example": 50,
+              "example": 20,
               "type": "string"
             }
           }
@@ -3468,7 +3479,7 @@
             "bearer": []
           }
         ],
-        "summary": "Listar transações do customer logado",
+        "summary": "Listar transações do customer logado com paginação",
         "tags": [
           "Transactions"
         ]

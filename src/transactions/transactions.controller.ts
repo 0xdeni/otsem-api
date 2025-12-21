@@ -32,22 +32,31 @@ export class TransactionsController {
     constructor(private readonly service: TransactionsService) { }
 
     @Get()
-    @ApiOperation({ summary: 'Listar transações do customer logado' })
-    @ApiQuery({ name: 'limit', required: false, example: 50 })
-    async findAll(@Request() req: ExpressRequest & { user: { customerId: string } }, @Query('limit') limit?: string) {
+    @ApiOperation({ summary: 'Listar transações do customer logado com paginação' })
+    @ApiQuery({ name: 'page', required: false, example: 1, description: 'Página (default: 1)' })
+    @ApiQuery({ name: 'limit', required: false, example: 20, description: 'Itens por página (default: 20, max: 100)' })
+    async findAll(
+        @Request() req: ExpressRequest & { user: { customerId: string } },
+        @Query('page') page?: string,
+        @Query('limit') limit?: string,
+    ) {
         const customerId = req.user.customerId;
 
-        // Buscar account do customer
         const account = await this.service['prisma'].account.findUnique({
             where: { customerId },
         });
 
         if (!account) {
-            return [];
+            return {
+                data: [],
+                pagination: { page: 1, limit: 20, total: 0, totalPages: 0, hasNext: false, hasPrev: false },
+            };
         }
 
-        const limitNumber = limit ? parseInt(limit, 10) : 50;
-        return this.service.findByAccount(account.id, limitNumber);
+        const pageNumber = Math.max(1, parseInt(page || '1', 10));
+        const limitNumber = Math.min(100, Math.max(1, parseInt(limit || '20', 10)));
+
+        return this.service.findByAccount(account.id, pageNumber, limitNumber);
     }
 
     @Get(':id')
