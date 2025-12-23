@@ -1,5 +1,6 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { MailService, EmailTemplate } from '../mail/mail.service';
 
 interface ListUsersParams {
   page: number;
@@ -13,7 +14,10 @@ interface ListUsersParams {
 export class AdminUsersService {
   private readonly logger = new Logger(AdminUsersService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mailService: MailService,
+  ) {}
 
   async listUsers(params: ListUsersParams) {
     const { page, limit, search, kycStatus, accountStatus } = params;
@@ -210,6 +214,35 @@ export class AdminUsersService {
 
     this.logger.log(`Usuário ${id} desbloqueado`);
     return { success: true, message: 'Usuário desbloqueado com sucesso' };
+  }
+
+  async sendEmail(userId: string, subject: string, message: string, template?: string) {
+    const customer = await this.prisma.customer.findUnique({ where: { id: userId } });
+    if (!customer) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+
+    const result = await this.mailService.sendEmail({
+      to: customer.email,
+      subject,
+      message,
+      template: template as EmailTemplate,
+      recipientName: customer.name,
+    });
+
+    if (!result.success) {
+      throw new BadRequestException(`Falha ao enviar email: ${result.error}`);
+    }
+
+    this.logger.log(`Email "${subject}" enviado para ${customer.email} (template: ${template || 'custom'})`);
+    
+    return { 
+      success: true, 
+      message: 'Email enviado com sucesso',
+      messageId: result.messageId,
+      sentTo: customer.email,
+      template: template || null,
+    };
   }
 
   private mapKycStatus(status: string): string {

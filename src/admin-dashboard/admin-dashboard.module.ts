@@ -3,6 +3,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { InterModule } from '../inter/inter.module';
 import { OkxModule } from '../okx/okx.module';
 import { FdbankModule } from '../fdbank/fdbank.module';
+import { MailModule } from '../mail/mail.module';
 
 import { AdminDashboardService } from './admin-dashboard.service';
 import { AdminDashboardController } from './admin-dashboard.controller';
@@ -12,6 +13,7 @@ import { AdminUsersController } from './admin-users.controller';
 @Module({
   imports: [
     PrismaModule,
+    MailModule,
     forwardRef(() => InterModule),
     forwardRef(() => OkxModule),
     forwardRef(() => FdbankModule),

@@ -1,5 +1,6 @@
-import { Controller, Get, Post, Param, Query, UseGuards, ParseIntPipe, DefaultValuePipe } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Controller, Get, Post, Param, Query, Body, UseGuards, ParseIntPipe, DefaultValuePipe } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags, ApiBody } from '@nestjs/swagger';
+import { SendEmailDto } from './dto/send-email.dto';
 import { AdminUsersService } from './admin-users.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -62,5 +63,18 @@ export class AdminUsersController {
   @ApiResponse({ status: 200, description: 'Usuário desbloqueado' })
   async unblockUser(@Param('id') id: string) {
     return this.service.unblockUser(id);
+  }
+
+  @Post(':id/send-email')
+  @ApiOperation({ summary: 'Enviar email para usuário' })
+  @ApiBody({ type: SendEmailDto })
+  @ApiResponse({ status: 200, description: 'Email enviado com sucesso' })
+  @ApiResponse({ status: 400, description: 'Dados inválidos' })
+  @ApiResponse({ status: 404, description: 'Usuário não encontrado' })
+  async sendEmail(
+    @Param('id') id: string,
+    @Body() dto: SendEmailDto,
+  ) {
+    return this.service.sendEmail(id, dto.subject, dto.message, dto.template);
   }
 }
