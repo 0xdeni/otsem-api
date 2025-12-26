@@ -3658,6 +3658,101 @@
         ]
       }
     },
+    "/admin/wallets": {
+      "get": {
+        "operationId": "AdminWalletsController_listWallets",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listar todas as carteiras com paginação",
+        "tags": [
+          "Admin - Wallets"
+        ]
+      }
+    },
+    "/admin/wallets/{walletId}/okx-whitelist": {
+      "patch": {
+        "operationId": "AdminWalletsController_updateOkxWhitelist",
+        "parameters": [
+          {
+            "name": "walletId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Atualizar status de whitelist OKX",
+        "tags": [
+          "Admin - Wallets"
+        ]
+      }
+    },
+    "/admin/wallets/{walletId}/toggle-active": {
+      "patch": {
+        "operationId": "AdminWalletsController_toggleActive",
+        "parameters": [
+          {
+            "name": "walletId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ativar/Desativar carteira",
+        "tags": [
+          "Admin - Wallets"
+        ]
+      }
+    },
     "/payments": {
       "get": {
         "operationId": "PaymentsController_listPayments",
