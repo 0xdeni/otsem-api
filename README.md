@@ -1016,7 +1016,7 @@ pm2 startup
 
 ## 📝 Licença
 
-MIT..
+MIT.
 
 ---
 
