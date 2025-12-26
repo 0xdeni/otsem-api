@@ -401,6 +401,7 @@ model Wallet {
   externalAddress String?
   label           String?
   isMain          Boolean       @default(false)
+  okxWhitelisted  Boolean       @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

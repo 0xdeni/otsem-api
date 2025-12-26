@@ -164,4 +164,15 @@ export class WalletController {
     const customerId = this.getCustomerId(req);
     return this.walletService.sellUsdtForBrl(customerId, usdtAmount);
   }
+
+  @Patch(':id/okx-whitelist')
+  @ApiOperation({ summary: 'Marcar wallet como whitelistada na OKX' })
+  async setOkxWhitelisted(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body('whitelisted') whitelisted: boolean,
+  ) {
+    const customerId = this.getCustomerId(req);
+    return this.walletService.setOkxWhitelisted(id, customerId, whitelisted);
+  }
 }

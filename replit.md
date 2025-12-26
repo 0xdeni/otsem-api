@@ -86,6 +86,19 @@ Legacy models (Deposit, Payment) are kept for backward compatibility.
 
 ## Recent Changes (Dec 2025)
 
+### OKX Whitelist Management (Dec 26)
+Added `okxWhitelisted` field to Wallet model for tracking OKX withdrawal address whitelist status:
+- **New field**: `okxWhitelisted` (boolean) - true if address is whitelisted on OKX
+- **New endpoint**: `PATCH /wallet/:id/okx-whitelist` - Mark wallet as whitelisted
+
+OKX requires addresses to be added to their whitelist before allowing withdrawals. This field allows the system to track which wallets are ready for automatic withdrawals.
+
+**Workflow**:
+1. User adds their crypto wallet to the system
+2. User adds the same address to OKX whitelist (via OKX website)
+3. Admin or user marks the wallet as `okxWhitelisted: true`
+4. System can now process automatic withdrawals to this wallet
+
 ### Tron Network Support (Dec 21)
 Added Tron (TRC20) support for USDT transfers:
 - **New TronModule**: `src/tron/` with TronService and TronController

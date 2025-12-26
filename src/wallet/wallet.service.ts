@@ -602,4 +602,18 @@ export class WalletService {
       throw error;
     }
   }
+
+  async setOkxWhitelisted(walletId: string, customerId: string, whitelisted: boolean) {
+    const wallet = await this.prisma.wallet.findFirst({
+      where: { id: walletId, customerId },
+    });
+    if (!wallet) {
+      throw new NotFoundException('Wallet não encontrada');
+    }
+
+    return this.prisma.wallet.update({
+      where: { id: walletId },
+      data: { okxWhitelisted: whitelisted },
+    });
+  }
 }

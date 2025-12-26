@@ -2014,6 +2014,35 @@
         ]
       }
     },
+    "/wallet/{id}/okx-whitelist": {
+      "patch": {
+        "operationId": "WalletController_setOkxWhitelisted",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Marcar wallet como whitelistada na OKX",
+        "tags": [
+          "Wallet"
+        ]
+      }
+    },
     "/inter/webhooks/{tipoWebhook}/callbacks": {
       "get": {
         "operationId": "InterWebhookController_getCallbacks",
