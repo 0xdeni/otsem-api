@@ -2486,7 +2486,7 @@
             "bearer": []
           }
         ],
-        "summary": "Iniciar venda USDT → PIX BRL",
+        "summary": "Vender USDT da carteira e creditar BRL na conta OTSEM",
         "tags": [
           "Wallet"
         ]

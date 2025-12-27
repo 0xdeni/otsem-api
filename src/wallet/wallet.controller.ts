@@ -210,16 +210,14 @@ export class WalletController {
   }
 
   @Post('sell-usdt-to-pix')
-  @ApiOperation({ summary: 'Iniciar venda USDT → PIX BRL' })
+  @ApiOperation({ summary: 'Vender USDT da carteira e creditar BRL na conta OTSEM' })
   async initiateSellUsdtToPix(
     @Req() req: AuthRequest,
     @Body('usdtAmount') usdtAmount: number,
-    @Body('network') network: 'SOLANA' | 'TRON',
-    @Body('pixKey') pixKey?: string,
-    @Body('pixKeyType') pixKeyType?: string,
+    @Body('walletId') walletId: string,
   ) {
     const customerId = this.getCustomerId(req);
-    return this.walletService.initiateSellUsdtToPix(customerId, usdtAmount, network, pixKey, pixKeyType);
+    return this.walletService.initiateSellUsdtToPix(customerId, usdtAmount, walletId);
   }
 
   @Post('process-sell/:conversionId')

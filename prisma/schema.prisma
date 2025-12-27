@@ -399,16 +399,17 @@ enum WalletNetwork {
 }
 
 model Wallet {
-  id              String        @id @default(cuid())
-  customerId      String
-  currency        String        @default("USDT")
-  network         WalletNetwork @default(SOLANA)
-  balance         Decimal       @db.Decimal(18, 8)
-  externalAddress String?
-  label           String?
-  isMain          Boolean       @default(false)
-  isActive        Boolean       @default(true)
-  okxWhitelisted  Boolean       @default(false)
+  id                  String        @id @default(cuid())
+  customerId          String
+  currency            String        @default("USDT")
+  network             WalletNetwork @default(SOLANA)
+  balance             Decimal       @db.Decimal(18, 8)
+  externalAddress     String?
+  encryptedPrivateKey String?
+  label               String?
+  isMain              Boolean       @default(false)
+  isActive            Boolean       @default(true)
+  okxWhitelisted      Boolean       @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

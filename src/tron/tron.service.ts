@@ -205,4 +205,38 @@ export class TronService implements OnModuleInit {
         const info = await this.getTransactionInfo(txId);
         return info && info.receipt && info.receipt.result === 'SUCCESS';
     }
+
+    async sendUsdtWithKey(toAddress: string, amount: number, privateKey: string): Promise<{ txId: string; success: boolean }> {
+        const isValid = await this.isValidAddress(toAddress);
+        if (!isValid) {
+            throw new Error('Endereço Tron inválido');
+        }
+
+        try {
+            const TronWeb = require('tronweb');
+            const tronWebWithKey = new TronWeb({
+                fullHost: 'https://api.trongrid.io',
+                privateKey: privateKey,
+            });
+
+            const contract = await tronWebWithKey.contract().at(USDT_TRC20_CONTRACT);
+            const amountInSun = Math.floor(amount * 1_000_000);
+
+            const tx = await contract.transfer(toAddress, amountInSun).send({
+                feeLimit: 100_000_000,
+                callValue: 0,
+                shouldPollResponse: false
+            });
+
+            this.logger.log(`✅ USDT TRC20 enviado: ${amount} para ${toAddress}, txId: ${tx}`);
+
+            return {
+                txId: tx,
+                success: true
+            };
+        } catch (error: any) {
+            this.logger.error(`❌ Erro ao enviar USDT TRC20: ${error.message}`);
+            throw error;
+        }
+    }
 }

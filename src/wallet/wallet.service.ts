@@ -1,6 +1,10 @@
 import { Injectable, BadRequestException, NotFoundException, Logger, Inject, forwardRef } from '@nestjs/common';
-import { Keypair, Connection, PublicKey } from '@solana/web3.js';
+import { Keypair, Connection, PublicKey, Transaction, sendAndConfirmTransaction } from '@solana/web3.js';
+import * as splToken from '@solana/spl-token';
 import { PrismaService } from '../prisma/prisma.service';
+
+const USDT_MINT_SOLANA = new PublicKey('Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB');
+const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
 import { InterPixService } from '../inter/services/inter-pix.service';
 import { PixKeyType } from '../inter/dto/send-pix.dto';
 import { OkxService } from '../okx/services/okx.service';
@@ -67,10 +71,31 @@ export class WalletService {
       where: { customerId, network: 'SOLANA', isMain: true },
     });
 
-    const wallet = await this.createWallet(customerId, 'SOLANA', publicKey, {
-      currency: 'USDT',
-      label: label || 'Solana Wallet',
-      isMain: !existingMain,
+    const existing = await this.prisma.wallet.findUnique({
+      where: { customerId_network_externalAddress: { customerId, network: 'SOLANA', externalAddress: publicKey } },
+    });
+    if (existing) {
+      throw new BadRequestException('Wallet com este endereço já existe nesta rede');
+    }
+
+    if (!existingMain) {
+      await this.prisma.wallet.updateMany({
+        where: { customerId, network: 'SOLANA', isMain: true },
+        data: { isMain: false },
+      });
+    }
+
+    const wallet = await this.prisma.wallet.create({
+      data: {
+        customerId,
+        network: 'SOLANA',
+        externalAddress: publicKey,
+        encryptedPrivateKey: secretKey,
+        currency: 'USDT',
+        label: label || 'Solana Wallet',
+        isMain: !existingMain,
+        balance: 0,
+      },
     });
 
     return { publicKey, secretKey, wallet };
@@ -87,10 +112,31 @@ export class WalletService {
       where: { customerId, network: 'TRON', isMain: true },
     });
 
-    const wallet = await this.createWallet(customerId, 'TRON', address, {
-      currency: 'USDT',
-      label: label || 'Tron Wallet',
-      isMain: !existingMain,
+    const existing = await this.prisma.wallet.findUnique({
+      where: { customerId_network_externalAddress: { customerId, network: 'TRON', externalAddress: address } },
+    });
+    if (existing) {
+      throw new BadRequestException('Wallet com este endereço já existe nesta rede');
+    }
+
+    if (!existingMain) {
+      await this.prisma.wallet.updateMany({
+        where: { customerId, network: 'TRON', isMain: true },
+        data: { isMain: false },
+      });
+    }
+
+    const wallet = await this.prisma.wallet.create({
+      data: {
+        customerId,
+        network: 'TRON',
+        externalAddress: address,
+        encryptedPrivateKey: privateKey,
+        currency: 'USDT',
+        label: label || 'Tron Wallet',
+        isMain: !existingMain,
+        balance: 0,
+      },
     });
 
     return { address, privateKey, wallet };
@@ -222,6 +268,94 @@ export class WalletService {
       this.logger.error(`Erro ao consultar saldo USDT Tron: ${err.message}`);
       return '0';
     }
+  }
+
+  async sendSolanaUsdt(
+    walletId: string,
+    customerId: string,
+    toAddress: string,
+    amount: number,
+  ): Promise<{ txId: string; success: boolean }> {
+    const wallet = await this.getWalletById(walletId, customerId);
+    
+    if (wallet.network !== 'SOLANA') {
+      throw new BadRequestException('Wallet não é Solana');
+    }
+    
+    if (!wallet.encryptedPrivateKey) {
+      throw new BadRequestException('Wallet não possui chave privada (não é custodial)');
+    }
+    
+    if (!wallet.externalAddress) {
+      throw new BadRequestException('Wallet não possui endereço');
+    }
+
+    const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
+    
+    const secretKeyBytes = Buffer.from(wallet.encryptedPrivateKey, 'hex');
+    const senderKeypair = Keypair.fromSecretKey(secretKeyBytes);
+    
+    const senderPubkey = new PublicKey(wallet.externalAddress);
+    const recipientPubkey = new PublicKey(toAddress);
+    
+    const senderAta = await splToken.Token.getAssociatedTokenAddress(
+      splToken.ASSOCIATED_TOKEN_PROGRAM_ID,
+      TOKEN_PROGRAM_ID,
+      USDT_MINT_SOLANA,
+      senderPubkey,
+    );
+    
+    const recipientAta = await splToken.Token.getAssociatedTokenAddress(
+      splToken.ASSOCIATED_TOKEN_PROGRAM_ID,
+      TOKEN_PROGRAM_ID,
+      USDT_MINT_SOLANA,
+      recipientPubkey,
+    );
+    
+    const senderAccountInfo = await connection.getTokenAccountBalance(senderAta);
+    const senderBalance = Number(senderAccountInfo.value.amount) / 1e6;
+    
+    if (senderBalance < amount) {
+      throw new BadRequestException(`Saldo insuficiente: ${senderBalance} USDT disponível, ${amount} USDT necessário`);
+    }
+    
+    const amountInMicroUnits = Math.floor(amount * 1e6);
+    
+    const transferInstruction = splToken.Token.createTransferInstruction(
+      TOKEN_PROGRAM_ID,
+      senderAta,
+      recipientAta,
+      senderPubkey,
+      [],
+      amountInMicroUnits,
+    );
+    
+    const transaction = new Transaction().add(transferInstruction);
+    
+    const txId = await sendAndConfirmTransaction(connection, transaction, [senderKeypair]);
+    
+    this.logger.log(`✅ USDT SPL enviado: ${amount} para ${toAddress}, txId: ${txId}`);
+    
+    return { txId, success: true };
+  }
+
+  async sendTronUsdt(
+    walletId: string,
+    customerId: string,
+    toAddress: string,
+    amount: number,
+  ): Promise<{ txId: string; success: boolean }> {
+    const wallet = await this.getWalletById(walletId, customerId);
+    
+    if (wallet.network !== 'TRON') {
+      throw new BadRequestException('Wallet não é Tron');
+    }
+    
+    if (!wallet.encryptedPrivateKey) {
+      throw new BadRequestException('Wallet não possui chave privada (não é custodial)');
+    }
+
+    return this.tronService.sendUsdtWithKey(toAddress, amount, wallet.encryptedPrivateKey);
   }
 
   async syncWalletBalance(walletId: string, customerId: string): Promise<{ balance: string; wallet: any }> {
@@ -855,12 +989,21 @@ export class WalletService {
   async initiateSellUsdtToPix(
     customerId: string,
     usdtAmount: number,
-    network: 'SOLANA' | 'TRON',
-    pixKey?: string,
-    pixKeyType?: string,
+    walletId: string,
   ) {
     if (usdtAmount < 1) {
       throw new BadRequestException('Quantidade mínima é 1 USDT');
+    }
+
+    const wallet = await this.getWalletById(walletId, customerId);
+    
+    if (!wallet.encryptedPrivateKey) {
+      throw new BadRequestException('Esta carteira não possui chave privada (não é custodial). Use uma carteira criada pelo sistema.');
+    }
+
+    const network = wallet.network as 'SOLANA' | 'TRON';
+    if (network !== 'SOLANA' && network !== 'TRON') {
+      throw new BadRequestException('Apenas carteiras Solana e Tron são suportadas');
     }
 
     const customer = await this.prisma.customer.findUnique({
@@ -879,11 +1022,15 @@ export class WalletService {
       throw new BadRequestException('Conta não encontrada');
     }
 
-    const destPixKey = pixKey || customer.pixKeys?.[0]?.keyValue;
-    const destPixKeyType = pixKeyType || customer.pixKeys?.[0]?.keyType || 'CPF';
+    let currentBalance = '0';
+    if (network === 'SOLANA') {
+      currentBalance = await this.getSolanaUsdtBalance(wallet.externalAddress!, customerId);
+    } else {
+      currentBalance = await this.getTronUsdtBalance(wallet.externalAddress!, customerId);
+    }
 
-    if (!destPixKey) {
-      throw new BadRequestException('Chave PIX de destino não informada');
+    if (Number(currentBalance) < usdtAmount) {
+      throw new BadRequestException(`Saldo insuficiente: ${currentBalance} USDT disponível, ${usdtAmount} USDT necessário`);
     }
 
     const okxNetwork = network === 'TRON' ? 'TRC20' : 'Solana';
@@ -896,17 +1043,16 @@ export class WalletService {
         customerId,
         accountId: account.id,
         type: 'SELL',
+        walletId: wallet.id,
         brlCharged: 0,
         brlExchanged: quote.brlFromExchange,
         spreadPercent: quote.spreadPercent / 100,
         spreadBrl: quote.spreadBrl,
         usdtPurchased: usdtAmount,
-        usdtWithdrawn: 0,
+        usdtWithdrawn: usdtAmount,
         exchangeRate: quote.exchangeRate,
         network,
         walletAddress: depositAddress.address,
-        pixDestKey: destPixKey,
-        pixDestKeyType: destPixKeyType,
         okxWithdrawFee: 0,
         okxTradingFee: quote.okxTradingFee,
         totalOkxFees: quote.okxTradingFee,
@@ -916,25 +1062,52 @@ export class WalletService {
       },
     });
 
-    this.logger.log(`[SELL] Venda iniciada: ${usdtAmount} USDT → PIX ${destPixKey}`);
+    this.logger.log(`[SELL] Venda iniciada: ${usdtAmount} USDT da carteira ${wallet.externalAddress} → OKX`);
 
-    return {
-      conversionId: conversion.id,
-      status: 'PENDING',
-      usdtAmount,
-      network,
-      depositAddress: depositAddress.address,
-      chain: depositAddress.chain,
-      memo: depositAddress.memo,
-      quote: {
-        brlToReceive: quote.brlToReceive,
-        exchangeRate: quote.exchangeRate,
-        spreadPercent: quote.spreadPercent,
-      },
-      pixDestination: { key: destPixKey, type: destPixKeyType },
-      instructions: `Envie exatamente ${usdtAmount} USDT ${network === 'TRON' ? 'TRC20' : 'SPL'} para o endereço acima. Após confirmação, o valor será convertido e enviado via PIX automaticamente.`,
-      expiresAt: new Date(Date.now() + 30 * 60 * 1000),
-    };
+    try {
+      let txResult: { txId: string; success: boolean };
+      
+      if (network === 'SOLANA') {
+        txResult = await this.sendSolanaUsdt(walletId, customerId, depositAddress.address, usdtAmount);
+      } else {
+        txResult = await this.sendTronUsdt(walletId, customerId, depositAddress.address, usdtAmount);
+      }
+
+      await this.prisma.conversion.update({
+        where: { id: conversion.id },
+        data: { 
+          status: 'USDT_RECEIVED',
+          okxDepositId: txResult.txId,
+        },
+      });
+
+      this.logger.log(`[SELL] USDT enviado para OKX: txId ${txResult.txId}`);
+
+      return {
+        conversionId: conversion.id,
+        status: 'USDT_RECEIVED',
+        usdtAmount,
+        network,
+        txId: txResult.txId,
+        quote: {
+          brlToReceive: quote.brlToReceive,
+          exchangeRate: quote.exchangeRate,
+          spreadPercent: quote.spreadPercent,
+        },
+        message: 'USDT enviado para OKX. Aguardando confirmação para conversão em BRL.',
+      };
+    } catch (error: any) {
+      await this.prisma.conversion.update({
+        where: { id: conversion.id },
+        data: { 
+          status: 'FAILED',
+          errorMessage: error.message,
+        },
+      });
+
+      this.logger.error(`[SELL] Falha ao enviar USDT: ${error.message}`);
+      throw new BadRequestException(`Falha ao enviar USDT: ${error.message}`);
+    }
   }
 
   /**
@@ -985,9 +1158,36 @@ export class WalletService {
       const okxTradingFee = brlFromExchange * 0.001;
       const netProfit = spreadBrl - okxTradingFee;
 
+      const currentBalance = Number(conversion.account.balance);
+      const newBalance = currentBalance + brlToSend;
+
+      const creditTx = await this.prisma.transaction.create({
+        data: {
+          accountId: conversion.accountId,
+          type: TransactionType.CONVERSION,
+          amount: brlToSend,
+          balanceBefore: currentBalance,
+          balanceAfter: newBalance,
+          status: 'COMPLETED',
+          description: `Venda USDT: ${usdtAmount} USDT → R$ ${brlToSend.toFixed(2)}`,
+          metadata: {
+            conversionId,
+            usdtAmount,
+            conversionType: 'SELL',
+            exchangeRate: Number(conversion.exchangeRate),
+          },
+        },
+      });
+
+      await this.prisma.account.update({
+        where: { id: conversion.accountId },
+        data: { balance: newBalance },
+      });
+
       await this.prisma.conversion.update({
         where: { id: conversionId },
         data: {
+          transactionId: creditTx.id,
           brlExchanged: brlFromExchange,
           brlCharged: brlToSend,
           spreadBrl,
@@ -996,39 +1196,23 @@ export class WalletService {
           totalOkxFees: okxTradingFee,
           grossProfit: spreadBrl,
           netProfit,
-          status: 'PIX_OUT_SENT',
-        },
-      });
-
-      this.logger.log(`[SELL] Enviando PIX: R$ ${brlToSend} para ${conversion.pixDestKey}`);
-
-      const pixResult = await this.interPixService.sendPixInternal({
-        valor: brlToSend,
-        chaveDestino: conversion.pixDestKey!,
-        tipoChave: conversion.pixDestKeyType as any || 'CPF',
-        descricao: `OTSEM - Venda ${usdtAmount} USDT`,
-      });
-
-      await this.prisma.conversion.update({
-        where: { id: conversionId },
-        data: {
-          pixEndToEnd: pixResult.endToEndId,
           status: 'COMPLETED',
           completedAt: new Date(),
         },
       });
 
-      this.logger.log(`[SELL] Venda concluída: ${usdtAmount} USDT → R$ ${brlToSend} PIX`);
+      this.logger.log(`[SELL] Venda concluída: ${usdtAmount} USDT → R$ ${brlToSend} creditado na conta`);
 
       return {
         message: 'Venda concluída com sucesso',
         conversionId,
         usdtSold: usdtAmount,
         brlFromExchange,
-        brlSent: brlToSend,
+        brlCredited: brlToSend,
+        newBalance,
         spreadBrl,
         netProfit,
-        pixEndToEnd: pixResult.endToEndId,
+        transactionId: creditTx.id,
       };
     } catch (error) {
       await this.prisma.conversion.update({
