@@ -923,14 +923,29 @@ export class WalletService {
    * Retorna endereço de depósito USDT para o cliente enviar
    */
   async getUsdtDepositAddress(network: 'SOLANA' | 'TRON') {
-    const okxNetwork = network === 'TRON' ? 'TRC20' : 'Solana';
+    const tronDepositAddress = process.env.OKX_TRON_DEPOSIT_ADDRESS;
+
+    if (network === 'TRON') {
+      if (!tronDepositAddress) {
+        throw new Error('Endereço de depósito TRON não configurado');
+      }
+      return {
+        network,
+        chain: 'TRC20',
+        address: tronDepositAddress,
+        memo: null,
+        instructions: 'Envie USDT TRC20 para este endereço. Após confirmação, o valor será convertido e creditado em BRL.',
+      };
+    }
+
+    const okxNetwork = 'Solana';
     const depositInfo = await this.okxService.getDepositAddress(okxNetwork);
     return {
       network,
       chain: depositInfo.chain,
       address: depositInfo.address,
       memo: depositInfo.memo,
-      instructions: `Envie USDT ${network === 'TRON' ? 'TRC20' : 'SPL'} para este endereço. Após confirmação, o valor será convertido e enviado via PIX.`,
+      instructions: 'Envie USDT SPL para este endereço. Após confirmação, o valor será convertido e creditado em BRL.',
     };
   }
 
