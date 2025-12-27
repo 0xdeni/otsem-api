@@ -86,6 +86,32 @@ export class WalletController {
     return this.walletService.getAllUsdtWalletsForCustomer(customerId);
   }
 
+  @Get('deposit-address')
+  @ApiOperation({ summary: 'Obter endereço de depósito USDT para venda' })
+  @ApiQuery({ name: 'network', enum: ['SOLANA', 'TRON'], required: true })
+  async getDepositAddress(@Query('network') network: 'SOLANA' | 'TRON') {
+    return this.walletService.getUsdtDepositAddress(network);
+  }
+
+  @Get('quote-sell-usdt')
+  @ApiOperation({ summary: 'Cotação: quanto BRL o cliente recebe por X USDT' })
+  @ApiQuery({ name: 'usdtAmount', type: Number, required: true })
+  @ApiQuery({ name: 'network', enum: ['SOLANA', 'TRON'], required: true })
+  async getSellUsdtQuote(
+    @Req() req: AuthRequest,
+    @Query('usdtAmount') usdtAmount: string,
+    @Query('network') network: 'SOLANA' | 'TRON',
+  ) {
+    const customerId = this.getCustomerId(req);
+    return this.walletService.quoteSellUsdt(customerId, Number(usdtAmount), network);
+  }
+
+  @Get('pending-sell-deposits')
+  @ApiOperation({ summary: 'Verificar depósitos pendentes para vendas (admin)' })
+  async checkPendingSellDeposits() {
+    return this.walletService.checkPendingSellDeposits();
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Obter wallet por ID' })
   async getWallet(@Req() req: AuthRequest, @Param('id') id: string) {
@@ -179,26 +205,6 @@ export class WalletController {
     return this.walletService.setOkxWhitelisted(id, customerId, whitelisted);
   }
 
-  @Get('deposit-address')
-  @ApiOperation({ summary: 'Obter endereço de depósito USDT para venda' })
-  @ApiQuery({ name: 'network', enum: ['SOLANA', 'TRON'], required: true })
-  async getDepositAddress(@Query('network') network: 'SOLANA' | 'TRON') {
-    return this.walletService.getUsdtDepositAddress(network);
-  }
-
-  @Get('quote-sell-usdt')
-  @ApiOperation({ summary: 'Cotação: quanto BRL o cliente recebe por X USDT' })
-  @ApiQuery({ name: 'usdtAmount', type: Number, required: true })
-  @ApiQuery({ name: 'network', enum: ['SOLANA', 'TRON'], required: true })
-  async getSellUsdtQuote(
-    @Req() req: AuthRequest,
-    @Query('usdtAmount') usdtAmount: string,
-    @Query('network') network: 'SOLANA' | 'TRON',
-  ) {
-    const customerId = this.getCustomerId(req);
-    return this.walletService.quoteSellUsdt(customerId, Number(usdtAmount), network);
-  }
-
   @Post('sell-usdt-to-brl')
   @ApiOperation({ summary: 'Iniciar venda USDT → BRL (cliente envia USDT para OKX)' })
   async initiateSellUsdtToBrl(
@@ -214,11 +220,5 @@ export class WalletController {
   @ApiOperation({ summary: 'Processar venda pendente após depósito confirmado (admin)' })
   async processSellConversion(@Param('conversionId') conversionId: string) {
     return this.walletService.processSellConversion(conversionId);
-  }
-
-  @Get('pending-sell-deposits')
-  @ApiOperation({ summary: 'Verificar depósitos pendentes para vendas (admin)' })
-  async checkPendingSellDeposits() {
-    return this.walletService.checkPendingSellDeposits();
   }
 }
