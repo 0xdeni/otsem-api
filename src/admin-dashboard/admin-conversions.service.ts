@@ -75,24 +75,25 @@ export class AdminConversionsService {
         : null;
       const commission = commissionMap.get(tx.id);
 
-      const metadata = (tx.metadata as any) || {};
+      const extData = (tx.externalData as any) || {};
+      const spread = extData.spread || {};
+      const okxBuyResult = extData.okxBuyResult || {};
+      
       const brlPaid = Math.round(Number(tx.amount) * 100);
-      const usdtCredited = metadata.usdtCredited
-        ? Math.round(Number(metadata.usdtCredited) * 100)
-        : 0;
-      const exchangeRate = metadata.exchangeRate
-        ? Math.round(Number(metadata.exchangeRate) * 100)
-        : 0;
-      const spreadPercent = metadata.spreadPercent || 0;
-      const pixFee = metadata.pixFee ? Math.round(Number(metadata.pixFee) * 100) : 0;
-      const okxFee = metadata.okxFee ? Math.round(Number(metadata.okxFee) * 100) : 0;
-      const internalFee = metadata.internalFee
-        ? Math.round(Number(metadata.internalFee) * 100)
-        : 0;
-      const totalFeesBrl = pixFee + okxFee + internalFee;
-      const profitBrl = metadata.profitBrl
-        ? Math.round(Number(metadata.profitBrl) * 100)
-        : Math.round(brlPaid * (spreadPercent / 100));
+      const usdtAmount = extData.usdtAmount ? Number(extData.usdtAmount) : 0;
+      const usdtCredited = Math.round(usdtAmount * 100);
+      
+      const spreadBrl = spread.spreadBrl ? Number(spread.spreadBrl) : 0;
+      const spreadRate = spread.spreadRate ? Number(spread.spreadRate) : 1;
+      const spreadPercent = spreadRate < 1 ? Math.round((1 - spreadRate) * 10000) / 100 : 0;
+      
+      const chargedBrl = spread.chargedBrl ? Number(spread.chargedBrl) : Number(tx.amount);
+      const exchangedBrl = spread.exchangedBrl ? Number(spread.exchangedBrl) : chargedBrl;
+      const exchangeRate = usdtAmount > 0 ? Math.round((exchangedBrl / usdtAmount) * 100) : 0;
+      
+      const profitBrl = Math.round(spreadBrl * 100);
+      
+      const okxOrderId = okxBuyResult.orderId || null;
 
       return {
         id: tx.id,
@@ -105,10 +106,10 @@ export class AdminConversionsService {
         usdtCredited,
         exchangeRateUsed: exchangeRate,
         spreadPercent,
-        pixFee,
-        okxFee,
-        internalFee,
-        totalFeesBrl,
+        pixFee: 0,
+        okxFee: 0,
+        internalFee: 0,
+        totalFeesBrl: 0,
         profitBrl,
         affiliate: affiliate
           ? { id: affiliate.id, code: affiliate.code, name: affiliate.name }
@@ -116,8 +117,8 @@ export class AdminConversionsService {
         affiliateCommissionBrl: commission
           ? Math.round(Number(commission.commissionBrl) * 100)
           : 0,
-        okxOrderId: metadata.okxOrderId || null,
-        sourceOfBRL: metadata.sourceOfBRL || 'INTER',
+        okxOrderId,
+        sourceOfBRL: 'INTER',
       };
     });
 
@@ -173,18 +174,18 @@ export class AdminConversionsService {
     let rateCount = 0;
 
     for (const tx of filteredTransactions) {
-      const metadata = (tx.metadata as any) || {};
+      const extData = (tx.externalData as any) || {};
+      const spread = extData.spread || {};
+      
       const brlPaid = Number(tx.amount);
-      const usdtCredited = metadata.usdtCredited ? Number(metadata.usdtCredited) : 0;
-      const spreadPercent = metadata.spreadPercent || 0;
-      const profitBrl = metadata.profitBrl
-        ? Number(metadata.profitBrl)
-        : brlPaid * (spreadPercent / 100);
-      const exchangeRate = metadata.exchangeRate ? Number(metadata.exchangeRate) : 0;
+      const usdtAmount = extData.usdtAmount ? Number(extData.usdtAmount) : 0;
+      const spreadBrl = spread.spreadBrl ? Number(spread.spreadBrl) : 0;
+      const exchangedBrl = spread.exchangedBrl ? Number(spread.exchangedBrl) : brlPaid;
+      const exchangeRate = usdtAmount > 0 ? exchangedBrl / usdtAmount : 0;
 
       totalVolumeBrl += brlPaid;
-      totalVolumeUsdt += usdtCredited;
-      totalProfit += profitBrl;
+      totalVolumeUsdt += usdtAmount;
+      totalProfit += spreadBrl;
 
       if (exchangeRate > 0) {
         rateSum += exchangeRate;
