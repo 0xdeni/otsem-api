@@ -141,12 +141,21 @@ Added admin endpoints for viewing and analyzing BRL→USDT conversions:
 
 **Response fields** (values in centavos):
 - `brlPaid`, `usdtCredited`, `exchangeRateUsed`, `spreadPercent`
-- `pixFee`, `okxFee`, `internalFee`, `totalFeesBrl`, `profitBrl`
+- `okxWithdrawFeeBrl` - Taxa de saque OKX (2.1 USDT TRC20, 1 USDT Solana) convertida para BRL
+- `okxTradingFeeBrl` - Taxa de trading OKX (0.1% do valor trocado)
+- `totalFeesBrl` - Total de taxas OKX
+- `grossProfitBrl` - Lucro bruto (spread)
+- `netProfitBrl` - Lucro líquido (spread - taxas OKX - comissão afiliado)
 - `affiliate` (id, code, name), `affiliateCommissionBrl`
-- `okxOrderId`, `sourceOfBRL`
+- `okxOrderId`, `network`, `sourceOfBRL`
 
 **Stats response**:
-- `totalCount`, `volumeBrl`, `volumeUsdt`, `grossProfit`, `netProfit`, `avgRate`, `totalCommissions`
+- `totalCount`, `volumeBrl`, `volumeUsdt`
+- `grossProfit` - Lucro bruto total
+- `totalOkxFees` - Total de taxas OKX
+- `totalCommissions` - Total de comissões de afiliados
+- `netProfit` - Lucro líquido real (grossProfit - totalOkxFees - totalCommissions)
+- `avgRate` - Taxa média BRL/USDT
 
 ### OKX Whitelist Management (Dec 26)
 Added `okxWhitelisted` field to Wallet model for tracking OKX withdrawal address whitelist status:

@@ -89,9 +89,21 @@ export class AdminConversionsService {
       
       const chargedBrl = spread.chargedBrl ? Number(spread.chargedBrl) : Number(tx.amount);
       const exchangedBrl = spread.exchangedBrl ? Number(spread.exchangedBrl) : chargedBrl;
-      const exchangeRate = usdtAmount > 0 ? Math.round((exchangedBrl / usdtAmount) * 100) : 0;
+      const exchangeRate = usdtAmount > 0 ? (exchangedBrl / usdtAmount) : 0;
       
-      const profitBrl = Math.round(spreadBrl * 100);
+      const network = extData.network || 'SOLANA';
+      const okxWithdrawFeeUsdt = network === 'TRON' ? 2.1 : 1.0;
+      const okxWithdrawFeeBrl = okxWithdrawFeeUsdt * exchangeRate;
+      
+      const okxTradingFeePercent = 0.001;
+      const okxTradingFeeBrl = exchangedBrl * okxTradingFeePercent;
+      
+      const okxTotalFeeBrl = okxWithdrawFeeBrl + okxTradingFeeBrl;
+      
+      const affiliateCommission = commission ? Number(commission.commissionBrl) : 0;
+      
+      const grossProfit = spreadBrl;
+      const netProfit = grossProfit - okxTotalFeeBrl - affiliateCommission;
       
       const okxOrderId = okxBuyResult.orderId || null;
 
@@ -104,20 +116,19 @@ export class AdminConversionsService {
           : null,
         brlPaid,
         usdtCredited,
-        exchangeRateUsed: exchangeRate,
+        exchangeRateUsed: Math.round(exchangeRate * 100),
         spreadPercent,
-        pixFee: 0,
-        okxFee: 0,
-        internalFee: 0,
-        totalFeesBrl: 0,
-        profitBrl,
+        okxWithdrawFeeBrl: Math.round(okxWithdrawFeeBrl * 100),
+        okxTradingFeeBrl: Math.round(okxTradingFeeBrl * 100),
+        totalFeesBrl: Math.round(okxTotalFeeBrl * 100),
+        grossProfitBrl: Math.round(grossProfit * 100),
+        netProfitBrl: Math.round(netProfit * 100),
         affiliate: affiliate
           ? { id: affiliate.id, code: affiliate.code, name: affiliate.name }
           : null,
-        affiliateCommissionBrl: commission
-          ? Math.round(Number(commission.commissionBrl) * 100)
-          : 0,
+        affiliateCommissionBrl: Math.round(affiliateCommission * 100),
         okxOrderId,
+        network,
         sourceOfBRL: 'INTER',
       };
     });
@@ -169,7 +180,8 @@ export class AdminConversionsService {
 
     let totalVolumeBrl = 0;
     let totalVolumeUsdt = 0;
-    let totalProfit = 0;
+    let totalGrossProfit = 0;
+    let totalOkxFees = 0;
     let rateSum = 0;
     let rateCount = 0;
 
@@ -182,10 +194,17 @@ export class AdminConversionsService {
       const spreadBrl = spread.spreadBrl ? Number(spread.spreadBrl) : 0;
       const exchangedBrl = spread.exchangedBrl ? Number(spread.exchangedBrl) : brlPaid;
       const exchangeRate = usdtAmount > 0 ? exchangedBrl / usdtAmount : 0;
+      
+      const network = extData.network || 'SOLANA';
+      const okxWithdrawFeeUsdt = network === 'TRON' ? 2.1 : 1.0;
+      const okxWithdrawFeeBrl = okxWithdrawFeeUsdt * exchangeRate;
+      const okxTradingFeeBrl = exchangedBrl * 0.001;
+      const okxTotalFeeBrl = okxWithdrawFeeBrl + okxTradingFeeBrl;
 
       totalVolumeBrl += brlPaid;
       totalVolumeUsdt += usdtAmount;
-      totalProfit += spreadBrl;
+      totalGrossProfit += spreadBrl;
+      totalOkxFees += okxTotalFeeBrl;
 
       if (exchangeRate > 0) {
         rateSum += exchangeRate;
@@ -197,17 +216,18 @@ export class AdminConversionsService {
       (sum, c) => sum + Number(c.commissionBrl),
       0,
     );
-    const netProfit = totalProfit - totalCommissions;
+    const netProfit = totalGrossProfit - totalOkxFees - totalCommissions;
 
     return {
       data: {
         totalCount: filteredTransactions.length,
         volumeBrl: Math.round(totalVolumeBrl * 100),
         volumeUsdt: Math.round(totalVolumeUsdt * 100),
-        grossProfit: Math.round(totalProfit * 100),
+        grossProfit: Math.round(totalGrossProfit * 100),
+        totalOkxFees: Math.round(totalOkxFees * 100),
+        totalCommissions: Math.round(totalCommissions * 100),
         netProfit: Math.round(netProfit * 100),
         avgRate: rateCount > 0 ? Math.round((rateSum / rateCount) * 100) : 0,
-        totalCommissions: Math.round(totalCommissions * 100),
       },
     };
   }
