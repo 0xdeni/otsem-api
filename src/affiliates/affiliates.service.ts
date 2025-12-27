@@ -288,4 +288,151 @@ export class AffiliatesService {
       spreadAffiliate,
     };
   }
+
+  async getCustomerAffiliateData(customerId: string) {
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { email: true },
+    });
+
+    if (!customer) {
+      return { data: null };
+    }
+
+    const affiliate = await this.prisma.affiliate.findFirst({
+      where: { email: customer.email },
+    });
+
+    if (!affiliate) {
+      return { data: null };
+    }
+
+    const referralCount = await this.prisma.customer.count({
+      where: { affiliateId: affiliate.id },
+    });
+
+    const activeReferrals = await this.prisma.customer.count({
+      where: {
+        affiliateId: affiliate.id,
+        account: { balance: { gt: 0 } },
+      },
+    });
+
+    const paidEarnings = Number(affiliate.totalEarnings) - Number(affiliate.pendingEarnings);
+
+    return {
+      data: {
+        referralCode: affiliate.code,
+        totalReferrals: referralCount,
+        activeReferrals,
+        totalEarnings: Number(affiliate.totalEarnings),
+        pendingEarnings: Number(affiliate.pendingEarnings),
+        paidEarnings: paidEarnings > 0 ? paidEarnings : 0,
+        commissionRate: Number(affiliate.spreadRate),
+      },
+    };
+  }
+
+  async getCustomerReferrals(customerId: string) {
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { email: true },
+    });
+
+    if (!customer) {
+      return { data: [] };
+    }
+
+    const affiliate = await this.prisma.affiliate.findFirst({
+      where: { email: customer.email },
+    });
+
+    if (!affiliate) {
+      return { data: [] };
+    }
+
+    const referrals = await this.prisma.customer.findMany({
+      where: { affiliateId: affiliate.id },
+      include: {
+        user: { select: { email: true } },
+        account: { select: { balance: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const commissionsByCustomer = await this.prisma.affiliateCommission.groupBy({
+      by: ['customerId'],
+      where: { affiliateId: affiliate.id },
+      _sum: { commissionBrl: true, transactionAmount: true },
+    });
+
+    const commissionMap = new Map(
+      commissionsByCustomer.map((c) => [
+        c.customerId,
+        {
+          totalVolume: Number(c._sum.transactionAmount || 0),
+          commissionEarned: Number(c._sum.commissionBrl || 0),
+        },
+      ]),
+    );
+
+    return {
+      data: referrals.map((r) => {
+        const stats = commissionMap.get(r.id) || { totalVolume: 0, commissionEarned: 0 };
+        return {
+          id: r.id,
+          name: r.name,
+          email: r.user?.email || r.email,
+          registeredAt: r.createdAt,
+          totalVolume: stats.totalVolume,
+          commissionEarned: stats.commissionEarned,
+          status: Number(r.account?.balance || 0) > 0 ? 'active' : 'inactive',
+        };
+      }),
+    };
+  }
+
+  async getCustomerCommissions(customerId: string) {
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { email: true },
+    });
+
+    if (!customer) {
+      return { data: [] };
+    }
+
+    const affiliate = await this.prisma.affiliate.findFirst({
+      where: { email: customer.email },
+    });
+
+    if (!affiliate) {
+      return { data: [] };
+    }
+
+    const commissions = await this.prisma.affiliateCommission.findMany({
+      where: { affiliateId: affiliate.id },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const customerIds = [...new Set(commissions.map((c) => c.customerId))];
+    const customers = await this.prisma.customer.findMany({
+      where: { id: { in: customerIds } },
+      select: { id: true, name: true },
+    });
+    const customerMap = new Map(customers.map((c) => [c.id, c.name]));
+
+    return {
+      data: commissions.map((c) => ({
+        id: c.id,
+        referralId: c.customerId,
+        referralName: customerMap.get(c.customerId) || null,
+        amount: Number(c.commissionBrl),
+        transactionAmount: Number(c.transactionAmount),
+        status: c.status.toLowerCase(),
+        createdAt: c.createdAt,
+        paidAt: c.paidAt,
+      })),
+    };
+  }
 }

@@ -6,12 +6,14 @@ import { CustomerKycService } from './customer-kyc.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { StatementsModule } from '../statements/statements.module';
 import { DiditModule } from '../didit/didit.module';
+import { AffiliatesModule } from '../affiliates/affiliates.module';
 
 @Module({
   imports: [
     PrismaModule,
     forwardRef(() => StatementsModule),
     DiditModule,
+    AffiliatesModule,
   ],
   controllers: [CustomersController],
   providers: [

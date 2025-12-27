@@ -112,6 +112,11 @@ Added affiliate/referral system for commission-based earnings on conversions:
 **Public Endpoints** (`/affiliates`):
 - `GET /affiliates/validate/:code` - Validate affiliate code (returns name if valid)
 
+**Customer Endpoints** (`/customers/me/affiliate`):
+- `GET /customers/me/affiliate` - Dados do afiliado (código, indicações, ganhos)
+- `GET /customers/me/affiliate/referrals` - Lista de pessoas indicadas
+- `GET /customers/me/affiliate/commissions` - Histórico de comissões
+
 **Commission Flow**:
 1. Customer registers with affiliate code → linked via `affiliateId`
 2. Customer makes BRL→USDT conversion

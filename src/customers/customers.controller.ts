@@ -17,6 +17,7 @@ import { CustomersService } from './customers.service';
 import { CustomerBalanceService } from './customer-balance.service';
 import { CustomerKycService } from './customer-kyc.service';
 import { StatementsService } from '../statements/statements.service';
+import { AffiliatesService } from '../affiliates/affiliates.service';
 import { CreateCustomerLocalDto } from './dto/create-customer-local.dto';
 import { UpdateCustomerLocalDto } from './dto/update-customer-local.dto';
 import { QueryCustomersDto } from './dto/query-customers.dto';
@@ -39,6 +40,7 @@ export class CustomersController {
     private readonly balances: CustomerBalanceService,
     private readonly kyc: CustomerKycService,
     private readonly statements: StatementsService,
+    private readonly affiliates: AffiliatesService,
   ) { }
 
   @Get()
@@ -73,6 +75,27 @@ export class CustomersController {
   async myKycStatus(@Req() req: AuthRequest) {
     const customer = await this.customers.findByUserId(req.user!.sub);
     return this.kyc.getKycStatus(customer.id);
+  }
+
+  @Get('me/affiliate')
+  @ApiOperation({ summary: 'Dados de afiliado do cliente logado' })
+  async myAffiliate(@Req() req: AuthRequest) {
+    const customer = await this.customers.findByUserId(req.user!.sub);
+    return this.affiliates.getCustomerAffiliateData(customer.id);
+  }
+
+  @Get('me/affiliate/referrals')
+  @ApiOperation({ summary: 'Lista de pessoas indicadas pelo cliente' })
+  async myReferrals(@Req() req: AuthRequest) {
+    const customer = await this.customers.findByUserId(req.user!.sub);
+    return this.affiliates.getCustomerReferrals(customer.id);
+  }
+
+  @Get('me/affiliate/commissions')
+  @ApiOperation({ summary: 'Histórico de comissões do cliente' })
+  async myCommissions(@Req() req: AuthRequest) {
+    const customer = await this.customers.findByUserId(req.user!.sub);
+    return this.affiliates.getCustomerCommissions(customer.id);
   }
 
   @Post()
