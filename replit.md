@@ -52,3 +52,36 @@ The system is built on **NestJS 11**, leveraging a modular architecture to separ
     -   FDBank
 -   **KYC Verification**: Didit API
 -   **Cryptocurrency Exchange**: OKX (for BRL to USDT conversions and withdrawals)
+
+## Database Schema - Conversions Table
+
+A tabela `conversions` armazena dados estruturados de todas as conversões BRL→USDT:
+
+| Campo | Tipo | Descrição |
+|-------|------|-----------|
+| id | String | ID único (cuid) |
+| customerId | String | FK para Customer |
+| accountId | String | FK para Account |
+| brlCharged | Decimal(18,2) | BRL cobrado do cliente |
+| brlExchanged | Decimal(18,2) | BRL enviado para OKX |
+| spreadPercent | Decimal(6,4) | % do spread aplicado |
+| spreadBrl | Decimal(18,2) | Lucro bruto (BRL) |
+| usdtPurchased | Decimal(18,6) | USDT comprado na OKX |
+| usdtWithdrawn | Decimal(18,6) | USDT enviado ao cliente |
+| exchangeRate | Decimal(10,4) | Taxa de câmbio BRL/USDT |
+| network | String | SOLANA ou TRON |
+| walletAddress | String | Endereço de destino |
+| okxOrderId | String | ID da ordem na OKX |
+| okxWithdrawId | String | ID do saque na OKX |
+| affiliateCommission | Decimal(18,2) | Comissão do afiliado |
+| okxWithdrawFee | Decimal(18,6) | Taxa de saque OKX (USDT) |
+| okxTradingFee | Decimal(18,2) | Taxa de trading OKX (BRL) |
+| totalOkxFees | Decimal(18,2) | Total de taxas OKX (BRL) |
+| grossProfit | Decimal(18,2) | Lucro bruto |
+| netProfit | Decimal(18,2) | Lucro líquido |
+| status | Enum | PENDING, PIX_SENT, USDT_BOUGHT, USDT_WITHDRAWN, COMPLETED, FAILED |
+
+### Admin Spread Management
+- `PATCH /admin/users/:id/spread` - Ajustar spread do cliente
+- Body: `{ "spreadPercent": 0.95 }` (spread em %)
+- O sistema converte automaticamente para spreadValue (0.95% → 0.9905)

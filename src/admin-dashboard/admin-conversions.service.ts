@@ -9,9 +9,7 @@ export class AdminConversionsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async listConversions(query: QueryConversionsDto) {
-    const where: any = {
-      type: 'CONVERSION',
-    };
+    const where: any = {};
 
     if (query.dateStart) {
       where.createdAt = { ...where.createdAt, gte: new Date(query.dateStart) };
@@ -23,29 +21,27 @@ export class AdminConversionsService {
       where.status = query.status;
     }
     if (query.customerId) {
-      where.account = { customerId: query.customerId };
+      where.customerId = query.customerId;
+    }
+    if (query.affiliateId) {
+      where.affiliateId = query.affiliateId;
     }
 
-    const transactions = await this.prisma.transaction.findMany({
+    const conversions = await this.prisma.conversion.findMany({
       where,
       include: {
-        account: {
-          include: {
-            customer: {
-              select: { id: true, name: true, email: true, affiliateId: true },
-            },
-          },
+        customer: {
+          select: { id: true, name: true, email: true, affiliateId: true },
+        },
+        wallet: {
+          select: { id: true, network: true, externalAddress: true },
         },
       },
       orderBy: { createdAt: 'desc' },
     });
 
     const affiliateIds = [
-      ...new Set(
-        transactions
-          .map((t) => t.account?.customer?.affiliateId)
-          .filter(Boolean),
-      ),
+      ...new Set(conversions.map((c) => c.affiliateId).filter(Boolean)),
     ] as string[];
 
     const affiliates = await this.prisma.affiliate.findMany({
@@ -54,83 +50,40 @@ export class AdminConversionsService {
     });
     const affiliateMap = new Map(affiliates.map((a) => [a.id, a]));
 
-    const commissions = await this.prisma.affiliateCommission.findMany({
-      where: {
-        transactionId: { in: transactions.map((t) => t.id) },
-      },
-    });
-    const commissionMap = new Map(commissions.map((c) => [c.transactionId, c]));
-
-    let filteredTransactions = transactions;
-    if (query.affiliateId) {
-      filteredTransactions = transactions.filter(
-        (t) => t.account?.customer?.affiliateId === query.affiliateId,
-      );
-    }
-
-    const data = filteredTransactions.map((tx) => {
-      const customer = tx.account?.customer;
-      const affiliate = customer?.affiliateId
-        ? affiliateMap.get(customer.affiliateId)
+    const data = conversions.map((conv) => {
+      const affiliate = conv.affiliateId
+        ? affiliateMap.get(conv.affiliateId)
         : null;
-      const commission = commissionMap.get(tx.id);
-
-      const extData = (tx.externalData as any) || {};
-      const spread = extData.spread || {};
-      const okxBuyResult = extData.okxBuyResult || {};
-      
-      const brlPaid = Number(tx.amount) || 0;
-      const usdtAmount = extData.usdtAmount ? Number(extData.usdtAmount) : 0;
-      
-      const chargedBrl = spread.chargedBrl ? Number(spread.chargedBrl) : brlPaid;
-      const exchangedBrl = spread.exchangedBrl ? Number(spread.exchangedBrl) : chargedBrl;
-      const spreadBrl = spread.spreadBrl ? Number(spread.spreadBrl) : (chargedBrl - exchangedBrl);
-      const spreadRate = spread.spreadRate ? Number(spread.spreadRate) : 1;
-      const spreadPercent = spreadRate < 1 ? Math.round((1 - spreadRate) * 10000) / 100 : 0;
-      
-      const exchangeRateBrlUsdt = usdtAmount > 0 ? (exchangedBrl / usdtAmount) : 0;
-      
-      const network = extData.network || extData.walletNetwork || 'SOLANA';
-      const okxWithdrawFeeUsdt = network === 'TRON' ? 2.1 : 1.0;
-      const okxWithdrawFeeBrl = exchangeRateBrlUsdt > 0 ? (okxWithdrawFeeUsdt * exchangeRateBrlUsdt) : 0;
-      
-      const okxTradingFeePercent = 0.001;
-      const okxTradingFeeBrl = exchangedBrl * okxTradingFeePercent;
-      
-      const okxTotalFeeBrl = okxWithdrawFeeBrl + okxTradingFeeBrl;
-      
-      const affiliateCommission = commission ? Number(commission.commissionBrl) : 0;
-      
-      const grossProfit = spreadBrl;
-      const netProfit = grossProfit - okxTotalFeeBrl - affiliateCommission;
-      
-      const okxOrderId = okxBuyResult.orderId || null;
 
       return {
-        id: tx.id,
-        createdAt: tx.createdAt,
-        status: tx.status,
-        customer: customer
-          ? { id: customer.id, name: customer.name, email: customer.email }
+        id: conv.id,
+        createdAt: conv.createdAt,
+        status: conv.status,
+        customer: conv.customer
+          ? { id: conv.customer.id, name: conv.customer.name, email: conv.customer.email }
           : null,
-        brlPaid: Math.round(brlPaid * 100),
-        brlCharged: Math.round(chargedBrl * 100),
-        brlExchanged: Math.round(exchangedBrl * 100),
-        usdtCredited: Math.round(usdtAmount * 100),
-        spreadApplied: spreadPercent,
-        spreadRate: spreadRate,
-        exchangeRateBrlUsdt: Math.round(exchangeRateBrlUsdt * 100),
-        okxWithdrawFeeBrl: Math.round(okxWithdrawFeeBrl * 100),
-        okxTradingFeeBrl: Math.round(okxTradingFeeBrl * 100),
-        totalOkxFeesBrl: Math.round(okxTotalFeeBrl * 100),
-        grossProfitBrl: Math.round(grossProfit * 100),
-        affiliateCommissionBrl: Math.round(affiliateCommission * 100),
-        netProfitBrl: Math.round(netProfit * 100),
+        brlPaid: Math.round(Number(conv.brlCharged) * 100),
+        brlCharged: Math.round(Number(conv.brlCharged) * 100),
+        brlExchanged: Math.round(Number(conv.brlExchanged) * 100),
+        usdtCredited: Math.round(Number(conv.usdtWithdrawn) * 100),
+        usdtPurchased: Math.round(Number(conv.usdtPurchased) * 100),
+        spreadApplied: Math.round(Number(conv.spreadPercent) * 10000) / 100,
+        spreadRate: 1 - Number(conv.spreadPercent),
+        exchangeRateBrlUsdt: Math.round(Number(conv.exchangeRate) * 100),
+        okxWithdrawFeeBrl: Math.round(Number(conv.okxWithdrawFee) * Number(conv.exchangeRate) * 100),
+        okxTradingFeeBrl: Math.round(Number(conv.okxTradingFee) * 100),
+        totalOkxFeesBrl: Math.round(Number(conv.totalOkxFees) * 100),
+        grossProfitBrl: Math.round(Number(conv.grossProfit) * 100),
+        affiliateCommissionBrl: Math.round(Number(conv.affiliateCommission || 0) * 100),
+        netProfitBrl: Math.round(Number(conv.netProfit) * 100),
         affiliate: affiliate
           ? { id: affiliate.id, code: affiliate.code, name: affiliate.name }
           : null,
-        okxOrderId,
-        network,
+        okxOrderId: conv.okxOrderId,
+        okxWithdrawId: conv.okxWithdrawId,
+        network: conv.network,
+        walletAddress: conv.walletAddress,
+        pixEndToEnd: conv.pixEndToEnd,
         sourceOfBRL: 'INTER',
       };
     });
@@ -139,9 +92,7 @@ export class AdminConversionsService {
   }
 
   async getConversionStats(query: QueryConversionsDto) {
-    const where: any = {
-      type: 'CONVERSION',
-    };
+    const where: any = {};
 
     if (query.dateStart) {
       where.createdAt = { ...where.createdAt, gte: new Date(query.dateStart) };
@@ -153,30 +104,24 @@ export class AdminConversionsService {
       where.status = query.status;
     }
     if (query.customerId) {
-      where.account = { customerId: query.customerId };
+      where.customerId = query.customerId;
     }
-
-    const transactions = await this.prisma.transaction.findMany({
-      where,
-      include: {
-        account: {
-          include: {
-            customer: { select: { affiliateId: true } },
-          },
-        },
-      },
-    });
-
-    let filteredTransactions = transactions;
     if (query.affiliateId) {
-      filteredTransactions = transactions.filter(
-        (t) => t.account?.customer?.affiliateId === query.affiliateId,
-      );
+      where.affiliateId = query.affiliateId;
     }
 
-    const commissions = await this.prisma.affiliateCommission.findMany({
-      where: {
-        transactionId: { in: filteredTransactions.map((t) => t.id) },
+    const conversions = await this.prisma.conversion.findMany({
+      where,
+      select: {
+        brlCharged: true,
+        brlExchanged: true,
+        usdtPurchased: true,
+        usdtWithdrawn: true,
+        spreadBrl: true,
+        totalOkxFees: true,
+        affiliateCommission: true,
+        netProfit: true,
+        exchangeRate: true,
       },
     });
 
@@ -184,51 +129,35 @@ export class AdminConversionsService {
     let totalVolumeUsdt = 0;
     let totalGrossProfit = 0;
     let totalOkxFees = 0;
+    let totalCommissions = 0;
+    let totalNetProfit = 0;
     let rateSum = 0;
     let rateCount = 0;
 
-    for (const tx of filteredTransactions) {
-      const extData = (tx.externalData as any) || {};
-      const spread = extData.spread || {};
-      
-      const brlPaid = Number(tx.amount);
-      const usdtAmount = extData.usdtAmount ? Number(extData.usdtAmount) : 0;
-      const spreadBrl = spread.spreadBrl ? Number(spread.spreadBrl) : 0;
-      const exchangedBrl = spread.exchangedBrl ? Number(spread.exchangedBrl) : brlPaid;
-      const exchangeRate = usdtAmount > 0 ? exchangedBrl / usdtAmount : 0;
-      
-      const network = extData.network || 'SOLANA';
-      const okxWithdrawFeeUsdt = network === 'TRON' ? 2.1 : 1.0;
-      const okxWithdrawFeeBrl = okxWithdrawFeeUsdt * exchangeRate;
-      const okxTradingFeeBrl = exchangedBrl * 0.001;
-      const okxTotalFeeBrl = okxWithdrawFeeBrl + okxTradingFeeBrl;
+    for (const conv of conversions) {
+      totalVolumeBrl += Number(conv.brlCharged);
+      totalVolumeUsdt += Number(conv.usdtWithdrawn);
+      totalGrossProfit += Number(conv.spreadBrl);
+      totalOkxFees += Number(conv.totalOkxFees);
+      totalCommissions += Number(conv.affiliateCommission || 0);
+      totalNetProfit += Number(conv.netProfit);
 
-      totalVolumeBrl += brlPaid;
-      totalVolumeUsdt += usdtAmount;
-      totalGrossProfit += spreadBrl;
-      totalOkxFees += okxTotalFeeBrl;
-
-      if (exchangeRate > 0) {
-        rateSum += exchangeRate;
+      const rate = Number(conv.exchangeRate);
+      if (rate > 0) {
+        rateSum += rate;
         rateCount++;
       }
     }
 
-    const totalCommissions = commissions.reduce(
-      (sum, c) => sum + Number(c.commissionBrl),
-      0,
-    );
-    const netProfit = totalGrossProfit - totalOkxFees - totalCommissions;
-
     return {
       data: {
-        totalCount: filteredTransactions.length,
+        totalCount: conversions.length,
         volumeBrl: Math.round(totalVolumeBrl * 100),
         volumeUsdt: Math.round(totalVolumeUsdt * 100),
         grossProfit: Math.round(totalGrossProfit * 100),
         totalOkxFees: Math.round(totalOkxFees * 100),
         totalCommissions: Math.round(totalCommissions * 100),
-        netProfit: Math.round(netProfit * 100),
+        netProfit: Math.round(totalNetProfit * 100),
         avgRate: rateCount > 0 ? Math.round((rateSum / rateCount) * 100) : 0,
       },
     };

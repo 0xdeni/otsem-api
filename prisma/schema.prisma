@@ -226,6 +226,7 @@ model Customer {
   account          Account?
   cardTransactions CardTransaction[]
   chargebacks      Chargeback[]
+  conversions      Conversion[]
 
   @@index([email])
   @@index([cpf])
@@ -412,8 +413,9 @@ model Wallet {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  payouts  Payout[]
+  customer    Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  payouts     Payout[]
+  conversions Conversion[]
 
   @@unique([customerId, network, externalAddress])
   @@index([customerId])
@@ -470,6 +472,7 @@ model Account {
 
   customer     Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
   transactions Transaction[]
+  conversions  Conversion[]
 
   @@index([customerId])
   @@map("accounts")
@@ -679,4 +682,67 @@ model AffiliateCommission {
   @@index([affiliateId])
   @@index([customerId])
   @@index([status])
+}
+
+// ==================== CONVERSIONS ====================
+
+enum ConversionStatus {
+  PENDING
+  PIX_SENT
+  USDT_BOUGHT
+  USDT_WITHDRAWN
+  COMPLETED
+  FAILED
+}
+
+model Conversion {
+  id            String           @id @default(cuid())
+  customerId    String
+  accountId     String
+  transactionId String?          @unique
+  
+  brlCharged      Decimal @db.Decimal(18, 2)
+  brlExchanged    Decimal @db.Decimal(18, 2)
+  spreadPercent   Decimal @db.Decimal(6, 4)
+  spreadBrl       Decimal @db.Decimal(18, 2)
+  
+  usdtPurchased   Decimal @db.Decimal(18, 6)
+  usdtWithdrawn   Decimal @db.Decimal(18, 6)
+  exchangeRate    Decimal @db.Decimal(10, 4)
+  
+  network         String
+  walletAddress   String
+  walletId        String?
+  
+  pixEndToEnd     String?
+  pixTxid         String?
+  okxOrderId      String?
+  okxWithdrawId   String?
+  
+  affiliateId         String?
+  affiliateCommission Decimal? @db.Decimal(18, 2)
+  
+  okxWithdrawFee  Decimal @db.Decimal(18, 6)
+  okxTradingFee   Decimal @db.Decimal(18, 2)
+  totalOkxFees    Decimal @db.Decimal(18, 2)
+  
+  grossProfit     Decimal @db.Decimal(18, 2)
+  netProfit       Decimal @db.Decimal(18, 2)
+  
+  status          ConversionStatus @default(PENDING)
+  errorMessage    String?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  completedAt     DateTime?
+  
+  customer        Customer @relation(fields: [customerId], references: [id])
+  account         Account  @relation(fields: [accountId], references: [id])
+  wallet          Wallet?  @relation(fields: [walletId], references: [id])
+  
+  @@map("conversions")
+  @@index([customerId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([affiliateId])
 }

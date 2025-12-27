@@ -496,6 +496,52 @@ export class WalletService {
         this.logger.log(`[Affiliate] Commission recorded: R$ ${(brlAmount * affiliateSpreadPercent).toFixed(2)} for ${affiliateSpread.affiliate.code}`);
       }
 
+      // 7) Criar registro na tabela Conversion (dados estruturados)
+      const exchangeRate = usdtAmount > 0 ? brlToExchange / usdtAmount : 0;
+      const okxWithdrawFeeUsdt = networkFee;
+      const okxTradingFee = brlToExchange * 0.001;
+      const okxWithdrawFeeBrl = okxWithdrawFeeUsdt * exchangeRate;
+      const totalOkxFees = okxWithdrawFeeBrl + okxTradingFee;
+      const affiliateCommissionBrl = affiliateCommission ? Number(affiliateCommission.commissionBrl) : 0;
+      const grossProfit = spreadAmount;
+      const netProfit = grossProfit - totalOkxFees - affiliateCommissionBrl;
+
+      const conversionTx = await this.prisma.transaction.findFirst({
+        where: { externalId: conversionId },
+      });
+
+      await this.prisma.conversion.create({
+        data: {
+          customerId,
+          accountId: account.id,
+          transactionId: conversionTx?.id,
+          brlCharged: brlAmount,
+          brlExchanged: brlToExchange,
+          spreadPercent: totalSpreadPercent,
+          spreadBrl: spreadAmount,
+          usdtPurchased: usdtAmount,
+          usdtWithdrawn: usdtToWithdraw,
+          exchangeRate,
+          network: wallet.network,
+          walletAddress: wallet.externalAddress,
+          walletId: wallet.id,
+          pixEndToEnd: pixResult?.endToEndId,
+          pixTxid: pixResult?.txid,
+          okxOrderId: okxBuyResult?.orderId || null,
+          okxWithdrawId: withdrawResult?.wdId || null,
+          affiliateId: affiliateSpread.affiliate?.id || null,
+          affiliateCommission: affiliateCommissionBrl,
+          okxWithdrawFee: okxWithdrawFeeUsdt,
+          okxTradingFee,
+          totalOkxFees,
+          grossProfit,
+          netProfit,
+          status: 'COMPLETED',
+          completedAt: new Date(),
+        },
+      });
+      this.logger.log(`[Conversion] Registro criado: R$ ${brlAmount} → ${usdtAmount} USDT`);
+
       return {
         message: 'Compra e transferência de USDT concluída',
         pixResult,
