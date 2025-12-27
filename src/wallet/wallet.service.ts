@@ -938,13 +938,15 @@ export class WalletService {
       };
     }
 
-    const okxNetwork = 'Solana';
-    const depositInfo = await this.okxService.getDepositAddress(okxNetwork);
+    const solanaDepositAddress = process.env.OKX_SOLANA_DEPOSIT_ADDRESS;
+    if (!solanaDepositAddress) {
+      throw new Error('Endereço de depósito Solana não configurado');
+    }
     return {
       network,
-      chain: depositInfo.chain,
-      address: depositInfo.address,
-      memo: depositInfo.memo,
+      chain: 'Solana',
+      address: solanaDepositAddress,
+      memo: null,
       instructions: 'Envie USDT SPL para este endereço. Após confirmação, o valor será convertido e creditado em BRL.',
     };
   }
