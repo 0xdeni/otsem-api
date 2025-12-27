@@ -943,7 +943,7 @@ Endpoint para receber notificações da BRX.
 - `accreditation.rejected` - Credenciamento rejeitado
 - `pix.received` - Pix recebido
 - `pix.sent` - Pix enviado
-- `pix.failed` - Pix falhou.
+- `pix.failed` - Pix falhou..
 
 ---
 
