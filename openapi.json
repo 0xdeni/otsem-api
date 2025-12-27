@@ -2521,6 +2521,75 @@
         ]
       }
     },
+    "/wallet/sell-tx-data": {
+      "get": {
+        "operationId": "WalletController_getSellTxData",
+        "parameters": [
+          {
+            "name": "walletId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "usdtAmount",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "network",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "SOLANA",
+                "TRON"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Obter dados para construir transação USDT no frontend (client-side signing)",
+        "tags": [
+          "Wallet"
+        ]
+      }
+    },
+    "/wallet/submit-signed-sell": {
+      "post": {
+        "operationId": "WalletController_submitSignedSell",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Submeter venda após transação assinada no frontend",
+        "tags": [
+          "Wallet"
+        ]
+      }
+    },
     "/inter/webhooks/{tipoWebhook}/callbacks": {
       "get": {
         "operationId": "InterWebhookController_getCallbacks",

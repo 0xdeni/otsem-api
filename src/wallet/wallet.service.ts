@@ -1227,4 +1227,153 @@ export class WalletService {
 
     return { pendingCount: pendingSells.length, matchedCount: matched.length, matched };
   }
+
+  /**
+   * Retorna dados para o frontend construir e assinar a transação USDT
+   * Client-side signing: a chave privada nunca sai do dispositivo do usuário
+   */
+  async getSellTransactionData(
+    customerId: string,
+    walletId: string,
+    usdtAmount: number,
+    network: 'SOLANA' | 'TRON',
+  ) {
+    if (usdtAmount < 10) {
+      throw new BadRequestException('Quantidade mínima é 10 USDT');
+    }
+
+    const wallet = await this.prisma.wallet.findFirst({
+      where: { id: walletId, customerId },
+    });
+
+    if (!wallet) {
+      throw new NotFoundException('Carteira não encontrada');
+    }
+
+    if (wallet.network !== network) {
+      throw new BadRequestException(`Carteira é da rede ${wallet.network}, não ${network}`);
+    }
+
+    const depositAddress = await this.getUsdtDepositAddress(network);
+    const quote = await this.quoteSellUsdt(customerId, usdtAmount, network);
+
+    const txData: any = {
+      network,
+      fromAddress: wallet.externalAddress,
+      toAddress: depositAddress.address,
+      usdtAmount,
+      usdtAmountRaw: Math.floor(usdtAmount * 1_000_000),
+      quote: {
+        brlToReceive: quote.brlToReceive,
+        exchangeRate: quote.exchangeRate,
+        spreadPercent: quote.spreadPercent,
+      },
+    };
+
+    if (network === 'SOLANA') {
+      txData.tokenMint = 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB';
+      txData.tokenProgram = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
+      txData.decimals = 6;
+      txData.instructions = [
+        'Use @solana/web3.js e @solana/spl-token para criar transferência SPL Token',
+        'Assine com Keypair.fromSecretKey(privateKey)',
+        'Envie com sendAndConfirmTransaction()',
+      ];
+    } else {
+      txData.contractAddress = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
+      txData.decimals = 6;
+      txData.instructions = [
+        'Use TronWeb para chamar contract.transfer(toAddress, amount)',
+        'Configure tronWeb com sua private key',
+        'O método .send() retorna o txHash',
+      ];
+    }
+
+    return txData;
+  }
+
+  /**
+   * Processa venda após o frontend assinar e submeter a transação
+   * Recebe apenas o txHash para rastreamento
+   */
+  async submitSignedSellTransaction(
+    customerId: string,
+    walletId: string,
+    usdtAmount: number,
+    network: 'SOLANA' | 'TRON',
+    txHash: string,
+  ) {
+    if (!txHash) {
+      throw new BadRequestException('txHash é obrigatório');
+    }
+
+    const wallet = await this.prisma.wallet.findFirst({
+      where: { id: walletId, customerId },
+    });
+
+    if (!wallet) {
+      throw new NotFoundException('Carteira não encontrada');
+    }
+
+    if (!wallet.externalAddress) {
+      throw new BadRequestException('Carteira sem endereço externo');
+    }
+
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+    });
+
+    if (!customer) {
+      throw new NotFoundException('Cliente não encontrado');
+    }
+
+    const account = await this.prisma.account.findFirst({ where: { customerId } });
+    if (!account) {
+      throw new BadRequestException('Conta não encontrada');
+    }
+
+    const quote = await this.quoteSellUsdt(customerId, usdtAmount, network);
+
+    const conversion = await this.prisma.conversion.create({
+      data: {
+        customerId,
+        accountId: account.id,
+        type: 'SELL',
+        brlCharged: 0,
+        brlExchanged: quote.brlFromExchange,
+        spreadPercent: quote.spreadPercent / 100,
+        spreadBrl: quote.spreadBrl,
+        usdtPurchased: usdtAmount,
+        usdtWithdrawn: 0,
+        exchangeRate: quote.exchangeRate,
+        network,
+        walletAddress: wallet.externalAddress,
+        walletId: wallet.id,
+        okxWithdrawFee: 0,
+        okxTradingFee: quote.okxTradingFee,
+        totalOkxFees: quote.okxTradingFee,
+        grossProfit: quote.spreadBrl,
+        netProfit: quote.spreadBrl - quote.okxTradingFee,
+        status: 'PENDING',
+        txHash,
+      },
+    });
+
+    this.logger.log(`[SELL] Transação submetida: ${usdtAmount} USDT, txHash: ${txHash}`);
+
+    return {
+      conversionId: conversion.id,
+      status: 'PENDING',
+      txHash,
+      usdtAmount,
+      network,
+      quote: {
+        brlToReceive: quote.brlToReceive,
+        exchangeRate: quote.exchangeRate,
+        spreadPercent: quote.spreadPercent,
+      },
+      message: 'Transação registrada. Após confirmação na blockchain e depósito na OKX, o BRL será creditado.',
+      nextStep: 'Aguarde confirmação. Use GET /wallet/pending-sell-deposits para verificar status.',
+    };
+  }
 }

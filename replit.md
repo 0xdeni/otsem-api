@@ -87,21 +87,45 @@ A tabela `conversions` armazena dados estruturados de todas as conversões BRL�
 - Body: `{ "spreadPercent": 0.95 }` (spread em %)
 - O sistema converte automaticamente para spreadValue (0.95% → 0.9905)
 
-## SELL Flow (USDT → BRL) - Depósito Direto OKX
+## SELL Flow (USDT → BRL) - Client-Side Signing
 
-O cliente envia USDT diretamente para endereço OKX e recebe BRL creditado no saldo OTSEM.
+O cliente assina a transação no frontend (chave privada nunca sai do dispositivo) e o backend recebe apenas o txHash.
+
+### Fluxo de Assinatura Client-Side (Recomendado)
 
 | Endpoint | Método | Descrição |
 |----------|--------|-----------|
-| `/wallet/deposit-address?network=SOLANA\|TRON` | GET | Obtém endereço OKX para depósito USDT |
-| `/wallet/quote-sell-usdt?usdtAmount=X&network=SOLANA\|TRON` | GET | Cotação: quanto BRL o cliente recebe por X USDT |
-| `/wallet/sell-usdt-to-brl` | POST | Inicia venda USDT → BRL (body: { usdtAmount, network }) |
-| `/wallet/process-sell/:conversionId` | POST | Processa venda após USDT recebido na OKX (admin) |
-| `/wallet/pending-sell-deposits` | GET | Verifica depósitos pendentes na OKX (admin) |
+| `/wallet/sell-tx-data?walletId=X&usdtAmount=Y&network=Z` | GET | Retorna dados para construir transação no frontend |
+| `/wallet/submit-signed-sell` | POST | Recebe txHash após frontend assinar e submeter |
+| `/wallet/quote-sell-usdt?usdtAmount=X&network=Y` | GET | Cotação: quanto BRL o cliente recebe |
+| `/wallet/deposit-address?network=SOLANA\|TRON` | GET | Endereço OKX fixo para depósito |
+| `/wallet/pending-sell-deposits` | GET | Verifica depósitos pendentes (admin) |
+| `/wallet/process-sell/:conversionId` | POST | Processa venda após depósito confirmado (admin) |
+
+### Client-Side Signing - Fluxo Frontend
+
+1. **GET /wallet/sell-tx-data** → Recebe:
+   - `toAddress`: Endereço OKX fixo
+   - `usdtAmountRaw`: Valor em menor unidade (6 decimais)
+   - `tokenMint` (Solana) ou `contractAddress` (Tron)
+   - `quote`: Cotação BRL a receber
+
+2. **Frontend assina e submete** transação usando:
+   - Solana: `@solana/web3.js` + `@solana/spl-token`
+   - Tron: `TronWeb`
+
+3. **POST /wallet/submit-signed-sell** → Body:
+   ```json
+   { "walletId": "...", "usdtAmount": 100, "network": "TRON", "txHash": "..." }
+   ```
+
+### Endereços OKX Fixos (ENV)
+- **TRON**: `OKX_TRON_DEPOSIT_ADDRESS`
+- **Solana**: `OKX_SOLANA_DEPOSIT_ADDRESS`
 
 ### SELL Flow Status Progression
-1. `PENDING` - Registro criado, aguardando depósito USDT na OKX
-2. `USDT_RECEIVED` - USDT confirmado na OKX (opcional, pode processar direto)
+1. `PENDING` - Transação submetida, aguardando confirmação blockchain
+2. `USDT_RECEIVED` - USDT confirmado na OKX
 3. `USDT_SOLD` - USDT vendido por BRL na OKX
 4. `COMPLETED` - BRL creditado no saldo OTSEM do cliente
 

@@ -729,6 +729,7 @@ model Conversion {
   okxOrderId      String?
   okxWithdrawId   String?
   okxDepositId    String?
+  txHash          String?
   
   pixDestKey      String?
   pixDestKeyType  String?

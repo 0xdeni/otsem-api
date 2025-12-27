@@ -221,4 +221,32 @@ export class WalletController {
   async processSellConversion(@Param('conversionId') conversionId: string) {
     return this.walletService.processSellConversion(conversionId);
   }
+
+  @Get('sell-tx-data')
+  @ApiOperation({ summary: 'Obter dados para construir transação USDT no frontend (client-side signing)' })
+  @ApiQuery({ name: 'walletId', type: String, required: true })
+  @ApiQuery({ name: 'usdtAmount', type: Number, required: true })
+  @ApiQuery({ name: 'network', enum: ['SOLANA', 'TRON'], required: true })
+  async getSellTxData(
+    @Req() req: AuthRequest,
+    @Query('walletId') walletId: string,
+    @Query('usdtAmount') usdtAmount: string,
+    @Query('network') network: 'SOLANA' | 'TRON',
+  ) {
+    const customerId = this.getCustomerId(req);
+    return this.walletService.getSellTransactionData(customerId, walletId, Number(usdtAmount), network);
+  }
+
+  @Post('submit-signed-sell')
+  @ApiOperation({ summary: 'Submeter venda após transação assinada no frontend' })
+  async submitSignedSell(
+    @Req() req: AuthRequest,
+    @Body('walletId') walletId: string,
+    @Body('usdtAmount') usdtAmount: number,
+    @Body('network') network: 'SOLANA' | 'TRON',
+    @Body('txHash') txHash: string,
+  ) {
+    const customerId = this.getCustomerId(req);
+    return this.walletService.submitSignedSellTransaction(customerId, walletId, usdtAmount, network, txHash);
+  }
 }
