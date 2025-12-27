@@ -365,6 +365,7 @@ export class WalletService {
 
       // 4) Registrar transação CONVERSION com dados da carteira
       const balanceBefore = account.balance;
+      const conversionId = `CONV-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
       await this.prisma.transaction.create({
         data: {
           accountId: account.id,
@@ -374,7 +375,8 @@ export class WalletService {
           balanceBefore,
           balanceAfter: balanceBefore,
           description: `Conversão BRL→USDT: R$ ${brlAmount.toFixed(2)} → ${usdtAmount.toFixed(2)} USDT`,
-          externalId: pixResult?.endToEndId || `CONV-${Date.now()}`,
+          externalId: conversionId,
+          endToEnd: pixResult?.endToEndId,
           externalData: {
             pixEndToEnd: pixResult?.endToEndId,
             okxBuyResult,

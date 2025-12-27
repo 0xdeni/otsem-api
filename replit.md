@@ -141,8 +141,11 @@ Added admin endpoints for viewing and analyzing BRL→USDT conversions:
 
 **Response fields** (values in centavos, except spreadApplied which is percentage):
 - `brlPaid` - Valor pago pelo cliente em BRL
+- `brlCharged` - Valor cobrado do cliente (mesmo que brlPaid)
+- `brlExchanged` - Valor enviado para OKX (após desconto do spread)
 - `usdtCredited` - USDT creditado na carteira do cliente
 - `spreadApplied` - Spread aplicado (%) - ex: 5.0 = 5%
+- `spreadRate` - Multiplicador de spread (ex: 0.95 = 5% spread)
 - `exchangeRateBrlUsdt` - Taxa de câmbio BRL/USDT usada na conversão
 - `okxWithdrawFeeBrl` - Taxa de saque OKX (2.1 USDT TRC20, 1 USDT Solana) convertida para BRL
 - `okxTradingFeeBrl` - Taxa de trading OKX (0.1% do valor trocado)
@@ -152,6 +155,12 @@ Added admin endpoints for viewing and analyzing BRL→USDT conversions:
 - `netProfitBrl` - Lucro líquido (grossProfit - taxas OKX - comissão afiliado)
 - `affiliate` (id, code, name)
 - `okxOrderId`, `network`, `sourceOfBRL`
+
+**Spread Calculation**:
+- `User.spreadValue` é um multiplicador: 0.95 = 5% spread, 1.0 = 0% spread
+- Se você quer 0.95% de spread, use `User.spreadValue = 0.9905`
+- Fórmula: `brlExchanged = brlCharged × spreadRate`
+- Lucro bruto: `grossProfitBrl = brlCharged - brlExchanged`
 
 **Stats response**:
 - `totalCount`, `volumeBrl`, `volumeUsdt`

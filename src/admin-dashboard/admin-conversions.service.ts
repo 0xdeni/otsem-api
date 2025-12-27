@@ -114,8 +114,11 @@ export class AdminConversionsService {
           ? { id: customer.id, name: customer.name, email: customer.email }
           : null,
         brlPaid: Math.round(brlPaid * 100),
+        brlCharged: Math.round(chargedBrl * 100),
+        brlExchanged: Math.round(exchangedBrl * 100),
         usdtCredited: Math.round(usdtAmount * 100),
         spreadApplied: spreadPercent,
+        spreadRate: spreadRate,
         exchangeRateBrlUsdt: Math.round(exchangeRateBrlUsdt * 100),
         okxWithdrawFeeBrl: Math.round(okxWithdrawFeeBrl * 100),
         okxTradingFeeBrl: Math.round(okxTradingFeeBrl * 100),
