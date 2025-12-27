@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Query, Body, UseGuards, ParseIntPipe, DefaultValuePipe } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Param, Query, Body, UseGuards, ParseIntPipe, DefaultValuePipe } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags, ApiBody } from '@nestjs/swagger';
 import { SendEmailDto } from './dto/send-email.dto';
 import { AdminUsersService } from './admin-users.service';
@@ -76,5 +76,16 @@ export class AdminUsersController {
     @Body() dto: SendEmailDto,
   ) {
     return this.service.sendEmail(id, dto.subject, dto.message, dto.template);
+  }
+
+  @Patch(':id/spread')
+  @ApiOperation({ summary: 'Ajustar spread do usuário' })
+  @ApiBody({ schema: { type: 'object', properties: { spreadPercent: { type: 'number', description: 'Spread em percentual (ex: 0.95 para 0.95%)' } } } })
+  @ApiResponse({ status: 200, description: 'Spread atualizado' })
+  async updateSpread(
+    @Param('id') id: string,
+    @Body('spreadPercent') spreadPercent: number,
+  ) {
+    return this.service.updateSpread(id, spreadPercent);
   }
 }

@@ -279,4 +279,36 @@ export class AdminUsersService {
     };
     return descriptions[type] || type;
   }
+
+  async updateSpread(customerId: string, spreadPercent: number) {
+    if (spreadPercent < 0 || spreadPercent > 100) {
+      throw new BadRequestException('Spread deve estar entre 0 e 100%');
+    }
+
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { userId: true, name: true, email: true },
+    });
+
+    if (!customer || !customer.userId) {
+      throw new NotFoundException('Cliente não encontrado ou sem usuário vinculado');
+    }
+
+    const spreadValue = 1 - (spreadPercent / 100);
+
+    await this.prisma.user.update({
+      where: { id: customer.userId },
+      data: { spreadValue },
+    });
+
+    this.logger.log(`Spread atualizado para ${customer.email}: ${spreadPercent}% (spreadValue=${spreadValue})`);
+
+    return {
+      success: true,
+      message: `Spread atualizado para ${spreadPercent}%`,
+      customer: { id: customerId, name: customer.name, email: customer.email },
+      spreadPercent,
+      spreadValue,
+    };
+  }
 }

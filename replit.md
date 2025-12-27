@@ -1,298 +1,54 @@
 # OTSEM API
 
-A NestJS backend API for financial services including PIX payments, customer management, and multi-bank integration.
-
 ## Overview
 
-This is a backend-only NestJS API that provides:
-- User authentication (JWT-based)
-- Customer management with KYC
-- PIX payment processing
-- Multi-bank integration (Inter, FDBank)
-- OKX crypto exchange integration
-- Wallet management
+The OTSEM API is a NestJS backend designed for financial services, specializing in PIX payments, comprehensive customer management with KYC, and multi-bank as well as crypto exchange integrations. Its core purpose is to provide a robust and secure platform for managing financial transactions, user identities, and digital assets.
 
-## Tech Stack
+**Key Capabilities:**
+- User Authentication (JWT)
+- Customer Management & KYC (Didit integration)
+- PIX Payment Processing (via Banco Inter)
+- Multi-bank Integration (Banco Inter, FDBank)
+- Cryptocurrency Exchange Integration (OKX for BRL to USDT conversions)
+- Multi-network Wallet Management (Solana, Ethereum, Polygon, BSC, Tron, etc.)
+- Affiliate System for commission-based earnings
+- Admin dashboard for monitoring and analytics
 
-- **Framework**: NestJS 11
-- **Database**: PostgreSQL with Prisma ORM
-- **Authentication**: Passport JWT
-- **API Docs**: Swagger (available at `/api/docs`)
+The project aims to streamline financial operations, enhance user experience through automated processes like PIX key validation and micro-transfers, and provide a secure environment for digital asset management.
 
-## Environment Variables
+## User Preferences
 
-### Required
-- `DATABASE_URL` - PostgreSQL connection string (auto-configured by Replit)
-- `JWT_SECRET` - Secret for JWT token signing
+I prefer iterative development and clear, concise explanations. Please ask before making major architectural changes or introducing new external dependencies. I value well-structured code and comprehensive testing.
 
-### Optional (External Services)
-- `RESEND_API_KEY` - For email sending (password reset)
-- `INTER_CLIENT_ID`, `INTER_CLIENT_SECRET` - Banco Inter API credentials
-- `INTER_CERT_PATH`, `INTER_KEY_PATH` - Banco Inter certificate paths
-- `FDBANK_API_KEY`, `FDBANK_API_SECRET` - FDBank API credentials
-- `OKX_API_KEY`, `OKX_API_SECRET`, `OKX_API_PASSPHRASE` - OKX exchange credentials
-- `DIDIT_API_KEY`, `DIDIT_WORKFLOW_ID` - Didit KYC verification API
+## System Architecture
 
-## Running Locally
+The system is built on **NestJS 11**, leveraging a modular architecture to separate concerns. **PostgreSQL** is used as the primary database, managed by **Prisma ORM**. Authentication is handled via **JWT tokens** using Passport.js. API documentation is generated with **Swagger**.
 
-```bash
-npm install
-npx prisma generate
-npx prisma migrate deploy
-npm run start:dev
-```
+**Key Architectural Decisions & Features:**
 
-## API Documentation
+-   **Unified Transaction Model**: A single `Transaction` model handles all financial movements (PIX_IN, PIX_OUT, CONVERSION) with detailed status tracking (`PENDING`, `COMPLETED`, `FAILED`), balance logging (`balanceBefore`, `balanceAfter`), and comprehensive metadata (payer/receiver info, bank payloads).
+-   **Customer Management with KYC**: Integration with the **Didit API** for identity verification, allowing for secure customer onboarding and compliance.
+-   **Multi-network Wallet System**: Supports various blockchain networks (Solana, Ethereum, Polygon, BSC, Tron) with capabilities for wallet creation, import, and management. Includes tracking for OKX whitelist status for withdrawals.
+-   **PIX Integration**:
+    -   **Automatic Reconciliation**: Polling of bank APIs for paid PIX charges and intelligent customer identification for automatic account crediting.
+    -   **PIX Key Management**: Endpoints for listing, creating, and deleting PIX keys with an automated micro-transfer validation mechanism.
+    -   **PIX Send Validation**: Strict checks for KYC status, valid PIX keys, sufficient balance, and adherence to transaction limits before processing outbound PIX payments.
+-   **BRL to USDT Conversion Flow**: Facilitates conversion from BRL to USDT using OKX exchange, with direct withdrawal to customer's specified wallet (Solana or Tron).
+-   **Affiliate System**:
+    -   Manages affiliate profiles, commission rates, and payouts.
+    -   Automated commission calculation on BRL to USDT conversions.
+    -   Admin and public endpoints for managing and tracking affiliate activities and earnings.
+-   **Admin Endpoints**: Dedicated administration routes for managing affiliates, viewing conversion statistics, and monitoring system health.
+-   **Design Patterns**: Emphasis on services, controllers, and DTOs as per NestJS best practices.
 
-Available at `http://localhost:5000/api/docs` when running.
+## External Dependencies
 
-## Project Structure
-
-- `src/` - Application source code
-  - `auth/` - Authentication module
-  - `users/` - User management
-  - `customers/` - Customer management with KYC
-  - `didit/` - Didit KYC verification integration
-  - `inter/` - Banco Inter integration
-  - `fdbank/` - FDBank integration
-  - `okx/` - OKX exchange integration
-  - `payments/` - Payment processing
-  - `transactions/` - Unified transaction management (PIX_IN, PIX_OUT)
-  - `wallet/` - Multi-network wallet management (Solana, Ethereum, Polygon, BSC, Tron, etc.)
-  - `statements/` - Account statements
-  - `admin-dashboard/` - Admin dashboard with stats and reports
-  - `prisma/` - Prisma service
-- `prisma/` - Database schema and migrations
-
-## Data Model Architecture
-
-### Unified Transaction Model (Dec 16, 2025)
-The system uses a **unified Transaction model** for all PIX operations:
-- **TransactionType**: PIX_IN (deposits), PIX_OUT (withdrawals), CONVERSION (BRL→USDT), TRANSFER, ADJUSTMENT, FEE, REVERSAL
-- **TransactionStatus**: PENDING, PROCESSING, COMPLETED, FAILED, CANCELLED, REVERSED
-
-Transaction fields:
-- `type` - Transaction type (PIX_IN, PIX_OUT, etc.)
-- `status` - Current status
-- `amount` - Transaction amount in BRL
-- `txid` - Unique transaction ID for PIX (embedded in QR Code)
-- `endToEnd` - End-to-end ID from bank
-- `payerName`, `payerTaxNumber` - Payer information (for PIX_IN)
-- `receiverName`, `receiverPixKey` - Receiver information (for PIX_OUT)
-- `balanceBefore`, `balanceAfter` - Balance tracking
-- `bankPayload` - Original bank webhook payload (JSON)
-
-Legacy models (Deposit, Payment) are kept for backward compatibility.
-
-## Recent Changes (Dec 2025)
-
-### Affiliate System (Dec 27)
-Added affiliate/referral system for commission-based earnings on conversions:
-
-**Models**:
-- `Affiliate` - Affiliate profile with code, spreadRate, payout wallet
-- `AffiliateCommission` - Tracks each commission earned
-- `Customer.affiliateId` - Links customer to referring affiliate
-
-**Spread Calculation**:
-- `User.spreadValue` = base spread multiplier (default 1.0 = 0% spread, 0.95 = 5% spread)
-- `Affiliate.spreadRate` = additional affiliate spread (e.g., 0.0035 = 0.35%)
-- Total spread = baseSpread + affiliateSpread
-- Example: User.spreadValue=0.95 (5%) + Affiliate.spreadRate=0.0035 (0.35%) = 5.35% total spread
-
-**Admin Endpoints** (`/admin/affiliates`):
-- `POST /admin/affiliates` - Create affiliate with code and spreadRate
-- `GET /admin/affiliates` - List affiliates with pagination
-- `GET /admin/affiliates/:id` - Get affiliate details + referred customers
-- `PATCH /admin/affiliates/:id` - Update affiliate settings
-- `PATCH /admin/affiliates/:id/toggle-active` - Enable/disable affiliate
-- `GET /admin/affiliates/:id/commissions` - List affiliate's commissions
-- `POST /admin/affiliates/:id/pay-commissions` - Mark commissions as paid
-
-**Public Endpoints** (`/affiliates`):
-- `GET /affiliates/validate/:code` - Validate affiliate code (returns name if valid)
-
-**Customer Endpoints** (`/customers/me/affiliate`):
-- `POST /customers/me/affiliate/activate` - Ativa programa de indicações (auto-ativação instantânea)
-- `GET /customers/me/affiliate` - Dados do afiliado (código, indicações, ganhos)
-- `GET /customers/me/affiliate/referrals` - Lista de pessoas indicadas
-- `GET /customers/me/affiliate/commissions` - Histórico de comissões
-
-**Auto-Activation Flow**:
-- Qualquer cliente pode ativar o programa de indicações instantaneamente
-- Sem necessidade de aprovação ou revisão
-- Gera código único baseado no nome do cliente (ex: JOAO123)
-- Taxa de comissão padrão: 0.5% (spreadRate = 0.005)
-
-**Commission Flow**:
-1. Customer registers with affiliate code → linked via `affiliateId`
-2. Customer makes BRL→USDT conversion
-3. System calculates: baseSpread + affiliateSpread = totalSpread
-4. After successful conversion, commission is recorded in `AffiliateCommission`
-5. Affiliate's `pendingEarnings` is incremented
-6. Admin marks commissions as paid → moves to `totalEarnings`
-
-### Admin Conversions Endpoints (Dec 27)
-Added admin endpoints for viewing and analyzing BRL→USDT conversions:
-
-**Endpoints** (`/admin/conversions`):
-- `GET /admin/conversions` - List all conversions with filters (dateStart, dateEnd, customerId, affiliateId, status)
-- `GET /admin/conversions/stats` - Aggregated statistics for the filtered period
-
-**Response fields** (values in centavos, except spreadApplied which is percentage):
-- `brlPaid` - Valor pago pelo cliente em BRL
-- `brlCharged` - Valor cobrado do cliente (mesmo que brlPaid)
-- `brlExchanged` - Valor enviado para OKX (após desconto do spread)
-- `usdtCredited` - USDT creditado na carteira do cliente
-- `spreadApplied` - Spread aplicado (%) - ex: 5.0 = 5%
-- `spreadRate` - Multiplicador de spread (ex: 0.95 = 5% spread)
-- `exchangeRateBrlUsdt` - Taxa de câmbio BRL/USDT usada na conversão
-- `okxWithdrawFeeBrl` - Taxa de saque OKX (2.1 USDT TRC20, 1 USDT Solana) convertida para BRL
-- `okxTradingFeeBrl` - Taxa de trading OKX (0.1% do valor trocado)
-- `totalOkxFeesBrl` - Total de taxas OKX
-- `grossProfitBrl` - Lucro bruto (spread cobrado do cliente)
-- `affiliateCommissionBrl` - Comissão paga ao afiliado
-- `netProfitBrl` - Lucro líquido (grossProfit - taxas OKX - comissão afiliado)
-- `affiliate` (id, code, name)
-- `okxOrderId`, `network`, `sourceOfBRL`
-
-**Spread Calculation**:
-- `User.spreadValue` é um multiplicador: 0.95 = 5% spread, 1.0 = 0% spread
-- Se você quer 0.95% de spread, use `User.spreadValue = 0.9905`
-- Fórmula: `brlExchanged = brlCharged × spreadRate`
-- Lucro bruto: `grossProfitBrl = brlCharged - brlExchanged`
-
-**Stats response**:
-- `totalCount`, `volumeBrl`, `volumeUsdt`
-- `grossProfit` - Lucro bruto total
-- `totalOkxFees` - Total de taxas OKX
-- `totalCommissions` - Total de comissões de afiliados
-- `netProfit` - Lucro líquido real (grossProfit - totalOkxFees - totalCommissions)
-- `avgRate` - Taxa média BRL/USDT
-
-### OKX Whitelist Management (Dec 26)
-Added `okxWhitelisted` field to Wallet model for tracking OKX withdrawal address whitelist status:
-- **New field**: `okxWhitelisted` (boolean) - true if address is whitelisted on OKX
-- **New endpoint**: `PATCH /wallet/:id/okx-whitelist` - Mark wallet as whitelisted
-
-OKX requires addresses to be added to their whitelist before allowing withdrawals. This field allows the system to track which wallets are ready for automatic withdrawals.
-
-**Workflow**:
-1. User adds their crypto wallet to the system
-2. User adds the same address to OKX whitelist (via OKX website)
-3. Admin or user marks the wallet as `okxWhitelisted: true`
-4. System can now process automatic withdrawals to this wallet
-
-### Tron Network Support (Dec 21)
-Added Tron (TRC20) support for USDT transfers:
-- **New TronModule**: `src/tron/` with TronService and TronController
-- **Direct Flow**: BRL → OKX → Customer Wallet (Solana or Tron)
-
-**New Endpoints**:
-- `GET /tron/balance?address=...` - Get USDT/TRX balance of any Tron address
-- `POST /tron/create-wallet` - Create new Tron wallet (returns address + private key)
-- `GET /tron/validate-address?address=...` - Validate Tron address format
-- `POST /wallet/create-tron` - Create Tron wallet for customer
-
-**BRL→USDT Flow** (supports both Solana and Tron):
-1. Customer pays BRL
-2. BRL sent to OKX via PIX
-3. USDT bought on OKX
-4. OKX withdraws USDT directly to customer's wallet (Solana or TRC20)
-
-**Fees**: ~1 USDT per withdrawal (OKX network fee)
-
-### CONVERSION Transaction Type (Dec 19)
-- Added `CONVERSION` to TransactionType enum for BRL→USDT conversions
-- `POST /wallet/buy-usdt-with-brl` now records transactions as `CONVERSION` type
-- This differentiates conversions from regular `PIX_OUT` payments
-- SendPixDto now accepts optional `transactionType` parameter
-
-### PIX Polling & Automatic Reconciliation (Dec 19)
-- **Automatic polling every 1 minute**: Checks Inter API for paid PIX charges
-- **Smart customer identification**: 3 methods to find the customer:
-  1. Extract shortId from txid (format: OTSEM + customerId + timestamp)
-  2. Find existing PENDING transaction by txid
-  3. If only 1 customer exists, assign automatically
-- **Reconciliation endpoints** (Admin only):
-  - `GET /inter/pix/cobrancas?dias=7` - List PIX charges from last N days
-  - `POST /inter/pix/reconciliar?dias=7` - Process unpaid charges and credit accounts
-- Updates existing PENDING transactions instead of creating duplicates
-
-### Transactions API Endpoint (Dec 19)
-- `GET /transactions?limit=6` - List customer transactions with optional limit
-- Returns type (PIX_IN/PIX_OUT), amount, description, payerName, createdAt
-
-### PIX Key Validation via Micro-Transfer (Dec 19)
-New endpoint to validate PIX keys by sending R$ 0,01:
-- `POST /inter/pix/validar-chave/:pixKeyId` - Validates a PIX key by micro-transfer
-
-Validation flow:
-1. Sends R$ 0,01 to the PIX key via Banco Inter
-2. If successful, checks if destination CPF/CNPJ matches customer's registration
-3. If matches, marks the key as `validated = true`
-4. This operation can only be done **ONCE per key**
-
-PixKey model now includes additional validation fields:
-- `validationAttempted` (boolean) - true if micro-transfer was attempted
-- `validationAttemptedAt` (DateTime) - when validation was attempted
-- `validationTxId` (string) - endToEnd ID of the validation transfer
-- `validationError` (string) - error message if validation failed
-
-### PIX Key Management with Auto-Validation (Dec 19)
-New endpoints for managing PIX keys with automatic validation:
-- `GET /pix-keys` - List customer's PIX keys with validation status
-- `POST /pix-keys` - Create new PIX key with automatic validation
-- `DELETE /pix-keys/:id` - Delete PIX key
-
-PixKey model now includes:
-- `validated` (boolean) - true if key belongs to customer's CPF/CNPJ
-- `validatedAt` (DateTime) - when validation occurred
-
-Auto-validation rules:
-- CPF key: validated if matches customer's CPF
-- CNPJ key: validated if matches customer's CNPJ
-- EMAIL key: validated if matches customer's email
-- PHONE key: validated if matches customer's phone
-- RANDOM key: requires manual validation
-
-### PIX Send Validation (Dec 19)
-- **KYC Required**: `accountStatus` must be `approved` to send PIX
-- **Same CPF/CNPJ**: PIX can only be sent to validated keys (or directly to CPF/CNPJ)
-- **Balance Check**: Validates sufficient balance before sending
-- **Limits Check**: Daily and monthly limits validated
-- Uses PixKey.validated field for faster validation
-- Fallback to direct CPF/CNPJ comparison if key not registered
-- Clear error messages for each validation failure
-
-### Unified Transaction Model Refactoring (Dec 16)
-- Migrated from separate Deposit/Payment models to unified Transaction model
-- New fields: payerName, payerTaxNumber, receiverName, receiverPixKey, endToEnd, txid
-- InterWebhookService now creates and updates Transaction records directly
-- InterPixService creates Transaction with status PENDING when generating QR Code
-- AdminDashboardService updated to query Transaction model for statistics
-- Better tracking with balanceBefore/balanceAfter on every transaction
-
-### Automatic PIX Deposit with Customer Identification (Dec 15)
-- **QR Code generation with customer tracking**: `POST /inter/pix/cobrancas`
-  - Generates unique `txid` with customer ID embedded (format: otsem + shortId + timestamp)
-  - Creates Transaction record with status PENDING and `externalId = txid`
-  - When PIX is paid, webhook identifies customer by txid and credits automatically
-- **Automatic deposit crediting via webhook**: `POST /inter/webhooks/receive/pix`
-  - Finds pending Transaction by txid
-  - Verifies payment amount matches requested amount (rejects mismatches)
-  - Credits customer account automatically
-  - Updates Transaction to COMPLETED with balance tracking
-  - PIX without linked customer saved as PENDING for manual review
-
-### Previous Changes
-- **Didit KYC Integration**: Integrated Didit API for identity verification
-  - New `didit/` module with service, controller, DTOs
-  - Customer model extended with `diditSessionId` and `diditVerificationUrl`
-  - KYC request creates Didit session and returns verification URL
-  - Webhook endpoint at `POST /didit/webhooks/verification` receives verification results
-  - KYC status endpoint at `GET /customers/:id/kyc/status` fetches Didit decision
-- Wallet system now supports multiple wallets per customer across different blockchain networks
-- Added WalletNetwork enum: SOLANA, ETHEREUM, POLYGON, BSC, TRON, BITCOIN, AVALANCHE, ARBITRUM, OPTIMISM, BASE
-- New wallet endpoints: import, set-main, update label, delete
-- Unique constraint: [customerId, network, externalAddress]
+-   **Database**: PostgreSQL
+-   **ORM**: Prisma
+-   **Authentication**: Passport JWT
+-   **Email Service**: Resend (for password resets)
+-   **Banking APIs**:
+    -   Banco Inter (for PIX payments and related services)
+    -   FDBank
+-   **KYC Verification**: Didit API
+-   **Cryptocurrency Exchange**: OKX (for BRL to USDT conversions and withdrawals)

@@ -3976,6 +3976,51 @@
         ]
       }
     },
+    "/admin/users/{id}/spread": {
+      "patch": {
+        "operationId": "AdminUsersController_updateSpread",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "spreadPercent": {
+                    "type": "number",
+                    "description": "Spread em percentual (ex: 0.95 para 0.95%)"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Spread atualizado"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ajustar spread do usuário",
+        "tags": [
+          "Admin Users"
+        ]
+      }
+    },
     "/admin/wallets": {
       "get": {
         "operationId": "AdminWalletsController_listWallets",
