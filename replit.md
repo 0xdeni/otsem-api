@@ -113,9 +113,16 @@ Added affiliate/referral system for commission-based earnings on conversions:
 - `GET /affiliates/validate/:code` - Validate affiliate code (returns name if valid)
 
 **Customer Endpoints** (`/customers/me/affiliate`):
+- `POST /customers/me/affiliate/activate` - Ativa programa de indicações (auto-ativação instantânea)
 - `GET /customers/me/affiliate` - Dados do afiliado (código, indicações, ganhos)
 - `GET /customers/me/affiliate/referrals` - Lista de pessoas indicadas
 - `GET /customers/me/affiliate/commissions` - Histórico de comissões
+
+**Auto-Activation Flow**:
+- Qualquer cliente pode ativar o programa de indicações instantaneamente
+- Sem necessidade de aprovação ou revisão
+- Gera código único baseado no nome do cliente (ex: JOAO123)
+- Taxa de comissão padrão: 0.5% (spreadRate = 0.005)
 
 **Commission Flow**:
 1. Customer registers with affiliate code → linked via `affiliateId`

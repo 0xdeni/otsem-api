@@ -98,6 +98,13 @@ export class CustomersController {
     return this.affiliates.getCustomerCommissions(customer.id);
   }
 
+  @Post('me/affiliate/activate')
+  @ApiOperation({ summary: 'Ativar programa de indicações para o cliente' })
+  async activateAffiliate(@Req() req: AuthRequest) {
+    const customer = await this.customers.findByUserId(req.user!.sub);
+    return this.affiliates.activateForCustomer(customer.id);
+  }
+
   @Post()
   @ApiOperation({ summary: 'Criar customer' })
   async create(@Req() req: AuthRequest, @Body() dto: CreateCustomerLocalDto) {

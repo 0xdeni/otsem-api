@@ -289,6 +289,82 @@ export class AffiliatesService {
     };
   }
 
+  async activateForCustomer(customerId: string) {
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { id: true, email: true, name: true, phone: true },
+    });
+
+    if (!customer) {
+      throw new NotFoundException('Cliente não encontrado');
+    }
+
+    const existingAffiliate = await this.prisma.affiliate.findFirst({
+      where: { email: customer.email },
+    });
+
+    if (existingAffiliate) {
+      return {
+        success: true,
+        data: {
+          referralCode: existingAffiliate.code,
+          commissionRate: Number(existingAffiliate.spreadRate),
+        },
+      };
+    }
+
+    const code = await this.generateUniqueCode(customer.name);
+    const defaultSpreadRate = 0.005;
+
+    const affiliate = await this.prisma.affiliate.create({
+      data: {
+        name: customer.name,
+        email: customer.email,
+        phone: customer.phone,
+        code,
+        spreadRate: defaultSpreadRate,
+        isActive: true,
+      },
+    });
+
+    return {
+      success: true,
+      data: {
+        referralCode: affiliate.code,
+        commissionRate: Number(affiliate.spreadRate),
+      },
+    };
+  }
+
+  private async generateUniqueCode(name: string): Promise<string> {
+    const baseName = name
+      .toUpperCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^A-Z]/g, '')
+      .substring(0, 6);
+
+    const baseCode = baseName.length >= 3 ? baseName : 'REF' + baseName;
+
+    for (let i = 0; i < 100; i++) {
+      const suffix = Math.floor(Math.random() * 1000)
+        .toString()
+        .padStart(3, '0');
+      const code = `${baseCode}${suffix}`;
+
+      const exists = await this.prisma.affiliate.findUnique({
+        where: { code },
+      });
+
+      if (!exists) {
+        return code;
+      }
+    }
+
+    const timestamp = Date.now().toString(36).toUpperCase().slice(-4);
+    return `${baseCode}${timestamp}`;
+  }
+
   async getCustomerAffiliateData(customerId: string) {
     const customer = await this.prisma.customer.findUnique({
       where: { id: customerId },

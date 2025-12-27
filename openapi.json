@@ -505,6 +505,26 @@
         ]
       }
     },
+    "/customers/me/affiliate/activate": {
+      "post": {
+        "operationId": "CustomersController_activateAffiliate",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ativar programa de indicações para o cliente",
+        "tags": [
+          "Customers"
+        ]
+      }
+    },
     "/customers/{id}": {
       "get": {
         "operationId": "CustomersController_get",
