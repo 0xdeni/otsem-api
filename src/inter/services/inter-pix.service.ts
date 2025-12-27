@@ -284,6 +284,66 @@ export class InterPixService {
     }
 
     /**
+     * 💸 Enviar Pix interno (sem validações de KYC/saldo)
+     * Usado para envio automático do sistema (ex: venda USDT → PIX)
+     */
+    async sendPixInternal(dto: {
+        valor: number;
+        chaveDestino: string;
+        tipoChave: string;
+        descricao?: string;
+        nomeFavorecido?: string;
+    }): Promise<PixPaymentResponseDto> {
+        this.logger.log(`💸 [INTERNO] Enviando Pix: R$ ${dto.valor} para ${dto.chaveDestino}`);
+
+        try {
+            const axios = this.authService.getAxiosInstance();
+
+            const payload = {
+                valor: dto.valor.toFixed(2),
+                destinatario: {
+                    tipo: dto.tipoChave,
+                    chave: dto.chaveDestino,
+                    ...(dto.nomeFavorecido && { nome: dto.nomeFavorecido }),
+                },
+                ...(dto.descricao && { descricao: dto.descricao }),
+            };
+
+            const response = await axios.post('/banking/v2/pix', payload);
+            const pixData = response.data;
+
+            this.logger.log(`✅ [INTERNO] Pix enviado: ${pixData.endToEndId || pixData.e2eId}`);
+
+            return {
+                endToEndId: pixData.endToEndId || pixData.e2eId,
+                valor: dto.valor,
+                horario: pixData.horario || new Date().toISOString(),
+                status: pixData.status || 'PROCESSANDO',
+                transacaoId: pixData.transacaoId,
+                destinatario: pixData.destinatario || pixData.favorecido || pixData.beneficiario,
+            };
+        } catch (error: any) {
+            const status = error.response?.status;
+            const message = error.response?.data?.message || error.message;
+            const details = error.response?.data;
+
+            this.logger.error(`❌ [INTERNO] Erro ao enviar Pix:`, {
+                status,
+                message,
+                details,
+            });
+
+            if (status === 400 || status === 422) {
+                throw new BadRequestException(
+                    `Erro ao enviar Pix: ${message}. Detalhes: ${JSON.stringify(details)}`,
+                );
+            }
+
+            throw new InternalServerErrorException('Erro ao processar pagamento Pix interno');
+        }
+    }
+
+    /**
      * 🔍 Consultar status de Pix enviado
      */
     async getPixStatus(endToEndId: string): Promise<any> {

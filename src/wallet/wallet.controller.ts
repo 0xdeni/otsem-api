@@ -188,4 +188,49 @@ export class WalletController {
     const customerId = this.getCustomerId(req);
     return this.walletService.setOkxWhitelisted(id, customerId, whitelisted);
   }
+
+  @Get('deposit-address')
+  @ApiOperation({ summary: 'Obter endereço de depósito USDT para venda' })
+  @ApiQuery({ name: 'network', enum: ['SOLANA', 'TRON'], required: true })
+  async getDepositAddress(@Query('network') network: 'SOLANA' | 'TRON') {
+    return this.walletService.getUsdtDepositAddress(network);
+  }
+
+  @Get('quote-sell-usdt')
+  @ApiOperation({ summary: 'Cotação: quanto BRL o cliente recebe por X USDT' })
+  @ApiQuery({ name: 'usdtAmount', type: Number, required: true })
+  @ApiQuery({ name: 'network', enum: ['SOLANA', 'TRON'], required: true })
+  async getSellUsdtQuote(
+    @Req() req: AuthRequest,
+    @Query('usdtAmount') usdtAmount: string,
+    @Query('network') network: 'SOLANA' | 'TRON',
+  ) {
+    const customerId = this.getCustomerId(req);
+    return this.walletService.quoteSellUsdt(customerId, Number(usdtAmount), network);
+  }
+
+  @Post('sell-usdt-to-pix')
+  @ApiOperation({ summary: 'Iniciar venda USDT → PIX BRL' })
+  async initiateSellUsdtToPix(
+    @Req() req: AuthRequest,
+    @Body('usdtAmount') usdtAmount: number,
+    @Body('network') network: 'SOLANA' | 'TRON',
+    @Body('pixKey') pixKey?: string,
+    @Body('pixKeyType') pixKeyType?: string,
+  ) {
+    const customerId = this.getCustomerId(req);
+    return this.walletService.initiateSellUsdtToPix(customerId, usdtAmount, network, pixKey, pixKeyType);
+  }
+
+  @Post('process-sell/:conversionId')
+  @ApiOperation({ summary: 'Processar venda pendente após depósito confirmado (admin)' })
+  async processSellConversion(@Param('conversionId') conversionId: string) {
+    return this.walletService.processSellConversion(conversionId);
+  }
+
+  @Get('pending-sell-deposits')
+  @ApiOperation({ summary: 'Verificar depósitos pendentes para vendas (admin)' })
+  async checkPendingSellDeposits() {
+    return this.walletService.checkPendingSellDeposits();
+  }
 }

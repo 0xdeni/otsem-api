@@ -784,4 +784,303 @@ export class WalletService {
       data: { okxWhitelisted: whitelisted },
     });
   }
+
+  /**
+   * Retorna endereço de depósito USDT para o cliente enviar
+   */
+  async getUsdtDepositAddress(network: 'SOLANA' | 'TRON') {
+    const okxNetwork = network === 'TRON' ? 'TRC20' : 'Solana';
+    const depositInfo = await this.okxService.getDepositAddress(okxNetwork);
+    return {
+      network,
+      chain: depositInfo.chain,
+      address: depositInfo.address,
+      memo: depositInfo.memo,
+      instructions: `Envie USDT ${network === 'TRON' ? 'TRC20' : 'SPL'} para este endereço. Após confirmação, o valor será convertido e enviado via PIX.`,
+    };
+  }
+
+  /**
+   * Cotação para venda USDT → PIX BRL
+   */
+  async quoteSellUsdt(customerId: string, usdtAmount: number, network: 'SOLANA' | 'TRON') {
+    if (usdtAmount < 1) {
+      throw new BadRequestException('Quantidade mínima é 1 USDT');
+    }
+
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+      include: { 
+        user: { select: { spreadValue: true } },
+        pixKeys: { where: { status: 'ACTIVE' }, take: 1 },
+      },
+    });
+
+    const spreadRateRaw = customer?.user?.spreadValue ? Number(customer.user.spreadValue) : 1;
+    const spreadRate = Number.isFinite(spreadRateRaw) && spreadRateRaw > 0 ? spreadRateRaw : 1;
+    const spreadPercent = (1 - spreadRate) * 100;
+
+    const okxRate = await this.okxService.getBrlToUsdtRate();
+    const exchangeRate = okxRate || 5.5;
+
+    const brlFromExchange = usdtAmount * exchangeRate;
+    const spreadBrl = brlFromExchange * (1 - spreadRate);
+    const brlToReceive = brlFromExchange * spreadRate;
+    const okxTradingFee = brlFromExchange * 0.001;
+    const netProfit = spreadBrl - okxTradingFee;
+
+    const mainPixKey = customer?.pixKeys?.[0];
+
+    return {
+      usdtAmount,
+      network,
+      exchangeRate,
+      brlFromExchange: Math.round(brlFromExchange * 100) / 100,
+      spreadPercent: Math.round(spreadPercent * 100) / 100,
+      spreadBrl: Math.round(spreadBrl * 100) / 100,
+      brlToReceive: Math.round(brlToReceive * 100) / 100,
+      okxTradingFee: Math.round(okxTradingFee * 100) / 100,
+      pixKey: mainPixKey ? { key: mainPixKey.keyValue, type: mainPixKey.keyType } : null,
+      canProceed: !!mainPixKey,
+      message: mainPixKey 
+        ? `Você receberá R$ ${brlToReceive.toFixed(2)} via PIX`
+        : 'Configure uma chave PIX principal primeiro',
+    };
+  }
+
+  /**
+   * Inicia venda USDT → PIX
+   * Cliente envia USDT para endereço OKX, sistema monitora e processa
+   */
+  async initiateSellUsdtToPix(
+    customerId: string,
+    usdtAmount: number,
+    network: 'SOLANA' | 'TRON',
+    pixKey?: string,
+    pixKeyType?: string,
+  ) {
+    if (usdtAmount < 1) {
+      throw new BadRequestException('Quantidade mínima é 1 USDT');
+    }
+
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+      include: { 
+        pixKeys: { where: { status: 'ACTIVE' }, take: 1 },
+      },
+    });
+
+    if (!customer) {
+      throw new NotFoundException('Cliente não encontrado');
+    }
+
+    const account = await this.prisma.account.findFirst({ where: { customerId } });
+    if (!account) {
+      throw new BadRequestException('Conta não encontrada');
+    }
+
+    const destPixKey = pixKey || customer.pixKeys?.[0]?.keyValue;
+    const destPixKeyType = pixKeyType || customer.pixKeys?.[0]?.keyType || 'CPF';
+
+    if (!destPixKey) {
+      throw new BadRequestException('Chave PIX de destino não informada');
+    }
+
+    const okxNetwork = network === 'TRON' ? 'TRC20' : 'Solana';
+    const depositAddress = await this.okxService.getDepositAddress(okxNetwork);
+
+    const quote = await this.quoteSellUsdt(customerId, usdtAmount, network);
+
+    const conversion = await this.prisma.conversion.create({
+      data: {
+        customerId,
+        accountId: account.id,
+        type: 'SELL',
+        brlCharged: 0,
+        brlExchanged: quote.brlFromExchange,
+        spreadPercent: quote.spreadPercent / 100,
+        spreadBrl: quote.spreadBrl,
+        usdtPurchased: usdtAmount,
+        usdtWithdrawn: 0,
+        exchangeRate: quote.exchangeRate,
+        network,
+        walletAddress: depositAddress.address,
+        pixDestKey: destPixKey,
+        pixDestKeyType: destPixKeyType,
+        okxWithdrawFee: 0,
+        okxTradingFee: quote.okxTradingFee,
+        totalOkxFees: quote.okxTradingFee,
+        grossProfit: quote.spreadBrl,
+        netProfit: quote.spreadBrl - quote.okxTradingFee,
+        status: 'PENDING',
+      },
+    });
+
+    this.logger.log(`[SELL] Venda iniciada: ${usdtAmount} USDT → PIX ${destPixKey}`);
+
+    return {
+      conversionId: conversion.id,
+      status: 'PENDING',
+      usdtAmount,
+      network,
+      depositAddress: depositAddress.address,
+      chain: depositAddress.chain,
+      memo: depositAddress.memo,
+      quote: {
+        brlToReceive: quote.brlToReceive,
+        exchangeRate: quote.exchangeRate,
+        spreadPercent: quote.spreadPercent,
+      },
+      pixDestination: { key: destPixKey, type: destPixKeyType },
+      instructions: `Envie exatamente ${usdtAmount} USDT ${network === 'TRON' ? 'TRC20' : 'SPL'} para o endereço acima. Após confirmação, o valor será convertido e enviado via PIX automaticamente.`,
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+    };
+  }
+
+  /**
+   * Processa venda pendente após depósito USDT confirmado
+   * (Chamado pelo job de monitoramento ou manualmente pelo admin)
+   */
+  async processSellConversion(conversionId: string) {
+    const conversion = await this.prisma.conversion.findUnique({
+      where: { id: conversionId },
+      include: { customer: true, account: true },
+    });
+
+    if (!conversion) {
+      throw new NotFoundException('Conversão não encontrada');
+    }
+
+    if (conversion.type !== 'SELL') {
+      throw new BadRequestException('Esta conversão não é do tipo SELL');
+    }
+
+    if (conversion.status !== 'USDT_RECEIVED') {
+      throw new BadRequestException(`Status inválido: ${conversion.status}. Esperado: USDT_RECEIVED`);
+    }
+
+    this.logger.log(`[SELL] Processando venda ${conversionId}: ${conversion.usdtPurchased} USDT`);
+
+    const usdtAmount = Number(conversion.usdtPurchased);
+
+    try {
+      await this.prisma.conversion.update({
+        where: { id: conversionId },
+        data: { status: 'USDT_SOLD' },
+      });
+
+      await this.okxService.transferUsdtToTrading(usdtAmount);
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      const okxSellResult = await this.okxService.sellAndCheckHistory(usdtAmount);
+      const brlFromExchange = okxSellResult.brlReceived;
+
+      if (brlFromExchange <= 0) {
+        throw new Error('Não foi possível determinar o valor em BRL recebido');
+      }
+
+      const spreadRate = 1 - Number(conversion.spreadPercent);
+      const brlToSend = Number((brlFromExchange * spreadRate).toFixed(2));
+      const spreadBrl = Number((brlFromExchange - brlToSend).toFixed(2));
+      const okxTradingFee = brlFromExchange * 0.001;
+      const netProfit = spreadBrl - okxTradingFee;
+
+      await this.prisma.conversion.update({
+        where: { id: conversionId },
+        data: {
+          brlExchanged: brlFromExchange,
+          brlCharged: brlToSend,
+          spreadBrl,
+          okxOrderId: okxSellResult.ordId,
+          okxTradingFee,
+          totalOkxFees: okxTradingFee,
+          grossProfit: spreadBrl,
+          netProfit,
+          status: 'PIX_OUT_SENT',
+        },
+      });
+
+      this.logger.log(`[SELL] Enviando PIX: R$ ${brlToSend} para ${conversion.pixDestKey}`);
+
+      const pixResult = await this.interPixService.sendPixInternal({
+        valor: brlToSend,
+        chaveDestino: conversion.pixDestKey!,
+        tipoChave: conversion.pixDestKeyType as any || 'CPF',
+        descricao: `OTSEM - Venda ${usdtAmount} USDT`,
+      });
+
+      await this.prisma.conversion.update({
+        where: { id: conversionId },
+        data: {
+          pixEndToEnd: pixResult.endToEndId,
+          status: 'COMPLETED',
+          completedAt: new Date(),
+        },
+      });
+
+      this.logger.log(`[SELL] Venda concluída: ${usdtAmount} USDT → R$ ${brlToSend} PIX`);
+
+      return {
+        message: 'Venda concluída com sucesso',
+        conversionId,
+        usdtSold: usdtAmount,
+        brlFromExchange,
+        brlSent: brlToSend,
+        spreadBrl,
+        netProfit,
+        pixEndToEnd: pixResult.endToEndId,
+      };
+    } catch (error) {
+      await this.prisma.conversion.update({
+        where: { id: conversionId },
+        data: {
+          status: 'FAILED',
+          errorMessage: error instanceof Error ? error.message : 'Erro desconhecido',
+        },
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Lista depósitos pendentes na OKX para reconciliação
+   */
+  async checkPendingSellDeposits() {
+    const pendingSells = await this.prisma.conversion.findMany({
+      where: { type: 'SELL', status: 'PENDING' },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const recentDeposits = await this.okxService.getRecentDeposits();
+
+    const matched: any[] = [];
+
+    for (const sell of pendingSells) {
+      const matchingDeposit = recentDeposits.find((d: any) => {
+        const depositAmount = parseFloat(d.amt || '0');
+        const expectedAmount = Number(sell.usdtPurchased);
+        return Math.abs(depositAmount - expectedAmount) < 0.01 && d.state === '2';
+      });
+
+      if (matchingDeposit) {
+        await this.prisma.conversion.update({
+          where: { id: sell.id },
+          data: {
+            status: 'USDT_RECEIVED',
+            okxDepositId: matchingDeposit.depId,
+          },
+        });
+
+        matched.push({
+          conversionId: sell.id,
+          depositId: matchingDeposit.depId,
+          amount: matchingDeposit.amt,
+        });
+
+        this.logger.log(`[SELL] Depósito identificado: ${matchingDeposit.amt} USDT para conversão ${sell.id}`);
+      }
+    }
+
+    return { pendingCount: pendingSells.length, matchedCount: matched.length, matched };
+  }
 }

@@ -686,11 +686,19 @@ model AffiliateCommission {
 
 // ==================== CONVERSIONS ====================
 
+enum ConversionType {
+  BUY   // BRL -> USDT (compra)
+  SELL  // USDT -> BRL (venda)
+}
+
 enum ConversionStatus {
   PENDING
   PIX_SENT
   USDT_BOUGHT
   USDT_WITHDRAWN
+  USDT_RECEIVED    // Para SELL: USDT depositado
+  USDT_SOLD        // Para SELL: USDT vendido na OKX
+  PIX_OUT_SENT     // Para SELL: PIX enviado ao cliente
   COMPLETED
   FAILED
 }
@@ -700,6 +708,7 @@ model Conversion {
   customerId    String
   accountId     String
   transactionId String?          @unique
+  type          ConversionType   @default(BUY)
   
   brlCharged      Decimal @db.Decimal(18, 2)
   brlExchanged    Decimal @db.Decimal(18, 2)
@@ -718,6 +727,10 @@ model Conversion {
   pixTxid         String?
   okxOrderId      String?
   okxWithdrawId   String?
+  okxDepositId    String?
+  
+  pixDestKey      String?
+  pixDestKeyType  String?
   
   affiliateId         String?
   affiliateCommission Decimal? @db.Decimal(18, 2)
@@ -743,6 +756,7 @@ model Conversion {
   @@map("conversions")
   @@index([customerId])
   @@index([status])
+  @@index([type])
   @@index([createdAt])
   @@index([affiliateId])
 }

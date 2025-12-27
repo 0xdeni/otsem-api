@@ -2398,6 +2398,149 @@
         ]
       }
     },
+    "/wallet/deposit-address": {
+      "get": {
+        "operationId": "WalletController_getDepositAddress",
+        "parameters": [
+          {
+            "name": "network",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "SOLANA",
+                "TRON"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Obter endereço de depósito USDT para venda",
+        "tags": [
+          "Wallet"
+        ]
+      }
+    },
+    "/wallet/quote-sell-usdt": {
+      "get": {
+        "operationId": "WalletController_getSellUsdtQuote",
+        "parameters": [
+          {
+            "name": "usdtAmount",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "network",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "SOLANA",
+                "TRON"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cotação: quanto BRL o cliente recebe por X USDT",
+        "tags": [
+          "Wallet"
+        ]
+      }
+    },
+    "/wallet/sell-usdt-to-pix": {
+      "post": {
+        "operationId": "WalletController_initiateSellUsdtToPix",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Iniciar venda USDT → PIX BRL",
+        "tags": [
+          "Wallet"
+        ]
+      }
+    },
+    "/wallet/process-sell/{conversionId}": {
+      "post": {
+        "operationId": "WalletController_processSellConversion",
+        "parameters": [
+          {
+            "name": "conversionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Processar venda pendente após depósito confirmado (admin)",
+        "tags": [
+          "Wallet"
+        ]
+      }
+    },
+    "/wallet/pending-sell-deposits": {
+      "get": {
+        "operationId": "WalletController_checkPendingSellDeposits",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Verificar depósitos pendentes para vendas (admin)",
+        "tags": [
+          "Wallet"
+        ]
+      }
+    },
     "/inter/webhooks/{tipoWebhook}/callbacks": {
       "get": {
         "operationId": "InterWebhookController_getCallbacks",
