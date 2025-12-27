@@ -3643,6 +3643,53 @@
         ]
       }
     },
+    "/okx/withdraw-crypto": {
+      "post": {
+        "operationId": "OkxController_withdrawCrypto",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Sacar qualquer crypto (SOL, TRX, etc) para endereço externo",
+        "tags": [
+          "OKX"
+        ]
+      }
+    },
+    "/okx/withdrawal-fee": {
+      "get": {
+        "operationId": "OkxController_getWithdrawalFee",
+        "parameters": [
+          {
+            "name": "currency",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "chain",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Taxa mínima de saque para uma crypto/chain",
+        "tags": [
+          "OKX"
+        ]
+      }
+    },
     "/tron/hot-wallet": {
       "get": {
         "operationId": "TronController_getHotWalletInfo",

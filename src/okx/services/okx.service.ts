@@ -204,6 +204,51 @@ export class OkxService {
         return response.data;
     }
 
+    async withdrawCrypto({
+        currency,
+        amount,
+        toAddress,
+        chain,
+        fee
+    }: {
+        currency: string;
+        amount: string;
+        toAddress: string;
+        chain: string;
+        fee: string;
+    }) {
+        const method = 'POST';
+        const requestPath = '/api/v5/asset/withdrawal';
+        const bodyObj = {
+            ccy: currency,
+            amt: amount,
+            dest: 4,
+            toAddr: toAddress,
+            chain: chain,
+            fee: fee
+        };
+        const body = JSON.stringify(bodyObj);
+
+        const headers = this.authService.getAuthHeaders(method, requestPath, body);
+
+        const url = `https://www.okx.com${requestPath}`;
+        const response = await axios.post(url, bodyObj, { headers });
+        return response.data;
+    }
+
+    async getWithdrawalFee(currency: string, chain: string) {
+        const method = 'GET';
+        const requestPath = `/api/v5/asset/currencies?ccy=${currency}`;
+        const headers = this.authService.getAuthHeaders(method, requestPath, '');
+
+        const url = `https://www.okx.com${requestPath}`;
+        const response = await axios.get(url, { headers });
+        
+        const currencies = response.data?.data || [];
+        const chainData = currencies.find((c: any) => c.chain === chain);
+        return chainData?.minFee || '0';
+    }
+
     async buyBrlAndReturnUsdtBalance(brlAmount: number) {
         await this.buyUsdtWithBrl(brlAmount);
         // Aguarda alguns segundos para a ordem ser processada

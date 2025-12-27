@@ -97,4 +97,35 @@ export class OkxController {
     async getFundingBalance() {
         return await this.okxService.getFundingBalance('USDT');
     }
+
+    @Post('withdraw-crypto')
+    @ApiOperation({ summary: 'Sacar qualquer crypto (SOL, TRX, etc) para endereço externo' })
+    async withdrawCrypto(@Body() body: {
+        currency: string;
+        amount: string;
+        toAddress: string;
+        chain: string;
+        fee?: string;
+    }) {
+        const fee = body.fee || await this.okxService.getWithdrawalFee(body.currency, body.chain);
+        return await this.okxService.withdrawCrypto({
+            currency: body.currency,
+            amount: body.amount,
+            toAddress: body.toAddress,
+            chain: body.chain,
+            fee: fee
+        });
+    }
+
+    @Get('withdrawal-fee')
+    @ApiOperation({ summary: 'Taxa mínima de saque para uma crypto/chain' })
+    @ApiQuery({ name: 'currency', type: String, required: true })
+    @ApiQuery({ name: 'chain', type: String, required: true })
+    async getWithdrawalFee(
+        @Query('currency') currency: string,
+        @Query('chain') chain: string
+    ) {
+        const fee = await this.okxService.getWithdrawalFee(currency, chain);
+        return { currency, chain, minFee: fee };
+    }
 }
