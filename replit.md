@@ -139,14 +139,18 @@ Added admin endpoints for viewing and analyzing BRL→USDT conversions:
 - `GET /admin/conversions` - List all conversions with filters (dateStart, dateEnd, customerId, affiliateId, status)
 - `GET /admin/conversions/stats` - Aggregated statistics for the filtered period
 
-**Response fields** (values in centavos):
-- `brlPaid`, `usdtCredited`, `exchangeRateUsed`, `spreadPercent`
+**Response fields** (values in centavos, except spreadApplied which is percentage):
+- `brlPaid` - Valor pago pelo cliente em BRL
+- `usdtCredited` - USDT creditado na carteira do cliente
+- `spreadApplied` - Spread aplicado (%) - ex: 5.0 = 5%
+- `exchangeRateBrlUsdt` - Taxa de câmbio BRL/USDT usada na conversão
 - `okxWithdrawFeeBrl` - Taxa de saque OKX (2.1 USDT TRC20, 1 USDT Solana) convertida para BRL
 - `okxTradingFeeBrl` - Taxa de trading OKX (0.1% do valor trocado)
-- `totalFeesBrl` - Total de taxas OKX
-- `grossProfitBrl` - Lucro bruto (spread)
-- `netProfitBrl` - Lucro líquido (spread - taxas OKX - comissão afiliado)
-- `affiliate` (id, code, name), `affiliateCommissionBrl`
+- `totalOkxFeesBrl` - Total de taxas OKX
+- `grossProfitBrl` - Lucro bruto (spread cobrado do cliente)
+- `affiliateCommissionBrl` - Comissão paga ao afiliado
+- `netProfitBrl` - Lucro líquido (grossProfit - taxas OKX - comissão afiliado)
+- `affiliate` (id, code, name)
 - `okxOrderId`, `network`, `sourceOfBRL`
 
 **Stats response**:

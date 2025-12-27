@@ -79,21 +79,20 @@ export class AdminConversionsService {
       const spread = extData.spread || {};
       const okxBuyResult = extData.okxBuyResult || {};
       
-      const brlPaid = Math.round(Number(tx.amount) * 100);
+      const brlPaid = Number(tx.amount) || 0;
       const usdtAmount = extData.usdtAmount ? Number(extData.usdtAmount) : 0;
-      const usdtCredited = Math.round(usdtAmount * 100);
       
-      const spreadBrl = spread.spreadBrl ? Number(spread.spreadBrl) : 0;
+      const chargedBrl = spread.chargedBrl ? Number(spread.chargedBrl) : brlPaid;
+      const exchangedBrl = spread.exchangedBrl ? Number(spread.exchangedBrl) : chargedBrl;
+      const spreadBrl = spread.spreadBrl ? Number(spread.spreadBrl) : (chargedBrl - exchangedBrl);
       const spreadRate = spread.spreadRate ? Number(spread.spreadRate) : 1;
       const spreadPercent = spreadRate < 1 ? Math.round((1 - spreadRate) * 10000) / 100 : 0;
       
-      const chargedBrl = spread.chargedBrl ? Number(spread.chargedBrl) : Number(tx.amount);
-      const exchangedBrl = spread.exchangedBrl ? Number(spread.exchangedBrl) : chargedBrl;
-      const exchangeRate = usdtAmount > 0 ? (exchangedBrl / usdtAmount) : 0;
+      const exchangeRateBrlUsdt = usdtAmount > 0 ? (exchangedBrl / usdtAmount) : 0;
       
-      const network = extData.network || 'SOLANA';
+      const network = extData.network || extData.walletNetwork || 'SOLANA';
       const okxWithdrawFeeUsdt = network === 'TRON' ? 2.1 : 1.0;
-      const okxWithdrawFeeBrl = okxWithdrawFeeUsdt * exchangeRate;
+      const okxWithdrawFeeBrl = exchangeRateBrlUsdt > 0 ? (okxWithdrawFeeUsdt * exchangeRateBrlUsdt) : 0;
       
       const okxTradingFeePercent = 0.001;
       const okxTradingFeeBrl = exchangedBrl * okxTradingFeePercent;
@@ -114,19 +113,19 @@ export class AdminConversionsService {
         customer: customer
           ? { id: customer.id, name: customer.name, email: customer.email }
           : null,
-        brlPaid,
-        usdtCredited,
-        exchangeRateUsed: Math.round(exchangeRate * 100),
-        spreadPercent,
+        brlPaid: Math.round(brlPaid * 100),
+        usdtCredited: Math.round(usdtAmount * 100),
+        spreadApplied: spreadPercent,
+        exchangeRateBrlUsdt: Math.round(exchangeRateBrlUsdt * 100),
         okxWithdrawFeeBrl: Math.round(okxWithdrawFeeBrl * 100),
         okxTradingFeeBrl: Math.round(okxTradingFeeBrl * 100),
-        totalFeesBrl: Math.round(okxTotalFeeBrl * 100),
+        totalOkxFeesBrl: Math.round(okxTotalFeeBrl * 100),
         grossProfitBrl: Math.round(grossProfit * 100),
+        affiliateCommissionBrl: Math.round(affiliateCommission * 100),
         netProfitBrl: Math.round(netProfit * 100),
         affiliate: affiliate
           ? { id: affiliate.id, code: affiliate.code, name: affiliate.name }
           : null,
-        affiliateCommissionBrl: Math.round(affiliateCommission * 100),
         okxOrderId,
         network,
         sourceOfBRL: 'INTER',
