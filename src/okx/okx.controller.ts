@@ -143,6 +143,16 @@ export class OkxController {
         return { currency, balance };
     }
 
+    @Get('all-balances')
+    @ApiOperation({ summary: 'Todos os saldos (trading + funding)' })
+    async getAllBalances() {
+        const [trading, funding] = await Promise.all([
+            this.okxService.getAllTradingBalances(),
+            this.okxService.getAllFundingBalances()
+        ]);
+        return { trading, funding };
+    }
+
     @Post('transfer-crypto-to-funding')
     @ApiOperation({ summary: 'Transferir crypto de trading para funding (para saque)' })
     async transferCryptoToFunding(@Body() body: { currency: string; amount: string }) {

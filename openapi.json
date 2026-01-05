@@ -3778,6 +3778,21 @@
         ]
       }
     },
+    "/okx/all-balances": {
+      "get": {
+        "operationId": "OkxController_getAllBalances",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Todos os saldos (trading + funding)",
+        "tags": [
+          "OKX"
+        ]
+      }
+    },
     "/okx/transfer-crypto-to-funding": {
       "post": {
         "operationId": "OkxController_transferCryptoToFunding",
