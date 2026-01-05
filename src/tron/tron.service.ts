@@ -11,7 +11,7 @@ export class TronService implements OnModuleInit {
     private initialized = false;
 
     constructor(private configService: ConfigService) {
-        this.hotWalletAddress = this.configService.get<string>('OKX_TRON_DEPOSIT_ADDRESS') || 'TLtccxekdFJ6Qjy8yAEBuiv5BM7uk4iepr';
+        this.hotWalletAddress = '';
     }
 
     async onModuleInit() {
@@ -31,7 +31,14 @@ export class TronService implements OnModuleInit {
                 fullHost: 'https://api.trongrid.io',
                 privateKey: privateKey
             });
-            this.logger.log('✅ TronWeb inicializado com hot wallet');
+            
+            try {
+                this.hotWalletAddress = this.tronWeb.address.fromPrivateKey(privateKey);
+                this.logger.log(`✅ TronWeb inicializado com hot wallet: ${this.hotWalletAddress}`);
+            } catch (e: any) {
+                this.hotWalletAddress = this.tronWeb.defaultAddress?.base58 || '';
+                this.logger.log(`✅ TronWeb inicializado com hot wallet: ${this.hotWalletAddress}`);
+            }
         } else {
             this.tronWeb = new TronWebClass({
                 fullHost: 'https://api.trongrid.io'
