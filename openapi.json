@@ -3901,6 +3901,84 @@
         ]
       }
     },
+    "/solana/hot-wallet": {
+      "get": {
+        "operationId": "SolanaController_getHotWalletInfo",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Endereço e saldos da hot wallet Solana",
+        "tags": [
+          "Solana"
+        ]
+      }
+    },
+    "/solana/balance": {
+      "get": {
+        "operationId": "SolanaController_getBalance",
+        "parameters": [
+          {
+            "name": "address",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Saldo USDT e SOL de uma carteira Solana",
+        "tags": [
+          "Solana"
+        ]
+      }
+    },
+    "/solana/send-sol": {
+      "post": {
+        "operationId": "SolanaController_sendSol",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Enviar SOL da hot wallet para endereço",
+        "tags": [
+          "Solana"
+        ]
+      }
+    },
+    "/solana/validate-address": {
+      "get": {
+        "operationId": "SolanaController_validateAddress",
+        "parameters": [
+          {
+            "name": "address",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Validar endereço Solana",
+        "tags": [
+          "Solana"
+        ]
+      }
+    },
     "/pix-keys": {
       "get": {
         "operationId": "PixKeysController_getMyKeys",
