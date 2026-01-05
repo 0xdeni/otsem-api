@@ -190,6 +190,37 @@ export class TronService implements OnModuleInit {
         }
     }
 
+    async sendTrx(toAddress: string, amount: number): Promise<{ txId: string; success: boolean }> {
+        await this.ensureInitialized();
+        const privateKey = this.configService.get<string>('TRON_HOT_WALLET_PRIVATE_KEY');
+        if (!privateKey) {
+            throw new Error('Hot wallet private key não configurada');
+        }
+
+        const isValid = await this.isValidAddress(toAddress);
+        if (!isValid) {
+            throw new Error('Endereço Tron inválido');
+        }
+
+        try {
+            const amountInSun = Math.floor(amount * 1_000_000);
+            const tx = await this.tronWeb.trx.sendTransaction(toAddress, amountInSun);
+
+            if (tx.result) {
+                this.logger.log(`✅ TRX enviado: ${amount} para ${toAddress}, txId: ${tx.txid}`);
+                return {
+                    txId: tx.txid,
+                    success: true
+                };
+            } else {
+                throw new Error(tx.message || 'Falha ao enviar TRX');
+            }
+        } catch (error: any) {
+            this.logger.error(`❌ Erro ao enviar TRX: ${error.message}`);
+            throw error;
+        }
+    }
+
     async getTransactionInfo(txId: string): Promise<any> {
         await this.ensureInitialized();
         try {

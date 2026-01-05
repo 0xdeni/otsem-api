@@ -20,6 +20,7 @@ import { WalletModule } from './wallet/wallet.module';
 import { PixKeysModule } from './pix-keys/pix-keys.module';
 import { DiditModule } from './didit/didit.module';
 import { TronModule } from './tron/tron.module';
+import { SolanaModule } from './solana/solana.module';
 import { AffiliatesModule } from './affiliates/affiliates.module';
 
 @Module({
@@ -37,6 +38,7 @@ import { AffiliatesModule } from './affiliates/affiliates.module';
     DiditModule,
     OkxModule,
     TronModule,
+    SolanaModule,
     MailModule,
     AdminDashboardModule,
     InterModule,
