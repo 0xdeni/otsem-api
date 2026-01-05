@@ -102,7 +102,7 @@ export class SellProcessingService {
     } else if (status === 'USDT_RECEIVED') {
       await this.sellUsdtForBrl(conversion);
     } else if (status === 'USDT_SOLD') {
-      await this.sendPixToCustomer(conversion);
+      await this.creditBalanceToCustomer(conversion);
     }
   }
 
@@ -170,16 +170,7 @@ export class SellProcessingService {
     this.logger.log(`[SELL] USDT vendido: R$ ${sellResult.brlReceived.toFixed(2)} (spread: R$ ${spreadBrl.toFixed(2)})`);
   }
 
-  private async sendPixToCustomer(conversion: any) {
-    const customer = conversion.customer;
-    
-    const pixKey = customer.cpf || customer.cnpj || customer.mainPixKey;
-    if (!pixKey) {
-      throw new Error('Cliente não possui chave PIX cadastrada (CPF, CNPJ ou chave principal)');
-    }
-    
-    const tipoChave = customer.cpf ? 'CPF' : customer.cnpj ? 'CNPJ' : 'CHAVE';
-    
+  private async creditBalanceToCustomer(conversion: any) {
     const usdtAmount = parseFloat(conversion.usdtPurchased.toString());
     const spreadPercent = parseFloat(conversion.spreadPercent.toString());
     const brlExchanged = parseFloat(conversion.brlExchanged.toString());
@@ -193,28 +184,23 @@ export class SellProcessingService {
     const grossProfit = spreadBrl;
     const netProfit = spreadBrl - okxTradingFee;
     
-    this.logger.log(`[SELL] Enviando PIX de R$ ${brlToCustomer.toFixed(2)} para ${pixKey}`);
-    this.logger.log(`[SELL] Detalhes: USDT=${usdtAmount}, BRL bruto=${brlExchanged.toFixed(2)}, spread=${spreadBrl.toFixed(2)}, taxaOKX=${okxTradingFee.toFixed(2)}, líquido=${brlToCustomer.toFixed(2)}`);
-    
-    const pixResult = await this.interPixService.sendPixInternal({
-      valor: brlToCustomer,
-      chaveDestino: pixKey,
-      tipoChave,
-      descricao: `Venda USDT - ${usdtAmount} USDT`,
-      nomeFavorecido: customer.name,
-    });
-    
     const balanceBefore = parseFloat(conversion.account.balance.toString());
-    const balanceAfter = balanceBefore;
+    const balanceAfter = balanceBefore + brlToCustomer;
+    
+    this.logger.log(`[SELL] Creditando R$ ${brlToCustomer.toFixed(2)} no saldo OTSEM`);
+    this.logger.log(`[SELL] Detalhes: USDT=${usdtAmount}, BRL bruto=${brlExchanged.toFixed(2)}, spread=${spreadBrl.toFixed(2)}, taxaOKX=${okxTradingFee.toFixed(2)}, líquido=${brlToCustomer.toFixed(2)}`);
+    this.logger.log(`[SELL] Saldo: R$ ${balanceBefore.toFixed(2)} → R$ ${balanceAfter.toFixed(2)}`);
     
     await this.prisma.$transaction([
+      this.prisma.account.update({
+        where: { id: conversion.accountId },
+        data: { balance: new Decimal(balanceAfter) },
+      }),
+      
       this.prisma.conversion.update({
         where: { id: conversion.id },
         data: {
           status: 'COMPLETED',
-          pixEndToEnd: pixResult.endToEndId,
-          pixDestKey: pixKey,
-          pixDestKeyType: tipoChave,
           grossProfit: new Decimal(grossProfit),
           netProfit: new Decimal(netProfit),
           completedAt: new Date(),
@@ -228,11 +214,10 @@ export class SellProcessingService {
           subType: 'SELL',
           amount: new Decimal(brlToCustomer),
           balanceBefore: new Decimal(balanceBefore),
-          balanceAfter: new Decimal(balanceBefore),
-          description: `Venda de ${usdtAmount} USDT → R$ ${brlToCustomer.toFixed(2)} (PIX enviado)`,
+          balanceAfter: new Decimal(balanceAfter),
+          description: `Venda de ${usdtAmount} USDT → R$ ${brlToCustomer.toFixed(2)} (crédito em conta)`,
           status: 'COMPLETED',
           externalId: conversion.txHash || conversion.id,
-          endToEnd: pixResult.endToEndId,
           externalData: {
             usdtAmount,
             brlExchanged,
@@ -246,14 +231,12 @@ export class SellProcessingService {
             netProfit,
             network: conversion.network,
             txHash: conversion.txHash,
-            pixDestKey: pixKey,
-            pixDestKeyType: tipoChave,
           },
         },
       }),
     ]);
 
-    this.logger.log(`[SELL] ✅ Conversão ${conversion.id} concluída! PIX enviado: ${pixResult.endToEndId}`);
+    this.logger.log(`[SELL] ✅ Conversão ${conversion.id} concluída! Novo saldo: R$ ${balanceAfter.toFixed(2)}`);
   }
 
   async manualProcessConversion(conversionId: string) {

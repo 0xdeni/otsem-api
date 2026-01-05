@@ -127,7 +127,10 @@ O cliente assina a transação no frontend (chave privada nunca sai do dispositi
 1. `PENDING` - Transação submetida, aguardando confirmação blockchain
 2. `USDT_RECEIVED` - USDT confirmado na OKX
 3. `USDT_SOLD` - USDT vendido por BRL na OKX
-4. `COMPLETED` - PIX enviado para o cliente
+4. `COMPLETED` - BRL creditado no saldo OTSEM do cliente
+
+### SELL Flow - Crédito em Conta (Não PIX)
+**Importante:** O SELL flow credita o valor BRL diretamente no saldo OTSEM do cliente (balance interno), NÃO envia PIX para conta externa. O cliente pode depois sacar o saldo via PIX OUT se desejar.
 
 ### Automated SELL Processing (SellProcessingService)
 
@@ -136,15 +139,14 @@ O sistema possui um cron job que roda **a cada minuto** para processar vendas au
 1. **Polling de Depósitos OKX**: Verifica novos depósitos na OKX
 2. **Matching por txHash ou Amount/Network/Time**: Associa depósitos a conversões pendentes
 3. **Venda Automática**: Vende USDT por BRL na OKX via market order
-4. **Envio de PIX**: Envia PIX para o cliente via Banco Inter
+4. **Crédito em Conta**: Credita o valor BRL no saldo OTSEM do cliente
 5. **Detecção de Órfãos**: Alerta sobre depósitos não processados (sem conversão correspondente)
 
 **Arquivos chave:**
 - `src/wallet/sell-processing.service.ts` - Orquestra todo o fluxo automatizado
 - `src/okx/services/okx.service.ts` - `sellUsdtForBrl()`, `getRecentDeposits()`
-- `src/inter/services/inter-pix.service.ts` - `sendPixInternal()`
 
-**Importante:** O balance OTSEM do cliente **não muda** no SELL flow porque o PIX é enviado diretamente do Banco Inter para a conta bancária do cliente.
+**Importante:** O balance OTSEM do cliente **AUMENTA** no SELL flow. O BRL é creditado internamente na conta OTSEM, e o cliente pode sacar via PIX OUT quando desejar.
 
 ### Fee Model
 - **Cliente paga apenas spread**: 0.95% (padrão, configurável por usuário)
