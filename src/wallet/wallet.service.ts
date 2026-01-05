@@ -515,30 +515,75 @@ export class WalletService {
     
     this.logger.log(`[Conversion] Spread: userBase=${baseSpreadPercent.toFixed(4)}, affiliate=${affiliateSpreadPercent.toFixed(4)}, total=${totalSpreadPercent.toFixed(4)}, rate=${spreadRate.toFixed(4)}`);
 
-    const stages: { pixTransfer: string; conversion: string; usdtTransfer: string } = {
-      pixTransfer: 'pending', // 1 - transferindo reais via PIX para OKX
-      conversion: 'pending', // 2 - comprando USDT na OKX
-      usdtTransfer: 'pending', // 3 - enviando USDT para carteira do cliente
-    };
+    // Determinar carteira de destino antes de iniciar
+    let wallet;
+    if (walletId) {
+      wallet = await this.getWalletById(walletId, customerId);
+    } else {
+      wallet = await this.getMainWallet(customerId, 'SOLANA');
+      if (!wallet) {
+        wallet = await this.getMainWallet(customerId, 'TRON');
+      }
+    }
+
+    if (!wallet || !wallet.externalAddress) {
+      throw new Error('Carteira (Solana ou Tron) não encontrada para o cliente');
+    }
+
+    if (!wallet.okxWhitelisted) {
+      throw new Error('Carteira não está na whitelist da OKX. Adicione o endereço na OKX e marque como whitelistada antes de converter.');
+    }
+
+    // Criar Conversion com status PENDING para tracking em tempo real
+    const conversion = await this.prisma.conversion.create({
+      data: {
+        customerId,
+        accountId: account.id,
+        type: 'BUY',
+        brlCharged: brlAmount,
+        brlExchanged: brlToExchange,
+        spreadPercent: totalSpreadPercent,
+        spreadBrl: spreadAmount,
+        network: wallet.network,
+        walletAddress: wallet.externalAddress,
+        walletId: wallet.id,
+        affiliateId: affiliateSpread.affiliate?.id || null,
+        status: 'PENDING',
+      },
+    });
+    this.logger.log(`[BUY] Conversion ${conversion.id} criada com status PENDING`);
 
     let pixResult: any = null;
     let okxBuyResult: any = null;
     let withdrawResult: any = null;
 
     try {
-      // 1) PIX para conta OKX
+      // 1) PIX para conta OKX - atualizar status
+      await this.prisma.conversion.update({
+        where: { id: conversion.id },
+        data: { status: 'PIX_SENT' },
+      });
+
       pixResult = await this.interPixService.sendPix(customerId, {
         valor: brlAmount,
         chaveDestino: '50459025000126',
         tipoChave: PixKeyType.CHAVE,
         descricao: customerId,
       });
-      stages.pixTransfer = 'done';
 
-      // 2) Compra USDT na OKX e verifica quantidade comprada
+      await this.prisma.conversion.update({
+        where: { id: conversion.id },
+        data: { pixEndToEnd: pixResult?.endToEndId, pixTxid: pixResult?.txid },
+      });
+
+      // 2) Compra USDT na OKX
+      await this.prisma.conversion.update({
+        where: { id: conversion.id },
+        data: { status: 'USDT_BOUGHT' },
+      });
+
       await new Promise((resolve) => setTimeout(resolve, 5000));
       okxBuyResult = await this.okxService.buyAndCheckHistory(brlToExchange);
-      stages.conversion = 'done';
 
       // Calcular quantidade de USDT comprada a partir dos fills
       let usdtAmount = 0;
@@ -551,28 +596,18 @@ export class WalletService {
         throw new Error('Não foi possível determinar a quantidade de USDT comprada');
       }
 
-      // 3) Determinar carteira de destino (precisa antes de criar transação)
-      let wallet;
-      if (walletId) {
-        wallet = await this.getWalletById(walletId, customerId);
-      } else {
-        wallet = await this.getMainWallet(customerId, 'SOLANA');
-        if (!wallet) {
-          wallet = await this.getMainWallet(customerId, 'TRON');
-        }
-      }
+      const exchangeRate = usdtAmount > 0 ? brlToExchange / usdtAmount : 0;
+      await this.prisma.conversion.update({
+        where: { id: conversion.id },
+        data: { 
+          usdtPurchased: usdtAmount,
+          exchangeRate,
+          okxOrderId: okxBuyResult?.orderId || null,
+        },
+      });
 
-      if (!wallet || !wallet.externalAddress) {
-        throw new Error('Carteira (Solana ou Tron) não encontrada para o cliente');
-      }
-
-      if (!wallet.okxWhitelisted) {
-        throw new Error('Carteira não está na whitelist da OKX. Adicione o endereço na OKX e marque como whitelistada antes de converter.');
-      }
-
-      // 4) Registrar transação CONVERSION com dados da carteira
+      // 3) Registrar transação CONVERSION
       const balanceBefore = account.balance;
-      const conversionId = `CONV-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
       await this.prisma.transaction.create({
         data: {
           accountId: account.id,
@@ -583,7 +618,7 @@ export class WalletService {
           balanceBefore,
           balanceAfter: balanceBefore,
           description: `Conversão BRL→USDT: R$ ${brlAmount.toFixed(2)} → ${usdtAmount.toFixed(2)} USDT`,
-          externalId: conversionId,
+          externalId: conversion.id,
           endToEnd: pixResult?.endToEndId,
           externalData: {
             pixEndToEnd: pixResult?.endToEndId,
@@ -614,7 +649,7 @@ export class WalletService {
                   spreadRate,
                 },
                 okxBuyResult,
-                stages,
+                conversionId: conversion.id,
               },
             },
           });
@@ -635,28 +670,30 @@ export class WalletService {
                   spreadRate,
                 },
                 okxBuyResult,
-                stages,
+                conversionId: conversion.id,
               },
             },
           });
         }
       }
 
-      // 5) Transferência USDT para carteira do cliente (wallet já foi determinado acima)
+      // 4) Atualizar status para USDT_WITHDRAWN antes do saque
+      await this.prisma.conversion.update({
+        where: { id: conversion.id },
+        data: { status: 'USDT_WITHDRAWN' },
+      });
+
       // Determinar rede e taxa (OTSEM paga a taxa, cliente recebe 100% do USDT comprado)
       const isTron = wallet.network === 'TRON';
       const networkFee = isTron ? 2.1 : 1; // TRC20: 2.1 USDT, Solana: 1 USDT
       const usdtToWithdraw = usdtAmount; // Cliente recebe exatamente o que foi comprado
-      if (usdtAmount <= 0) {
-        throw new Error(`Quantidade de USDT insuficiente para saque. Comprado: ${usdtAmount}`);
-      }
 
-      // 5a) Transferir da conta trading para funding (valor + taxa para cobrir saque)
+      // 4a) Transferir da conta trading para funding (valor + taxa para cobrir saque)
       const totalToTransfer = (usdtAmount + networkFee).toFixed(2);
       this.logger.log(`[OKX] Transferindo ${totalToTransfer} USDT de trading para funding (${usdtAmount} + ${networkFee} taxa)`);
       await this.okxService.transferFromTradingToFunding('USDT', totalToTransfer);
 
-      // 5b) OKX → Cliente direto (Solana ou Tron) - cliente recebe 100%
+      // 4b) OKX → Cliente direto (Solana ou Tron) - cliente recebe 100%
       const network = isTron ? 'TRC20' : 'Solana';
       this.logger.log(`[${network}] Sacando ${usdtToWithdraw} USDT para: ${wallet.externalAddress} (taxa ${networkFee} paga pela OTSEM)`);
 
@@ -666,36 +703,14 @@ export class WalletService {
         network,
         networkFee.toString(),
       );
-      stages.usdtTransfer = 'done';
 
-      // Persist estágio final
-      if (pixResult?.endToEndId) {
-        const payment = await this.prisma.payment.findUnique({ where: { endToEnd: pixResult.endToEndId } });
-        if (payment) {
-          const bankPayload = (payment.bankPayload as any) || {};
-          await this.prisma.payment.update({
-            where: { id: payment.id },
-            data: { bankPayload: { ...bankPayload, stages } },
-          });
-        }
-
-        const tx = await this.prisma.transaction.findFirst({ where: { externalId: pixResult.endToEndId } });
-        if (tx) {
-          const metadata = (tx.metadata as any) || {};
-          await this.prisma.transaction.update({
-            where: { id: tx.id },
-            data: { metadata: { ...metadata, stages } },
-          });
-        }
-      }
-
-      // 6) Registrar comissão do afiliado (se aplicável)
+      // 5) Registrar comissão do afiliado (se aplicável)
       let affiliateCommission = null;
       if (affiliateSpread.affiliate && affiliateSpreadPercent > 0) {
         affiliateCommission = await this.affiliatesService.recordCommission({
           affiliateId: affiliateSpread.affiliate.id,
           customerId,
-          transactionId: pixResult?.endToEndId,
+          transactionId: conversion.id,
           transactionAmount: brlAmount,
           spreadTotal: totalSpreadPercent,
           spreadBase: baseSpreadPercent,
@@ -704,40 +719,26 @@ export class WalletService {
         this.logger.log(`[Affiliate] Commission recorded: R$ ${(brlAmount * affiliateSpreadPercent).toFixed(2)} for ${affiliateSpread.affiliate.code}`);
       }
 
-      // 7) Criar registro na tabela Conversion (dados estruturados)
-      const exchangeRate = usdtAmount > 0 ? brlToExchange / usdtAmount : 0;
+      // 6) Calcular fees e atualizar Conversion para COMPLETED
       const okxWithdrawFeeUsdt = networkFee;
       const okxTradingFee = brlToExchange * 0.001;
-      const okxWithdrawFeeBrl = okxWithdrawFeeUsdt * exchangeRate;
+      const currentExchangeRate = usdtAmount > 0 ? brlToExchange / usdtAmount : 0;
+      const okxWithdrawFeeBrl = okxWithdrawFeeUsdt * currentExchangeRate;
       const totalOkxFees = okxWithdrawFeeBrl + okxTradingFee;
       const affiliateCommissionBrl = affiliateCommission ? Number(affiliateCommission.commissionBrl) : 0;
       const grossProfit = spreadAmount;
       const netProfit = grossProfit - totalOkxFees - affiliateCommissionBrl;
 
       const conversionTx = await this.prisma.transaction.findFirst({
-        where: { externalId: conversionId },
+        where: { externalId: conversion.id },
       });
 
-      await this.prisma.conversion.create({
+      await this.prisma.conversion.update({
+        where: { id: conversion.id },
         data: {
-          customerId,
-          accountId: account.id,
           transactionId: conversionTx?.id,
-          brlCharged: brlAmount,
-          brlExchanged: brlToExchange,
-          spreadPercent: totalSpreadPercent,
-          spreadBrl: spreadAmount,
-          usdtPurchased: usdtAmount,
           usdtWithdrawn: usdtAmount,
-          exchangeRate,
-          network: wallet.network,
-          walletAddress: wallet.externalAddress,
-          walletId: wallet.id,
-          pixEndToEnd: pixResult?.endToEndId,
-          pixTxid: pixResult?.txid,
-          okxOrderId: okxBuyResult?.orderId || null,
           okxWithdrawId: withdrawResult?.wdId || null,
-          affiliateId: affiliateSpread.affiliate?.id || null,
           affiliateCommission: affiliateCommissionBrl,
           okxWithdrawFee: okxWithdrawFeeUsdt,
           okxTradingFee,
@@ -748,13 +749,12 @@ export class WalletService {
           completedAt: new Date(),
         },
       });
-      this.logger.log(`[Conversion] Registro criado: R$ ${brlAmount} → ${usdtAmount} USDT`);
+      this.logger.log(`[BUY] Conversion ${conversion.id} COMPLETED: R$ ${brlAmount} → ${usdtAmount} USDT`);
 
       return {
+        conversionId: conversion.id,
+        status: 'COMPLETED',
         message: 'Compra e transferência de USDT concluída',
-        pixResult,
-        okxBuyResult,
-        withdrawResult,
         usdtBought: usdtAmount,
         usdtWithdrawn: usdtAmount,
         networkFee,
@@ -772,32 +772,16 @@ export class WalletService {
           affiliateCode: affiliateSpread.affiliate?.code,
           commissionBrl: Number(affiliateCommission.commissionBrl),
         } : null,
-        stages,
         wallet: { id: wallet.id, network: wallet.network, address: wallet.externalAddress },
       };
     } catch (error) {
-      // Persist estágio em erro, se possível
-      if (pixResult?.endToEndId) {
-        const payment = await this.prisma.payment.findUnique({ where: { endToEnd: pixResult.endToEndId } });
-        const tx = await this.prisma.transaction.findFirst({ where: { externalId: pixResult.endToEndId } });
-        const errorMsg = error instanceof Error ? error.message : 'Erro na compra/transferência USDT';
-
-        if (payment) {
-          const bankPayload = (payment.bankPayload as any) || {};
-          await this.prisma.payment.update({
-            where: { id: payment.id },
-            data: { bankPayload: { ...bankPayload, stages, error: errorMsg } },
-          });
-        }
-
-        if (tx) {
-          const metadata = (tx.metadata as any) || {};
-          await this.prisma.transaction.update({
-            where: { id: tx.id },
-            data: { metadata: { ...metadata, stages, error: errorMsg } },
-          });
-        }
-      }
+      // Atualizar Conversion para FAILED
+      const errorMsg = error instanceof Error ? error.message : 'Erro na compra/transferência USDT';
+      await this.prisma.conversion.update({
+        where: { id: conversion.id },
+        data: { status: 'FAILED', errorMessage: errorMsg },
+      });
+      this.logger.error(`[BUY] Conversion ${conversion.id} FAILED: ${errorMsg}`);
 
       throw error;
     }
@@ -1557,22 +1541,33 @@ export class WalletService {
       usdtAmount: c.usdtPurchased ? parseFloat(c.usdtPurchased.toString()) : null,
       brlAmount: c.brlExchanged ? parseFloat(c.brlExchanged.toString()) : (c.brlCharged ? parseFloat(c.brlCharged.toString()) : null),
       spreadBrl: c.spreadBrl ? parseFloat(c.spreadBrl.toString()) : null,
-      statusLabel: this.getConversionStatusLabel(c.status),
+      statusLabel: this.getConversionStatusLabel(c.status, c.type),
     }));
   }
 
-  private getConversionStatusLabel(status: string): string {
-    const labels: Record<string, string> = {
+  private getConversionStatusLabel(status: string, type?: string): string {
+    // Labels específicos por tipo de conversão
+    if (type === 'BUY') {
+      const buyLabels: Record<string, string> = {
+        'PENDING': 'Iniciando compra...',
+        'PIX_SENT': 'Enviando BRL para exchange...',
+        'USDT_BOUGHT': 'USDT comprado, preparando envio...',
+        'USDT_WITHDRAWN': 'Enviando USDT para sua carteira...',
+        'COMPLETED': 'Concluído - USDT enviado!',
+        'FAILED': 'Falhou',
+      };
+      return buyLabels[status] || status;
+    }
+    
+    // Labels para SELL
+    const sellLabels: Record<string, string> = {
       'PENDING': 'Aguardando confirmação do depósito',
       'USDT_RECEIVED': 'USDT recebido, vendendo...',
       'USDT_SOLD': 'USDT vendido, creditando saldo...',
-      'COMPLETED': 'Concluído',
+      'COMPLETED': 'Concluído - BRL creditado!',
       'FAILED': 'Falhou',
-      'PIX_SENT': 'PIX enviado',
-      'USDT_BOUGHT': 'USDT comprado',
-      'USDT_WITHDRAWN': 'USDT enviado para sua carteira',
     };
-    return labels[status] || status;
+    return sellLabels[status] || status;
   }
 
   async getConversionDetails(customerId: string, conversionId: string) {
@@ -1591,7 +1586,7 @@ export class WalletService {
       id: conversion.id,
       type: conversion.type,
       status: conversion.status,
-      statusLabel: this.getConversionStatusLabel(conversion.status),
+      statusLabel: this.getConversionStatusLabel(conversion.status, conversion.type),
       network: conversion.network,
       usdtAmount: conversion.usdtPurchased ? parseFloat(conversion.usdtPurchased.toString()) : null,
       brlCharged: conversion.brlCharged ? parseFloat(conversion.brlCharged.toString()) : null,

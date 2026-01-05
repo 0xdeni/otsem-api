@@ -717,9 +717,9 @@ model Conversion {
   spreadPercent   Decimal @db.Decimal(6, 4)
   spreadBrl       Decimal @db.Decimal(18, 2)
   
-  usdtPurchased   Decimal @db.Decimal(18, 6)
-  usdtWithdrawn   Decimal @db.Decimal(18, 6)
-  exchangeRate    Decimal @db.Decimal(10, 4)
+  usdtPurchased   Decimal? @db.Decimal(18, 6)
+  usdtWithdrawn   Decimal? @db.Decimal(18, 6)
+  exchangeRate    Decimal? @db.Decimal(10, 4)
   
   network         String
   walletAddress   String
@@ -738,12 +738,12 @@ model Conversion {
   affiliateId         String?
   affiliateCommission Decimal? @db.Decimal(18, 2)
   
-  okxWithdrawFee  Decimal @db.Decimal(18, 6)
-  okxTradingFee   Decimal @db.Decimal(18, 2)
-  totalOkxFees    Decimal @db.Decimal(18, 2)
+  okxWithdrawFee  Decimal? @db.Decimal(18, 6)
+  okxTradingFee   Decimal? @db.Decimal(18, 2)
+  totalOkxFees    Decimal? @db.Decimal(18, 2)
   
-  grossProfit     Decimal @db.Decimal(18, 2)
-  netProfit       Decimal @db.Decimal(18, 2)
+  grossProfit     Decimal? @db.Decimal(18, 2)
+  netProfit       Decimal? @db.Decimal(18, 2)
   
   status          ConversionStatus @default(PENDING)
   errorMessage    String?
