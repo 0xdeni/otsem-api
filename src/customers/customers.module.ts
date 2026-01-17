@@ -18,7 +18,7 @@ import { AffiliatesModule } from '../affiliates/affiliates.module';
     DiditModule,
     AffiliatesModule,
   ],
-  controllers: [CustomersController, KycUpgradeController],
+  controllers: [KycUpgradeController, CustomersController],
   providers: [
     CustomersService,
     CustomerBalanceService,
