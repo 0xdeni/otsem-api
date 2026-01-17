@@ -922,6 +922,32 @@
       "post": {
         "operationId": "KycUpgradeController_createRequest",
         "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "targetLevel": {
+                    "type": "string",
+                    "enum": [
+                      "LEVEL_2",
+                      "LEVEL_3"
+                    ]
+                  },
+                  "documents": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
         "responses": {
           "201": {
             "description": ""

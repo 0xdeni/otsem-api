@@ -7,13 +7,21 @@ import {
   Query,
   UseGuards,
   Req,
+  UseInterceptors,
+  UploadedFiles,
+  BadRequestException,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { FilesInterceptor } from '@nestjs/platform-express';
+import { ApiBearerAuth, ApiTags, ApiOperation, ApiQuery, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { KycUpgradeService } from './kyc-upgrade.service';
 import { KycLevel } from '@prisma/client';
+import { diskStorage } from 'multer';
+import { extname } from 'path';
+import { v4 as uuidv4 } from 'uuid';
+import { Request } from 'express';
 
 interface DocumentDto {
   name: string;
@@ -29,6 +37,15 @@ interface RejectRequestDto {
   reason: string;
 }
 
+const kycUpgradeStorage = diskStorage({
+  destination: './uploads/kyc-upgrades',
+  filename: (req: Request, file: Express.Multer.File, callback: (error: Error | null, filename: string) => void) => {
+    const uniqueId = uuidv4();
+    const ext = extname(file.originalname);
+    callback(null, `${uniqueId}${ext}`);
+  },
+});
+
 @ApiTags('KYC Upgrade')
 @ApiBearerAuth()
 @Controller()
@@ -37,10 +54,38 @@ export class KycUpgradeController {
 
   @Post('customers/kyc-upgrade-requests')
   @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FilesInterceptor('documents', 10, { storage: kycUpgradeStorage }))
   @ApiOperation({ summary: 'Criar solicitação de upgrade de KYC' })
-  async createRequest(@Req() req: any, @Body() body: CreateUpgradeRequestDto) {
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        targetLevel: { type: 'string', enum: ['LEVEL_2', 'LEVEL_3'] },
+        documents: { type: 'array', items: { type: 'string', format: 'binary' } },
+      },
+    },
+  })
+  async createRequest(
+    @Req() req: any,
+    @Body('targetLevel') targetLevel: string,
+    @UploadedFiles() files: Express.Multer.File[],
+  ) {
     const customerId = req.user.customerId;
-    return this.kycUpgradeService.createRequest(customerId, body);
+    
+    if (!targetLevel) {
+      throw new BadRequestException('targetLevel é obrigatório');
+    }
+
+    const documents = (files || []).map(file => ({
+      name: file.originalname,
+      objectPath: `/uploads/kyc-upgrades/${file.filename}`,
+    }));
+
+    return this.kycUpgradeService.createRequest(customerId, {
+      targetLevel: targetLevel as KycLevel,
+      documents,
+    });
   }
 
   @Get('customers/me/kyc-upgrade-requests')

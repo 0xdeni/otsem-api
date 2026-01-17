@@ -258,13 +258,31 @@ Fluxo para clientes solicitarem upgrade de nível KYC com envio de documentos.
 | `/customers/kyc-upgrade-requests` | POST | Criar solicitação de upgrade |
 | `/customers/me/kyc-upgrade-requests` | GET | Listar minhas solicitações |
 
-**Criar solicitação:**
-```json
+**Criar solicitação (multipart/form-data):**
+```
 POST /customers/kyc-upgrade-requests
+Content-Type: multipart/form-data
+
+targetLevel: "LEVEL_2"
+documents: [arquivo1.pdf, arquivo2.jpg, ...]
+```
+
+**Exemplo com curl:**
+```bash
+curl -X POST /customers/kyc-upgrade-requests \
+  -H "Authorization: Bearer <token>" \
+  -F "targetLevel=LEVEL_2" \
+  -F "documents=@comprovante_renda.pdf" \
+  -F "documents=@selfie_documento.jpg"
+```
+
+**Resposta:**
+```json
 {
-  "targetLevel": "LEVEL_2",
+  "id": "...",
+  "status": "PENDING",
   "documents": [
-    { "name": "comprovante_renda.pdf", "objectPath": "/objects/kyc-upgrades/uuid.pdf" }
+    { "name": "comprovante_renda.pdf", "objectPath": "/uploads/kyc-upgrades/uuid.pdf" }
   ]
 }
 ```
