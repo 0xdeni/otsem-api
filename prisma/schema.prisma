@@ -313,12 +313,12 @@ model PixKey {
   // Campo de validação: true se a chave pertence ao CPF/CNPJ do customer
   validated   Boolean   @default(false)
   validatedAt DateTime?
-  
+
   // Controle de tentativa de validação por micro-transferência (R$ 0,01)
   validationAttempted   Boolean   @default(false)
   validationAttemptedAt DateTime?
-  validationTxId        String?   // endToEnd da transferência de teste
-  validationError       String?   // Mensagem de erro se falhou
+  validationTxId        String? // endToEnd da transferência de teste
+  validationError       String? // Mensagem de erro se falhou
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -545,8 +545,8 @@ model Transaction {
 
   relatedTxId String? @unique
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @default(now()) @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now()) @updatedAt
   processedAt DateTime?
   completedAt DateTime?
 
@@ -656,56 +656,56 @@ model WebhookLog {
 // ==================== AFFILIATE SYSTEM ====================
 
 model Affiliate {
-  id          String  @id @default(cuid())
-  name        String
-  email       String  @unique
-  phone       String?
-  code        String  @unique // Código único para indicação (ex: "JOAO123")
-  
+  id    String  @id @default(cuid())
+  name  String
+  email String  @unique
+  phone String?
+  code  String  @unique // Código único para indicação (ex: "JOAO123")
+
   // Spread do afiliado (ex: 0.0035 = 0.35% que ele adiciona ao spread base)
-  spreadRate  Decimal @db.Decimal(10, 6) @default(0)
-  
+  spreadRate Decimal @default(0) @db.Decimal(10, 6)
+
   // Wallet para receber comissões (opcional - pode ser Tron/Solana)
   payoutWalletAddress String?
   payoutWalletNetwork String? // TRON, SOLANA
-  
+
   // Estatísticas
-  totalEarnings    Decimal @db.Decimal(18, 2) @default(0) // Total ganho em BRL
-  pendingEarnings  Decimal @db.Decimal(18, 2) @default(0) // Pendente de pagamento
-  
+  totalEarnings   Decimal @default(0) @db.Decimal(18, 2) // Total ganho em BRL
+  pendingEarnings Decimal @default(0) @db.Decimal(18, 2) // Pendente de pagamento
+
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
+
   // Clientes indicados
   referredCustomers Customer[]
   commissions       AffiliateCommission[]
-  
+
   @@index([code])
   @@index([email])
 }
 
 model AffiliateCommission {
-  id           String @id @default(cuid())
-  affiliateId  String
-  customerId   String
+  id            String  @id @default(cuid())
+  affiliateId   String
+  customerId    String
   transactionId String?
-  
+
   // Valores
   transactionAmount Decimal @db.Decimal(18, 2) // Valor da transação em BRL
   spreadTotal       Decimal @db.Decimal(10, 6) // Spread total cobrado
   spreadBase        Decimal @db.Decimal(10, 6) // Spread base (seu lucro)
   spreadAffiliate   Decimal @db.Decimal(10, 6) // Spread do afiliado
   commissionBrl     Decimal @db.Decimal(18, 2) // Comissão em BRL
-  
-  status    String   @default("PENDING") // PENDING, PAID, CANCELLED
-  paidAt    DateTime?
-  
+
+  status String    @default("PENDING") // PENDING, PAID, CANCELLED
+  paidAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
+
   affiliate Affiliate @relation(fields: [affiliateId], references: [id])
-  
+
   @@index([affiliateId])
   @@index([customerId])
   @@index([status])
@@ -714,8 +714,8 @@ model AffiliateCommission {
 // ==================== CONVERSIONS ====================
 
 enum ConversionType {
-  BUY   // BRL -> USDT (compra)
-  SELL  // USDT -> BRL (venda)
+  BUY // BRL -> USDT (compra)
+  SELL // USDT -> BRL (venda)
 }
 
 enum ConversionStatus {
@@ -723,68 +723,68 @@ enum ConversionStatus {
   PIX_SENT
   USDT_BOUGHT
   USDT_WITHDRAWN
-  USDT_RECEIVED    // Para SELL: USDT depositado
-  USDT_SOLD        // Para SELL: USDT vendido na OKX
-  PIX_OUT_SENT     // Para SELL: PIX enviado ao cliente
+  USDT_RECEIVED // Para SELL: USDT depositado
+  USDT_SOLD // Para SELL: USDT vendido na OKX
+  PIX_OUT_SENT // Para SELL: PIX enviado ao cliente
   COMPLETED
   FAILED
 }
 
 model Conversion {
-  id            String           @id @default(cuid())
+  id            String         @id @default(cuid())
   customerId    String
   accountId     String
-  transactionId String?          @unique
-  type          ConversionType   @default(BUY)
-  
-  brlCharged      Decimal @db.Decimal(18, 2)
-  brlExchanged    Decimal @db.Decimal(18, 2)
-  spreadPercent   Decimal @db.Decimal(6, 4)
-  spreadBrl       Decimal @db.Decimal(18, 2)
-  
-  usdtPurchased   Decimal? @db.Decimal(18, 6)
-  usdtWithdrawn   Decimal? @db.Decimal(18, 6)
-  exchangeRate    Decimal? @db.Decimal(10, 4)
-  
-  network         String
-  walletAddress   String
-  walletId        String?
-  
-  pixEndToEnd     String?
-  pixTxid         String?
-  okxOrderId      String?
-  okxWithdrawId   String?
-  okxDepositId    String?
-  txHash          String?
-  
-  pixDestKey      String?
-  pixDestKeyType  String?
-  
+  transactionId String?        @unique
+  type          ConversionType @default(BUY)
+
+  brlCharged    Decimal @db.Decimal(18, 2)
+  brlExchanged  Decimal @db.Decimal(18, 2)
+  spreadPercent Decimal @db.Decimal(6, 4)
+  spreadBrl     Decimal @db.Decimal(18, 2)
+
+  usdtPurchased Decimal? @db.Decimal(18, 6)
+  usdtWithdrawn Decimal? @db.Decimal(18, 6)
+  exchangeRate  Decimal? @db.Decimal(10, 4)
+
+  network       String
+  walletAddress String
+  walletId      String?
+
+  pixEndToEnd   String?
+  pixTxid       String?
+  okxOrderId    String?
+  okxWithdrawId String?
+  okxDepositId  String?
+  txHash        String?
+
+  pixDestKey     String?
+  pixDestKeyType String?
+
   affiliateId         String?
   affiliateCommission Decimal? @db.Decimal(18, 2)
-  
-  okxWithdrawFee  Decimal? @db.Decimal(18, 6)
-  okxTradingFee   Decimal? @db.Decimal(18, 2)
-  totalOkxFees    Decimal? @db.Decimal(18, 2)
-  
-  grossProfit     Decimal? @db.Decimal(18, 2)
-  netProfit       Decimal? @db.Decimal(18, 2)
-  
-  status          ConversionStatus @default(PENDING)
-  errorMessage    String?
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  completedAt     DateTime?
-  
-  customer        Customer @relation(fields: [customerId], references: [id])
-  account         Account  @relation(fields: [accountId], references: [id])
-  wallet          Wallet?  @relation(fields: [walletId], references: [id])
-  
-  @@map("conversions")
+
+  okxWithdrawFee Decimal? @db.Decimal(18, 6)
+  okxTradingFee  Decimal? @db.Decimal(18, 2)
+  totalOkxFees   Decimal? @db.Decimal(18, 2)
+
+  grossProfit Decimal? @db.Decimal(18, 2)
+  netProfit   Decimal? @db.Decimal(18, 2)
+
+  status       ConversionStatus @default(PENDING)
+  errorMessage String?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  completedAt DateTime?
+
+  customer Customer @relation(fields: [customerId], references: [id])
+  account  Account  @relation(fields: [accountId], references: [id])
+  wallet   Wallet?  @relation(fields: [walletId], references: [id])
+
   @@index([customerId])
   @@index([status])
   @@index([type])
   @@index([createdAt])
   @@index([affiliateId])
+  @@map("conversions")
 }
