@@ -207,6 +207,10 @@ export class KycUpgradeService {
   }
 
   async rejectRequest(requestId: string, adminEmail: string, reason: string) {
+    if (!reason || reason.trim().length === 0) {
+      throw new BadRequestException('Motivo da rejeição é obrigatório');
+    }
+
     const request = await this.prisma.kycUpgradeRequest.findUnique({
       where: { id: requestId },
     });
