@@ -2,10 +2,11 @@ import { Controller, Get, Post, Patch, Param, Query, Body, UseGuards, ParseIntPi
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags, ApiBody } from '@nestjs/swagger';
 import { SendEmailDto } from './dto/send-email.dto';
 import { AdminUsersService } from './admin-users.service';
+import { KycLimitsService } from '../customers/kyc-limits.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
-import { Role } from '@prisma/client';
+import { Role, KycLevel } from '@prisma/client';
 
 @ApiTags('Admin Users')
 @ApiBearerAuth()
@@ -13,7 +14,10 @@ import { Role } from '@prisma/client';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.ADMIN)
 export class AdminUsersController {
-  constructor(private readonly service: AdminUsersService) {}
+  constructor(
+    private readonly service: AdminUsersService,
+    private readonly kycLimits: KycLimitsService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'Listar usuários com paginação e filtros' })
@@ -87,5 +91,42 @@ export class AdminUsersController {
     @Body('spreadPercent') spreadPercent: number,
   ) {
     return this.service.updateSpread(id, spreadPercent);
+  }
+
+  @Patch(':id/kyc-level')
+  @ApiOperation({ summary: 'Alterar nível KYC do cliente' })
+  @ApiBody({ 
+    schema: { 
+      type: 'object', 
+      properties: { 
+        kycLevel: { 
+          type: 'string', 
+          enum: ['LEVEL_1', 'LEVEL_2', 'LEVEL_3'],
+          description: 'Nível KYC (LEVEL_1: básico, LEVEL_2: intermediário, LEVEL_3: ilimitado)' 
+        } 
+      } 
+    } 
+  })
+  @ApiResponse({ status: 200, description: 'Nível KYC atualizado' })
+  async updateKycLevel(
+    @Param('id') id: string,
+    @Body('kycLevel') kycLevel: KycLevel,
+  ) {
+    await this.kycLimits.upgradeKycLevel(id, kycLevel);
+    return { message: `Nível KYC atualizado para ${kycLevel}`, customerId: id, kycLevel };
+  }
+
+  @Get('kyc-levels/config')
+  @ApiOperation({ summary: 'Listar configurações de limites por nível KYC' })
+  @ApiResponse({ status: 200, description: 'Configurações de limites' })
+  async getKycLevelConfigs() {
+    return this.kycLimits.getAllConfigs();
+  }
+
+  @Get(':id/limits')
+  @ApiOperation({ summary: 'Ver limites e uso mensal do cliente' })
+  @ApiResponse({ status: 200, description: 'Limites e uso do cliente' })
+  async getCustomerLimits(@Param('id') id: string) {
+    return this.kycLimits.getMonthlyUsage(id);
   }
 }

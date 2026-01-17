@@ -174,3 +174,75 @@ if (tx.type === 'CONVERSION') {
 ```
 
 **Para transações antigas sem subType:** verificar a `description` - se começa com "Venda" é SELL, senão é BUY.
+
+## KYC por Níveis (17/01/2026)
+
+Sistema de limites de transação baseado em nível de verificação KYC.
+
+### Níveis e Limites Mensais
+
+| Nível | Pessoa Física (PF) | Pessoa Jurídica (PJ) |
+|-------|-------------------|---------------------|
+| LEVEL_1 | R$ 30.000/mês | R$ 50.000/mês |
+| LEVEL_2 | R$ 100.000/mês | R$ 200.000/mês |
+| LEVEL_3 | Ilimitado | Ilimitado |
+
+### Endpoints Cliente
+
+| Endpoint | Método | Descrição |
+|----------|--------|-----------|
+| `/customers/me/limits` | GET | Ver limites e uso mensal do cliente |
+
+**Resposta exemplo:**
+```json
+{
+  "customerId": "...",
+  "customerType": "PF",
+  "kycLevel": "LEVEL_1",
+  "monthlyLimit": 30000,
+  "usedThisMonth": 5000,
+  "availableThisMonth": 25000,
+  "isUnlimited": false,
+  "percentUsed": 16.67
+}
+```
+
+### Endpoints Admin
+
+| Endpoint | Método | Descrição |
+|----------|--------|-----------|
+| `/admin/users/:id/kyc-level` | PATCH | Alterar nível KYC do cliente |
+| `/admin/users/:id/limits` | GET | Ver limites e uso do cliente |
+| `/admin/users/kyc-levels/config` | GET | Ver configuração de limites por nível |
+
+**Upgrade de nível:**
+```json
+PATCH /admin/users/:id/kyc-level
+{ "kycLevel": "LEVEL_2" }
+```
+
+### Validação de Limites
+
+O sistema valida automaticamente antes de processar:
+- Compra de USDT (BUY flow)
+- Envio de PIX (PIX OUT)
+
+Se o limite for excedido, retorna erro 400:
+```json
+{
+  "message": "Limite mensal excedido. Disponível: R$ 25000.00. Solicitado: R$ 30000.00. Upgrade para Nível 2 para aumentar seu limite."
+}
+```
+
+### Tabela KycLevelConfig
+
+Configuração de limites populada automaticamente na inicialização:
+```sql
+SELECT * FROM kyc_level_configs;
+-- LEVEL_1 | PF | 30000
+-- LEVEL_2 | PF | 100000
+-- LEVEL_3 | PF | 0 (ilimitado)
+-- LEVEL_1 | PJ | 50000
+-- LEVEL_2 | PJ | 200000
+-- LEVEL_3 | PJ | 0 (ilimitado)
+```

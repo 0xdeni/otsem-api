@@ -11,6 +11,7 @@ import { OkxService } from '../okx/services/okx.service';
 import { TronService } from '../tron/tron.service';
 import { SolanaService } from '../solana/solana.service';
 import { AffiliatesService } from '../affiliates/affiliates.service';
+import { KycLimitsService } from '../customers/kyc-limits.service';
 import { WalletNetwork, TransactionType } from '@prisma/client';
 
 const SOL_FEE_FOR_USDT_TRANSFER = 0.005;
@@ -28,6 +29,8 @@ export class WalletService {
     private readonly solanaService: SolanaService,
     @Inject(forwardRef(() => AffiliatesService))
     private readonly affiliatesService: AffiliatesService,
+    @Inject(forwardRef(() => KycLimitsService))
+    private readonly kycLimitsService: KycLimitsService,
   ) { }
 
   getTronService() {
@@ -489,6 +492,12 @@ export class WalletService {
     const account = await this.prisma.account.findFirst({ where: { customerId } });
     if (!account || Number(account.balance) < brlAmount || brlAmount < 10) {
       throw new Error('Saldo insuficiente em BRL (mínimo R$10)');
+    }
+
+    // Validar limite mensal KYC
+    const limitCheck = await this.kycLimitsService.validateTransactionLimit(customerId, brlAmount);
+    if (!limitCheck.allowed) {
+      throw new BadRequestException(limitCheck.message);
     }
 
     // Obter spread base do User.spreadValue (legacy) + spread do afiliado

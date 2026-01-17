@@ -16,6 +16,7 @@ import { ApiBearerAuth, ApiTags, ApiOperation } from '@nestjs/swagger';
 import { CustomersService } from './customers.service';
 import { CustomerBalanceService } from './customer-balance.service';
 import { CustomerKycService } from './customer-kyc.service';
+import { KycLimitsService } from './kyc-limits.service';
 import { StatementsService } from '../statements/statements.service';
 import { AffiliatesService } from '../affiliates/affiliates.service';
 import { CreateCustomerLocalDto } from './dto/create-customer-local.dto';
@@ -39,6 +40,7 @@ export class CustomersController {
     private readonly customers: CustomersService,
     private readonly balances: CustomerBalanceService,
     private readonly kyc: CustomerKycService,
+    private readonly kycLimits: KycLimitsService,
     private readonly statements: StatementsService,
     private readonly affiliates: AffiliatesService,
   ) { }
@@ -75,6 +77,13 @@ export class CustomersController {
   async myKycStatus(@Req() req: AuthRequest) {
     const customer = await this.customers.findByUserId(req.user!.sub);
     return this.kyc.getKycStatus(customer.id);
+  }
+
+  @Get('me/limits')
+  @ApiOperation({ summary: 'Ver limites mensais e uso do cliente' })
+  async myLimits(@Req() req: AuthRequest) {
+    const customer = await this.customers.findByUserId(req.user!.sub);
+    return this.kycLimits.getMonthlyUsage(customer.id);
   }
 
   @Get('me/affiliate')

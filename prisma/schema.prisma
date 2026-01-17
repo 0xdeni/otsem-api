@@ -28,6 +28,12 @@ enum AccountStatus {
   suspended
 }
 
+enum KycLevel {
+  LEVEL_1  // PF: até R$30k/mês, PJ: até R$50k/mês
+  LEVEL_2  // PF: até R$100k/mês, PJ: até R$200k/mês
+  LEVEL_3  // Ilimitado (análise completa)
+}
+
 enum PixKeyType {
   CPF
   CNPJ
@@ -197,12 +203,16 @@ model Customer {
 
   // Integrações/estado
   accountStatus    AccountStatus @default(not_requested)
+  kycLevel         KycLevel      @default(LEVEL_1)
   externalClientId String?
   externalAccredId String?
 
   // Didit KYC
   diditSessionId       String?
   diditVerificationUrl String?
+
+  // Spread personalizado (0.0095 = 0.95%)
+  spreadPercent    Decimal?      @db.Decimal(6, 4)
 
   mainPixKey String? @unique
 
@@ -260,6 +270,21 @@ model PixLimits {
   serviceId      Int
 
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+}
+
+// Configuração de limites por nível KYC
+model KycLevelConfig {
+  id            String       @id @default(cuid())
+  level         KycLevel
+  customerType  CustomerType
+  monthlyLimit  Decimal      @db.Decimal(18, 2)  // 0 = ilimitado
+  description   String?
+  
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@unique([level, customerType])
+  @@map("kyc_level_configs")
 }
 
 model Ownership {

@@ -4,6 +4,7 @@ import { InterModule } from '../inter/inter.module';
 import { OkxModule } from '../okx/okx.module';
 import { FdbankModule } from '../fdbank/fdbank.module';
 import { MailModule } from '../mail/mail.module';
+import { CustomersModule } from '../customers/customers.module';
 
 import { AdminDashboardService } from './admin-dashboard.service';
 import { AdminDashboardController } from './admin-dashboard.controller';
@@ -21,6 +22,7 @@ import { AdminConversionsController } from './admin-conversions.controller';
     forwardRef(() => InterModule),
     forwardRef(() => OkxModule),
     forwardRef(() => FdbankModule),
+    forwardRef(() => CustomersModule),
   ],
   controllers: [AdminDashboardController, AdminUsersController, AdminWalletsController, AdminConversionsController],
   providers: [AdminDashboardService, AdminUsersService, AdminWalletsService, AdminConversionsService],

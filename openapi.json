@@ -445,6 +445,26 @@
         ]
       }
     },
+    "/customers/me/limits": {
+      "get": {
+        "operationId": "CustomersController_myLimits",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ver limites mensais e uso do cliente",
+        "tags": [
+          "Customers"
+        ]
+      }
+    },
     "/customers/me/affiliate": {
       "get": {
         "operationId": "CustomersController_myAffiliate",
@@ -4599,6 +4619,105 @@
           }
         ],
         "summary": "Ajustar spread do usuário",
+        "tags": [
+          "Admin Users"
+        ]
+      }
+    },
+    "/admin/users/{id}/kyc-level": {
+      "patch": {
+        "operationId": "AdminUsersController_updateKycLevel",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kycLevel": {
+                    "type": "string",
+                    "enum": [
+                      "LEVEL_1",
+                      "LEVEL_2",
+                      "LEVEL_3"
+                    ],
+                    "description": "Nível KYC (LEVEL_1: básico, LEVEL_2: intermediário, LEVEL_3: ilimitado)"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Nível KYC atualizado"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Alterar nível KYC do cliente",
+        "tags": [
+          "Admin Users"
+        ]
+      }
+    },
+    "/admin/users/kyc-levels/config": {
+      "get": {
+        "operationId": "AdminUsersController_getKycLevelConfigs",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Configurações de limites"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listar configurações de limites por nível KYC",
+        "tags": [
+          "Admin Users"
+        ]
+      }
+    },
+    "/admin/users/{id}/limits": {
+      "get": {
+        "operationId": "AdminUsersController_getCustomerLimits",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Limites e uso do cliente"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ver limites e uso mensal do cliente",
         "tags": [
           "Admin Users"
         ]
