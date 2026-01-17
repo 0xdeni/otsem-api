@@ -1,0 +1,107 @@
+ENDPOINTS NECESSÁRIOS PARA O SISTEMA DE UPGRADE KYC
+
+1. Criar Solicitação de Upgrade (Cliente)
+
+POST /customers/kyc-upgrade-requests
+Authorization: Bearer <token do cliente>
+Content-Type: application/json
+Body:
+{
+  "targetLevel": "LEVEL_2" ou "LEVEL_3",
+  "documents": [
+    { "name": "comprovante_renda.pdf", "objectPath": "/objects/kyc-upgrades/uuid.pdf" },
+    { "name": "documento.jpg", "objectPath": "/objects/kyc-upgrades/uuid.jpg" }
+  ]
+}
+Response 201:
+{
+  "id": "uuid",
+  "status": "PENDING",
+  "createdAt": "2026-01-17T00:00:00Z"
+}
+2. Listar Solicitações (Admin)
+
+GET /admin/kyc-upgrade-requests?status=PENDING
+Authorization: Bearer <token do admin>
+Response 200:
+{
+  "data": [
+    {
+      "id": "uuid",
+      "customerId": "uuid",
+      "customerName": "João Silva",
+      "customerEmail": "joao@email.com",
+      "currentLevel": "LEVEL_1",
+      "targetLevel": "LEVEL_2",
+      "status": "PENDING",
+      "documents": [{ "name": "doc.pdf", "objectPath": "/objects/..." }],
+      "createdAt": "2026-01-17T00:00:00Z",
+      "updatedAt": "2026-01-17T00:00:00Z"
+    }
+  ]
+}
+Query params: status = PENDING | APPROVED | REJECTED
+3. Detalhes da Solicitação (Admin)
+
+GET /admin/kyc-upgrade-requests/:id
+Authorization: Bearer <token do admin>
+Response 200:
+{
+  "data": {
+    "id": "uuid",
+    "customerId": "uuid",
+    "customerName": "João Silva",
+    "customerEmail": "joao@email.com",
+    "customerDocument": "123.456.789-00",
+    "currentLevel": "LEVEL_1",
+    "targetLevel": "LEVEL_2",
+    "status": "PENDING",
+    "documents": [{ "name": "doc.pdf", "objectPath": "/objects/..." }],
+    "adminNotes": null,
+    "reviewedBy": null,
+    "reviewedAt": null,
+    "createdAt": "2026-01-17T00:00:00Z",
+    "updatedAt": "2026-01-17T00:00:00Z"
+  }
+}
+4. Aprovar Solicitação (Admin)
+
+POST /admin/kyc-upgrade-requests/:id/approve
+Authorization: Bearer <token do admin>
+Response 200:
+{
+  "success": true,
+  "message": "Upgrade aprovado"
+}
+Ação: Atualizar o kycLevel do cliente para o targetLevel
+5. Rejeitar Solicitação (Admin)
+
+POST /admin/kyc-upgrade-requests/:id/reject
+Authorization: Bearer <token do admin>
+Content-Type: application/json
+Body:
+{
+  "reason": "Documentos ilegíveis"
+}
+Response 200:
+{
+  "success": true,
+  "message": "Solicitação rejeitada"
+}
+TABELA SUGERIDA (Prisma/SQL):
+
+model KycUpgradeRequest {
+  id            String   @id @default(uuid())
+  customerId    String
+  customer      Customer @relation(fields: [customerId], references: [id])
+  currentLevel  String   // LEVEL_1, LEVEL_2, LEVEL_3
+  targetLevel   String
+  status        String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  documents     Json     // [{ name, objectPath }]
+  adminNotes    String?
+  reviewedBy    String?
+  reviewedAt    DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+Pode copiar esse prompt completo para o outro Replit!

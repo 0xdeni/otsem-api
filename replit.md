@@ -246,3 +246,53 @@ SELECT * FROM kyc_level_configs;
 -- LEVEL_2 | PJ | 200000
 -- LEVEL_3 | PJ | 0 (ilimitado)
 ```
+
+## Sistema de Upgrade de KYC (17/01/2026)
+
+Fluxo para clientes solicitarem upgrade de nível KYC com envio de documentos.
+
+### Endpoints Cliente
+
+| Endpoint | Método | Descrição |
+|----------|--------|-----------|
+| `/customers/kyc-upgrade-requests` | POST | Criar solicitação de upgrade |
+| `/customers/me/kyc-upgrade-requests` | GET | Listar minhas solicitações |
+
+**Criar solicitação:**
+```json
+POST /customers/kyc-upgrade-requests
+{
+  "targetLevel": "LEVEL_2",
+  "documents": [
+    { "name": "comprovante_renda.pdf", "objectPath": "/objects/kyc-upgrades/uuid.pdf" }
+  ]
+}
+```
+
+### Endpoints Admin
+
+| Endpoint | Método | Descrição |
+|----------|--------|-----------|
+| `/admin/kyc-upgrade-requests` | GET | Listar todas solicitações |
+| `/admin/kyc-upgrade-requests/:id` | GET | Detalhes de uma solicitação |
+| `/admin/kyc-upgrade-requests/:id/approve` | POST | Aprovar solicitação |
+| `/admin/kyc-upgrade-requests/:id/reject` | POST | Rejeitar solicitação |
+
+**Query params:** `?status=PENDING|APPROVED|REJECTED`
+
+**Aprovar:**
+```json
+POST /admin/kyc-upgrade-requests/:id/approve
+Response: { "success": true, "message": "Upgrade aprovado" }
+```
+
+**Rejeitar:**
+```json
+POST /admin/kyc-upgrade-requests/:id/reject
+{ "reason": "Documentos ilegíveis" }
+```
+
+### Status da Solicitação
+- `PENDING` - Aguardando análise
+- `APPROVED` - Aprovada (kycLevel atualizado automaticamente)
+- `REJECTED` - Rejeitada (motivo em adminNotes)
