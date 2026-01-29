@@ -10,6 +10,9 @@ export class RegisterDto {
   @IsOptional() @IsEnum(CustomerType) type?: CustomerType;
   @IsOptional() @IsString() cpf?: string;
   @IsOptional() @IsString() cnpj?: string;
+
+  // Affiliate code
+  @IsOptional() @IsString() affiliateCode?: string;
 }
 
 export const RegisterDtoSchema = {
