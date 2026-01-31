@@ -101,7 +101,7 @@ export class AuthService {
     };
   }
 
-  async register(dto: { email: string; password: string; name?: string; type?: CustomerType; cpf?: string; cnpj?: string; affiliateCode?: string }) {
+  async register(dto: { email: string; password: string; name?: string; type?: CustomerType; cpf?: string; cnpj?: string }) {
     const exists = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
@@ -151,18 +151,6 @@ export class AuthService {
 
     const hash = await bcrypt.hash(dto.password, SALT_ROUNDS);
 
-    // Verificar se o código de afiliado é válido
-    let affiliateId: string | null = null;
-    if (dto.affiliateCode) {
-      const affiliate = await this.prisma.affiliate.findUnique({
-        where: { code: dto.affiliateCode.toUpperCase() },
-        select: { id: true },
-      });
-      if (affiliate) {
-        affiliateId = affiliate.id;
-      }
-    }
-
     // Cria o usuário
     const user = await this.prisma.user.create({
       data: {
@@ -191,7 +179,6 @@ export class AuthService {
         cnpj,
         kycLevel,
         accountStatus, // Set approved status for LEVEL_1 when CPF/CNPJ is valid
-        affiliateId, // Link to affiliate if code was provided and valid
       },
       select: { id: true, kycLevel: true, accountStatus: true },
     });
@@ -275,7 +262,7 @@ export class AuthService {
     });
 
     const frontendBase =
-      process.env.FRONTEND_BASE_URL ?? 'https://otsem-web.vercel.app';
+      process.env.FRONTEND_BASE_URL ?? 'https://otsempay.com';
     const resetUrl = `${frontendBase}/reset?token=${token}`;
 
     await this.mail.sendPasswordReset(user.email, resetUrl);
