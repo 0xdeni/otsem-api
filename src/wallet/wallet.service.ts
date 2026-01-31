@@ -1562,6 +1562,7 @@ export class WalletService {
         type: true,
         status: true,
         network: true,
+        walletAddress: true,
         usdtPurchased: true,
         brlCharged: true,
         brlExchanged: true,

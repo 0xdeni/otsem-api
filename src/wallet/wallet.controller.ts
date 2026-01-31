@@ -291,6 +291,35 @@ export class WalletController {
     return this.walletService.submitSignedSellTransaction(customerId, walletId, usdtAmount, network, txHash);
   }
 
+  @Get('conversions')
+  @ApiOperation({ summary: 'Listar conversões USDT (formato frontend)' })
+  @ApiQuery({ name: 'type', enum: ['BUY', 'SELL'], required: false })
+  @ApiQuery({ name: 'status', required: false })
+  async getConversions(
+    @Req() req: AuthRequest,
+    @Query('type') type?: 'BUY' | 'SELL',
+    @Query('status') status?: string,
+  ) {
+    const customerId = this.getCustomerId(req);
+    const conversions = await this.walletService.getCustomerConversions(customerId, type, status);
+
+    // Format to match frontend expectations
+    return {
+      data: conversions.map(conv => ({
+        id: conv.id,
+        status: conv.status,
+        subType: conv.type, // BUY or SELL
+        brlAmount: conv.brlAmount,
+        usdtAmount: conv.usdtAmount,
+        network: conv.network,
+        walletAddress: conv.walletAddress,
+        txHash: conv.txHash,
+        createdAt: conv.createdAt,
+        completedAt: conv.completedAt
+      }))
+    };
+  }
+
   @Get('my-conversions')
   @ApiOperation({ summary: 'Listar conversões do cliente (compras e vendas USDT)' })
   @ApiQuery({ name: 'type', enum: ['BUY', 'SELL'], required: false })

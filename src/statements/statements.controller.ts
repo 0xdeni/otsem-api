@@ -94,6 +94,26 @@ export class StatementsController {
   async byCustomerAdmin(@Param('customerId') customerId: string, @Query() query: StatementQueryDto) {
     return this.service.getStatementByCustomerIdAdmin(customerId, query);
   }
+
+  @Get('pix/account-holders/:accountHolderId')
+  @Roles(Role.ADMIN, Role.CUSTOMER)
+  @ApiOperation({ summary: 'Listar transações PIX (PIX_IN e PIX_OUT) por accountHolderId' })
+  @ApiParam({ name: 'accountHolderId' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  async getPixTransactions(
+    @Request() req: any,
+    @Param('accountHolderId') accountHolderId: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    await this.validateAccess(accountHolderId, req.user);
+    return this.service.getPixTransactionsByAccountHolder(
+      accountHolderId,
+      page ?? 1,
+      limit ?? 20,
+    );
+  }
 }
 
 

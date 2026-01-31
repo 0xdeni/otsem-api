@@ -230,9 +230,10 @@ export class StatementsService {
     if (!account) throw new BadRequestException('Conta não encontrada');
 
     const now = new Date();
-    const from = query.from ? new Date(query.from) : new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    const to = query.to ? new Date(query.to) : now;
-    const limit = query.limit ?? 200;
+    const from = query.from ? new Date(query.from) : (query.startDate ? new Date(query.startDate) : new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000));
+    const to = query.to ? new Date(query.to) : (query.endDate ? new Date(query.endDate) : now);
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
 
     if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
       throw new BadRequestException('Datas inválidas');
@@ -264,14 +265,21 @@ export class StatementsService {
       whereClause.status = validStatus;
     }
 
+    // Count total for pagination
+    const total = await this.prisma.transaction.count({ where: whereClause });
+
+    const skip = (page - 1) * limit;
+
     const transactions = await this.prisma.transaction.findMany({
       where: whereClause,
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: 'desc' },
+      skip,
       take: limit,
       select: {
         id: true,
         createdAt: true,
         type: true,
+        subType: true,
         status: true,
         amount: true,
         description: true,
@@ -279,6 +287,8 @@ export class StatementsService {
         balanceAfter: true,
         externalId: true,
         metadata: true,
+        payerName: true,
+        receiverName: true,
       },
     });
 
@@ -294,23 +304,37 @@ export class StatementsService {
     }
 
     const closingBalance =
-      transactions.length > 0 ? transactions[transactions.length - 1].balanceAfter : openingBalance;
+      transactions.length > 0 ? transactions[0].balanceAfter : openingBalance;
 
-    const items = transactions.map((t) => ({
-      id: t.id,
-      date: t.createdAt,
-      type: t.type,
-      status: t.status,
-      description: t.description,
-      amount: Number(t.amount),
-      direction: this.isCredit(t.type) ? 'C' : 'D',
-      balanceBefore: Number(t.balanceBefore),
-      balanceAfter: Number(t.balanceAfter),
-      externalId: t.externalId,
-      metadata: t.metadata ?? null,
-    }));
+    // Format for frontend
+    const statements = transactions.map((t) => {
+      const metadata = t.metadata as any || {};
+
+      return {
+        transactionId: t.id,
+        type: t.type,
+        status: t.status,
+        amount: Number(t.amount),
+        description: t.description,
+        senderName: t.payerName || null,
+        recipientName: t.receiverName || null,
+        createdAt: t.createdAt,
+        usdtAmount: metadata.usdtAmount || null,
+        subType: t.subType || metadata.conversionType || null,
+        externalData: (t.type === 'CONVERSION' && metadata) ? {
+          walletAddress: metadata.walletAddress || null,
+          network: metadata.network || null,
+          txHash: metadata.txHash || null,
+        } : null,
+      };
+    });
 
     return {
+      statements,
+      total,
+      page,
+      limit,
+      // Legacy fields for backward compatibility
       accountId: account.id,
       period: {
         from: from.toISOString(),
@@ -320,8 +344,7 @@ export class StatementsService {
       totalCredits: Number(totalCredits),
       totalDebits: Number(totalDebits),
       closingBalance: Number(closingBalance),
-      count: items.length,
-      items,
+      count: statements.length,
     };
   }
 
@@ -345,5 +368,65 @@ export class StatementsService {
       );
     }
     return status as TransactionStatus;
+  }
+
+  /**
+   * Get PIX transactions only (PIX_IN and PIX_OUT)
+   */
+  async getPixTransactionsByAccountHolder(accountHolderId: string, page = 1, limit = 20) {
+    const account = await this.resolveAccountByAccountHolderId(accountHolderId);
+
+    const whereClause: Prisma.TransactionWhereInput = {
+      accountId: account.id,
+      type: {
+        in: ['PIX_IN', 'PIX_OUT'],
+      },
+    };
+
+    // Count total for pagination
+    const total = await this.prisma.transaction.count({ where: whereClause });
+
+    const skip = (page - 1) * limit;
+
+    const transactions = await this.prisma.transaction.findMany({
+      where: whereClause,
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit,
+      select: {
+        id: true,
+        createdAt: true,
+        type: true,
+        status: true,
+        amount: true,
+        description: true,
+        payerName: true,
+        payerTaxNumber: true,
+        receiverName: true,
+        receiverTaxNumber: true,
+        endToEnd: true,
+      },
+    });
+
+    const formattedTransactions = transactions.map((t) => ({
+      transactionId: t.id,
+      type: t.type,
+      status: t.status,
+      amount: Number(t.amount),
+      description: t.description || '',
+      recipientName: t.receiverName || '',
+      recipientCpf: t.receiverTaxNumber || '',
+      senderName: t.payerName || '',
+      senderCpf: t.payerTaxNumber || '',
+      createdAt: t.createdAt,
+      endToEnd: t.endToEnd || null,
+    }));
+
+    return {
+      transactions: formattedTransactions,
+      total,
+      page,
+      limit,
+    };
   }
 }
