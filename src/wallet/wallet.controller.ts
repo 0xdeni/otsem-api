@@ -221,6 +221,24 @@ export class WalletController {
     return this.walletService.deleteWallet(id, customerId);
   }
 
+  @Post('send-usdt')
+  @ApiOperation({ summary: 'Enviar USDT de uma wallet custodial para endereço externo' })
+  async sendUsdt(
+    @Req() req: AuthRequest,
+    @Body('walletId') walletId: string,
+    @Body('toAddress') toAddress: string,
+    @Body('amount') amount: number,
+  ) {
+    const customerId = this.getCustomerId(req);
+    if (!walletId || !toAddress || !amount) {
+      throw new BadRequestException('walletId, toAddress e amount são obrigatórios');
+    }
+    if (amount <= 0) {
+      throw new BadRequestException('O valor deve ser maior que zero');
+    }
+    return this.walletService.sendUsdt(customerId, walletId, toAddress, amount);
+  }
+
   @Post('buy-usdt-with-brl')
   @ApiOperation({ summary: 'Comprar USDT com BRL e transferir para wallet' })
   async buyUsdtWithBrl(

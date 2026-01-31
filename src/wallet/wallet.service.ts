@@ -278,6 +278,34 @@ export class WalletService {
     }
   }
 
+  async sendUsdt(
+    customerId: string,
+    walletId: string,
+    toAddress: string,
+    amount: number,
+  ): Promise<{ txId: string; success: boolean; network: string }> {
+    const wallet = await this.getWalletById(walletId, customerId);
+
+    if (!wallet.encryptedPrivateKey) {
+      throw new BadRequestException('Wallet não possui chave privada (não é custodial). Envie diretamente pela carteira externa.');
+    }
+
+    let result: { txId: string; success: boolean };
+
+    if (wallet.network === 'SOLANA') {
+      result = await this.sendSolanaUsdt(walletId, customerId, toAddress, amount);
+    } else if (wallet.network === 'TRON') {
+      result = await this.sendTronUsdt(walletId, customerId, toAddress, amount);
+    } else {
+      throw new BadRequestException(`Rede não suportada: ${wallet.network}`);
+    }
+
+    // Sync balance after send
+    await this.syncWalletBalance(walletId, customerId);
+
+    return { ...result, network: wallet.network };
+  }
+
   async sendSolanaUsdt(
     walletId: string,
     customerId: string,
