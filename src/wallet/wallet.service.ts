@@ -5,7 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 
 const USDT_MINT_SOLANA = new PublicKey('Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB');
 const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
-import { InterPixService } from '../inter/services/inter-pix.service';
+import { BankingGatewayService } from '../banking/banking-gateway.service';
 import { PixKeyType } from '../inter/dto/send-pix.dto';
 import { OkxService } from '../okx/services/okx.service';
 import { TronService } from '../tron/tron.service';
@@ -23,7 +23,7 @@ export class WalletService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly interPixService: InterPixService,
+    private readonly bankingGateway: BankingGatewayService,
     private readonly okxService: OkxService,
     private readonly tronService: TronService,
     private readonly solanaService: SolanaService,
@@ -626,7 +626,7 @@ export class WalletService {
         data: { status: 'PIX_SENT' },
       });
 
-      pixResult = await this.interPixService.sendPix(customerId, {
+      pixResult = await this.bankingGateway.sendPix(customerId, {
         valor: brlAmount,
         chaveDestino: '50459025000126',
         tipoChave: PixKeyType.CHAVE,

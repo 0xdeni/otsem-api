@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import fdbankConfig from './fdbank.config';
+import { PrismaModule } from '../prisma/prisma.module';
 import { FdbankService } from './services/fdbank.service';
 import { FdbankCustomerService } from './services/fdbank-customer.service';
 import { FdbankPixTransferService } from './services/fdbank-pix-transfer.service';
@@ -13,11 +14,41 @@ import { FdbankBankAccountController } from './controllers/fdbank-bank-account.c
 import { FdbankPixKeyService } from './services/fdbank-pix-key.service';
 import { FdbankPixKeyController } from './controllers/fdbank-pix-key.controller';
 import { FdbankPixTransferController } from './controllers/fdbank-pix-transfer.controller';
+import { FdbankPixIntegrationService } from './services/fdbank-pix-integration.service';
+import { FdbankWebhookService } from './services/fdbank-webhook.service';
+import { FdbankWebhookController } from './controllers/fdbank-webhook.controller';
+import { FdbankPixPollingTask } from './tasks/fdbank-pix-polling.task';
 
 @Module({
-    imports: [ConfigModule.forFeature(fdbankConfig)],
-    providers: [FdbankService, FdbankBankAccountService, FdbankPixKeyService, FdbankCustomerService, FdbankPixContactService, FdbankPixTransferService],
-    controllers: [FdbankController, FdbankPixKeyController, FdbankBankAccountController, FdbankCustomerController, FdbankPixContactController, FdbankPixTransferController],
-    exports: [FdbankService, FdbankBankAccountService, FdbankCustomerService, FdbankPixContactService, FdbankPixTransferService],
+    imports: [ConfigModule.forFeature(fdbankConfig), PrismaModule],
+    providers: [
+        FdbankService,
+        FdbankBankAccountService,
+        FdbankPixKeyService,
+        FdbankCustomerService,
+        FdbankPixContactService,
+        FdbankPixTransferService,
+        FdbankPixIntegrationService,
+        FdbankWebhookService,
+        FdbankPixPollingTask,
+    ],
+    controllers: [
+        FdbankController,
+        FdbankPixKeyController,
+        FdbankBankAccountController,
+        FdbankCustomerController,
+        FdbankPixContactController,
+        FdbankPixTransferController,
+        FdbankWebhookController,
+    ],
+    exports: [
+        FdbankService,
+        FdbankBankAccountService,
+        FdbankCustomerService,
+        FdbankPixContactService,
+        FdbankPixTransferService,
+        FdbankPixIntegrationService,
+        FdbankWebhookService,
+    ],
 })
 export class FdbankModule { }
