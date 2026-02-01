@@ -22,6 +22,8 @@ import { DiditModule } from './didit/didit.module';
 import { TronModule } from './tron/tron.module';
 import { SolanaModule } from './solana/solana.module';
 import { AffiliatesModule } from './affiliates/affiliates.module';
+import { BankingModule } from './banking/banking.module';
+import { SystemSettingsModule } from './system-settings/system-settings.module';
 
 @Module({
   imports: [
@@ -45,6 +47,8 @@ import { AffiliatesModule } from './affiliates/affiliates.module';
     PaymentsModule,
     TransactionsModule,
     AffiliatesModule,
+    BankingModule,
+    SystemSettingsModule,
     ScheduleModule.forRoot(),
   ],
   controllers: [AppController],

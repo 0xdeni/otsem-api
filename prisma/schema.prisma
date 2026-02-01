@@ -124,6 +124,11 @@ enum TransactionStatus {
   CANCELED
 }
 
+enum BankProvider {
+  INTER
+  FDBANK
+}
+
 // ---- Novos enums para campos que eram String ----
 
 enum KycUpgradeRequestStatus {
@@ -382,6 +387,7 @@ model Payment {
   endToEnd     String  @unique
   identifier   String?
   paymentValue Int
+  bankProvider BankProvider?
 
   receiverName      String?
   receiverTaxNumber String?
@@ -412,6 +418,7 @@ model Deposit {
   endToEnd     String   @unique
   receiptValue Int
   receiptDate  DateTime
+  bankProvider BankProvider?
 
   payerName      String?
   payerTaxNumber String?
@@ -557,6 +564,7 @@ model Transaction {
   type    TransactionType
   subType String?
   status  TransactionStatus
+  bankProvider BankProvider?
 
   amount        Decimal @db.Decimal(15, 2)
   balanceBefore Decimal @db.Decimal(15, 2)
@@ -677,6 +685,20 @@ model Chargeback {
 
   @@index([customerId, status])
   @@index([status, openedAt])
+}
+
+// ==================== SYSTEM SETTINGS ====================
+
+model SystemSettings {
+  id        String   @id @default("singleton")
+  activeBankProvider BankProvider @default(INTER)
+  interEnabled       Boolean     @default(true)
+  fdbankEnabled      Boolean     @default(false)
+  metadata           Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("system_settings")
 }
 
 // ==================== WEBHOOK LOGS ====================

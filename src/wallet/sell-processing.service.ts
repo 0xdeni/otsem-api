@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { OkxService } from '../okx/services/okx.service';
-import { InterPixService } from '../inter/services/inter-pix.service';
+import { BankingGatewayService } from '../banking/banking-gateway.service';
 import { AffiliatesService } from '../affiliates/affiliates.service';
 import { Decimal } from '@prisma/client/runtime/library';
 
@@ -14,7 +14,7 @@ export class SellProcessingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly okxService: OkxService,
-    private readonly interPixService: InterPixService,
+    private readonly bankingGateway: BankingGatewayService,
     private readonly affiliatesService: AffiliatesService,
   ) {}
 
