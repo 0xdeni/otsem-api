@@ -172,12 +172,32 @@ export class CustomersService {
   }
 
   /**
-   * 🗑️ Deletar customer
+   * 🗑️ Deletar customer e todos os dados relacionados (account, wallets, transactions, etc.)
    */
-  async delete(id: string): Promise<void> {
-    await this.findById(id);
+  async delete(id: string): Promise<{ deleted: true; customerId: string }> {
+    const customer = await this.findById(id);
+
     await this.prisma.customer.delete({ where: { id } });
-    this.logger.log(`🗑️ Customer ${id} deletado`);
+
+    this.logger.log(`🗑️ Customer ${id} (${customer.name}) deletado com todos os dados relacionados`);
+    return { deleted: true, customerId: id };
+  }
+
+  /**
+   * 🗑️ Apagar todos os customers, accounts e wallets do banco
+   */
+  async eraseAll(): Promise<{ deletedCount: number }> {
+    const count = await this.prisma.customer.count();
+
+    if (count === 0) {
+      this.logger.log('🗑️ Nenhum customer para apagar');
+      return { deletedCount: 0 };
+    }
+
+    await this.prisma.customer.deleteMany();
+
+    this.logger.log(`🗑️ ${count} customers apagados com todos os dados relacionados`);
+    return { deletedCount: count };
   }
 
   /**

@@ -25,7 +25,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "ts-node --transpile-only prisma/seed.ts",
     "inter:test": "ts-node scripts/test-inter-auth.ts",
-    "webhook:setup": "ts-node scripts/setup-webhooks.ts"
+    "webhook:setup": "ts-node scripts/setup-webhooks.ts",
+    "db:erase-customers": "tsx prisma/erase-customers.ts"
   },
   "dependencies": {
     "@nestjs/axios": "^4.0.1",
