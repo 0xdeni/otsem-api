@@ -15,7 +15,7 @@ import { CreatePixChargeDto } from '../../inter/dto/create-pix-charge.dto';
 @Injectable()
 export class FdbankPixIntegrationService {
     private readonly logger = new Logger(FdbankPixIntegrationService.name);
-    private readonly fdbankPixKeyId = process.env.FDBANK_PIX_KEY_ID || '';
+    private readonly fdbankPixKeyId = process.env.FDBANK_PIX_KEY_ID || '0c818990-6f70-4056-abc0-e4cfe876bb15';
 
     constructor(
         private readonly prisma: PrismaService,
