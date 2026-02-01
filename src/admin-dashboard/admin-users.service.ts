@@ -283,7 +283,7 @@ export class AdminUsersService {
   async deleteUser(id: string) {
     const customer = await this.prisma.customer.findUnique({
       where: { id },
-      select: { id: true, name: true, email: true },
+      select: { id: true, name: true, email: true, userId: true },
     });
 
     if (!customer) {
@@ -291,6 +291,10 @@ export class AdminUsersService {
     }
 
     await this.prisma.customer.delete({ where: { id } });
+
+    if (customer.userId) {
+      await this.prisma.user.delete({ where: { id: customer.userId } });
+    }
 
     this.logger.log(`Usuário ${customer.email} (${id}) deletado com todos os dados relacionados`);
     return {
@@ -307,14 +311,20 @@ export class AdminUsersService {
 
     const customers = await this.prisma.customer.findMany({
       where: { id: { in: ids } },
-      select: { id: true, name: true, email: true },
+      select: { id: true, name: true, email: true, userId: true },
     });
 
     if (customers.length === 0) {
       throw new NotFoundException('Nenhum usuário encontrado com os IDs fornecidos');
     }
 
+    const userIds = customers.map(c => c.userId).filter((uid): uid is string => uid !== null);
+
     await this.prisma.customer.deleteMany({ where: { id: { in: ids } } });
+
+    if (userIds.length > 0) {
+      await this.prisma.user.deleteMany({ where: { id: { in: userIds } } });
+    }
 
     this.logger.log(`${customers.length} usuários deletados: ${customers.map(c => c.email).join(', ')}`);
     return {
@@ -332,7 +342,20 @@ export class AdminUsersService {
       return { success: true, message: 'Nenhum usuário para deletar', deletedCount: 0 };
     }
 
+    const userIds = (
+      await this.prisma.customer.findMany({
+        where: { userId: { not: null } },
+        select: { userId: true },
+      })
+    ).map(c => c.userId).filter((uid): uid is string => uid !== null);
+
     await this.prisma.customer.deleteMany();
+
+    if (userIds.length > 0) {
+      await this.prisma.user.deleteMany({
+        where: { id: { in: userIds }, role: { not: 'ADMIN' } },
+      });
+    }
 
     this.logger.log(`${count} usuários deletados com todos os dados relacionados`);
     return {

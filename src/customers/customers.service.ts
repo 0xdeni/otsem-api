@@ -176,8 +176,13 @@ export class CustomersService {
    */
   async delete(id: string): Promise<{ deleted: true; customerId: string }> {
     const customer = await this.findById(id);
+    const userId = (customer as any).userId as string | null;
 
     await this.prisma.customer.delete({ where: { id } });
+
+    if (userId) {
+      await this.prisma.user.delete({ where: { id: userId } });
+    }
 
     this.logger.log(`🗑️ Customer ${id} (${customer.name}) deletado com todos os dados relacionados`);
     return { deleted: true, customerId: id };
@@ -194,7 +199,20 @@ export class CustomersService {
       return { deletedCount: 0 };
     }
 
+    const userIds = (
+      await this.prisma.customer.findMany({
+        where: { userId: { not: null } },
+        select: { userId: true },
+      })
+    ).map(c => c.userId).filter((uid): uid is string => uid !== null);
+
     await this.prisma.customer.deleteMany();
+
+    if (userIds.length > 0) {
+      await this.prisma.user.deleteMany({
+        where: { id: { in: userIds }, role: { not: 'ADMIN' } },
+      });
+    }
 
     this.logger.log(`🗑️ ${count} customers apagados com todos os dados relacionados`);
     return { deletedCount: count };
