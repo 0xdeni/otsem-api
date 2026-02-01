@@ -1,10 +1,12 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
+import { TronModule } from '../tron/tron.module';
+import { OkxModule } from '../okx/okx.module';
 import { AffiliatesService } from './affiliates.service';
 import { AffiliatesController, PublicAffiliatesController } from './affiliates.controller';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, TronModule, forwardRef(() => OkxModule)],
   controllers: [AffiliatesController, PublicAffiliatesController],
   providers: [AffiliatesService],
   exports: [AffiliatesService],

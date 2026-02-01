@@ -1,19 +1,28 @@
 import { Injectable, NotFoundException, ConflictException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { Decimal } from '@prisma/client/runtime/library';
+import { TronService } from '../tron/tron.service';
+import { OkxService } from '../okx/services/okx.service';
+
+const DEFAULT_COMMISSION_RATE = 0.10; // 10% of OTSEM's spread
+const MIN_SETTLEMENT_USDT = 1; // Minimum USDT to trigger auto-settlement
 
 @Injectable()
 export class AffiliatesService {
   private readonly logger = new Logger(AffiliatesService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private tronService: TronService,
+    private okxService: OkxService,
+  ) {}
 
   async createAffiliate(data: {
     name: string;
     email: string;
     phone?: string;
     code: string;
-    spreadRate: number;
+    commissionRate?: number;
+    spreadRate?: number;
     payoutWalletAddress?: string;
     payoutWalletNetwork?: string;
   }) {
@@ -33,7 +42,8 @@ export class AffiliatesService {
         email: data.email,
         phone: data.phone,
         code: data.code.toUpperCase(),
-        spreadRate: data.spreadRate,
+        commissionRate: data.commissionRate ?? DEFAULT_COMMISSION_RATE,
+        spreadRate: data.spreadRate ?? 0,
         payoutWalletAddress: data.payoutWalletAddress,
         payoutWalletNetwork: data.payoutWalletNetwork,
       },
@@ -66,11 +76,14 @@ export class AffiliatesService {
         email: a.email,
         phone: a.phone,
         code: a.code,
+        commissionRate: Number(a.commissionRate),
         spreadRate: Number(a.spreadRate),
         payoutWalletAddress: a.payoutWalletAddress,
         payoutWalletNetwork: a.payoutWalletNetwork,
         totalEarnings: Number(a.totalEarnings),
         pendingEarnings: Number(a.pendingEarnings),
+        totalEarningsUsdt: Number(a.totalEarningsUsdt),
+        pendingEarningsUsdt: Number(a.pendingEarningsUsdt),
         isActive: a.isActive,
         referredCustomersCount: a._count.referredCustomers,
         commissionsCount: a._count.commissions,
@@ -113,6 +126,7 @@ export class AffiliatesService {
     name: string;
     email: string;
     phone: string;
+    commissionRate: number;
     spreadRate: number;
     payoutWalletAddress: string;
     payoutWalletNetwork: string;
@@ -157,29 +171,92 @@ export class AffiliatesService {
     });
   }
 
+  /**
+   * Links a customer to a default affiliate or a specific referral code.
+   * Called during registration.
+   */
+  async linkCustomerOnRegistration(customerId: string, affiliateCode?: string) {
+    // If a specific code was provided, try it first
+    if (affiliateCode) {
+      const affiliate = await this.findByCode(affiliateCode);
+      if (affiliate && affiliate.isActive) {
+        await this.prisma.customer.update({
+          where: { id: customerId },
+          data: { affiliateId: affiliate.id },
+        });
+        this.logger.log(`[Affiliate] Customer ${customerId} linked to affiliate ${affiliate.code} (referral code)`);
+        return;
+      }
+      this.logger.warn(`[Affiliate] Referral code "${affiliateCode}" invalid or inactive, falling back to default`);
+    }
+
+    // Fall back to default affiliate
+    const defaultCode = process.env.DEFAULT_AFFILIATE_CODE;
+    if (!defaultCode) {
+      return; // No default configured, skip
+    }
+
+    const defaultAffiliate = await this.findByCode(defaultCode);
+    if (defaultAffiliate && defaultAffiliate.isActive) {
+      await this.prisma.customer.update({
+        where: { id: customerId },
+        data: { affiliateId: defaultAffiliate.id },
+      });
+      this.logger.log(`[Affiliate] Customer ${customerId} linked to default affiliate ${defaultAffiliate.code}`);
+    }
+  }
+
+  /**
+   * Records a commission for an affiliate.
+   * New model: commission = commissionRate * spreadBrl (10% of OTSEM's spread by default).
+   * Stores both BRL and USDT values.
+   */
   async recordCommission(data: {
     affiliateId: string;
     customerId: string;
+    conversionId?: string;
+    conversionType?: string;
     transactionId?: string;
-    transactionAmount: number;
-    spreadTotal: number;
-    spreadBase: number;
-    spreadAffiliate: number;
+    transactionAmount: number; // Total BRL amount of the transaction
+    spreadBrl: number; // OTSEM's spread in BRL
+    exchangeRate: number; // BRL per USDT at time of conversion
   }) {
-    const commissionBrl = data.transactionAmount * data.spreadAffiliate;
+    const affiliate = await this.prisma.affiliate.findUnique({
+      where: { id: data.affiliateId },
+    });
 
-    this.logger.log(`[Affiliate] Recording commission: ${commissionBrl.toFixed(2)} BRL for affiliate ${data.affiliateId}`);
+    if (!affiliate) {
+      this.logger.error(`[Affiliate] Affiliate ${data.affiliateId} not found, skipping commission`);
+      return null;
+    }
+
+    const commissionRate = Number(affiliate.commissionRate) || DEFAULT_COMMISSION_RATE;
+    const commissionBrl = data.spreadBrl * commissionRate;
+    const commissionUsdt = data.exchangeRate > 0 ? commissionBrl / data.exchangeRate : 0;
+
+    this.logger.log(
+      `[Affiliate] Recording commission: R$ ${commissionBrl.toFixed(2)} / ${commissionUsdt.toFixed(6)} USDT ` +
+      `(${(commissionRate * 100).toFixed(0)}% of R$ ${data.spreadBrl.toFixed(2)} spread) ` +
+      `for affiliate ${affiliate.code} [${data.conversionType || 'N/A'}]`,
+    );
 
     const commission = await this.prisma.affiliateCommission.create({
       data: {
         affiliateId: data.affiliateId,
         customerId: data.customerId,
         transactionId: data.transactionId,
+        conversionId: data.conversionId,
+        conversionType: data.conversionType,
         transactionAmount: data.transactionAmount,
-        spreadTotal: data.spreadTotal,
-        spreadBase: data.spreadBase,
-        spreadAffiliate: data.spreadAffiliate,
+        spreadBrl: data.spreadBrl,
+        commissionRate,
         commissionBrl,
+        commissionUsdt,
+        exchangeRate: data.exchangeRate,
+        // Legacy fields set to 0
+        spreadTotal: 0,
+        spreadBase: 0,
+        spreadAffiliate: 0,
       },
     });
 
@@ -187,10 +264,168 @@ export class AffiliatesService {
       where: { id: data.affiliateId },
       data: {
         pendingEarnings: { increment: commissionBrl },
+        pendingEarningsUsdt: { increment: commissionUsdt },
       },
     });
 
     return commission;
+  }
+
+  /**
+   * Attempts to settle pending USDT commissions for an affiliate.
+   * Uses Tron hot wallet for TRON payouts or OKX withdrawal for SOLANA.
+   * Returns the settlement result or null if not settled.
+   */
+  async settleCommissionUsdt(affiliateId: string): Promise<{
+    settled: boolean;
+    amountUsdt: number;
+    txId?: string;
+    reason?: string;
+  }> {
+    const affiliate = await this.prisma.affiliate.findUnique({
+      where: { id: affiliateId },
+    });
+
+    if (!affiliate) {
+      return { settled: false, amountUsdt: 0, reason: 'Affiliate not found' };
+    }
+
+    const pendingUsdt = Number(affiliate.pendingEarningsUsdt);
+
+    if (pendingUsdt < MIN_SETTLEMENT_USDT) {
+      return {
+        settled: false,
+        amountUsdt: pendingUsdt,
+        reason: `Below minimum settlement (${MIN_SETTLEMENT_USDT} USDT). Accumulated: ${pendingUsdt.toFixed(6)} USDT`,
+      };
+    }
+
+    if (!affiliate.payoutWalletAddress || !affiliate.payoutWalletNetwork) {
+      return {
+        settled: false,
+        amountUsdt: pendingUsdt,
+        reason: 'No payout wallet configured',
+      };
+    }
+
+    try {
+      let txId: string;
+      const amountToSend = Math.floor(pendingUsdt * 1_000_000) / 1_000_000; // Floor to 6 decimals
+
+      if (affiliate.payoutWalletNetwork === 'TRON') {
+        // Send from Tron hot wallet
+        const result = await this.tronService.sendUsdt(affiliate.payoutWalletAddress, amountToSend);
+        txId = result.txId;
+      } else if (affiliate.payoutWalletNetwork === 'SOLANA') {
+        // Use OKX withdrawal for Solana
+        const fee = '1'; // Solana USDT withdrawal fee
+        await this.okxService.transferFromTradingToFunding('USDT', amountToSend.toString());
+        const result = await this.okxService.withdrawUsdtSimple(
+          amountToSend.toFixed(6),
+          affiliate.payoutWalletAddress,
+          'Solana',
+          fee,
+        );
+        txId = result?.wdId || 'okx-withdrawal';
+      } else {
+        return {
+          settled: false,
+          amountUsdt: pendingUsdt,
+          reason: `Unsupported payout network: ${affiliate.payoutWalletNetwork}`,
+        };
+      }
+
+      // Mark all PENDING commissions as PAID
+      const pendingCommissions = await this.prisma.affiliateCommission.findMany({
+        where: { affiliateId, status: 'PENDING' },
+        select: { id: true, commissionBrl: true, commissionUsdt: true },
+      });
+
+      const totalBrl = pendingCommissions.reduce((s, c) => s + Number(c.commissionBrl), 0);
+      const totalUsdt = pendingCommissions.reduce((s, c) => s + Number(c.commissionUsdt), 0);
+
+      await this.prisma.$transaction([
+        this.prisma.affiliateCommission.updateMany({
+          where: {
+            id: { in: pendingCommissions.map((c) => c.id) },
+          },
+          data: { status: 'PAID', paidAt: new Date(), settlementTxId: txId },
+        }),
+        this.prisma.affiliate.update({
+          where: { id: affiliateId },
+          data: {
+            pendingEarnings: { decrement: totalBrl },
+            totalEarnings: { increment: totalBrl },
+            pendingEarningsUsdt: { decrement: totalUsdt },
+            totalEarningsUsdt: { increment: totalUsdt },
+          },
+        }),
+      ]);
+
+      this.logger.log(
+        `[Affiliate] Settled ${amountToSend.toFixed(6)} USDT to ${affiliate.code} ` +
+        `(${affiliate.payoutWalletNetwork}: ${affiliate.payoutWalletAddress}), txId: ${txId}`,
+      );
+
+      return { settled: true, amountUsdt: amountToSend, txId };
+    } catch (error: any) {
+      this.logger.error(
+        `[Affiliate] Settlement failed for ${affiliate.code}: ${error.message}`,
+      );
+      return {
+        settled: false,
+        amountUsdt: pendingUsdt,
+        reason: `Settlement failed: ${error.message}`,
+      };
+    }
+  }
+
+  /**
+   * Returns affiliate info for a customer (for commission calculation).
+   * No longer adds to the spread — just provides the affiliate reference.
+   */
+  async getAffiliateForCustomer(customerId: string): Promise<{
+    affiliate: { id: string; code: string; commissionRate: number } | null;
+  }> {
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+      include: { affiliate: true },
+    });
+
+    if (!customer?.affiliate || !customer.affiliate.isActive) {
+      return { affiliate: null };
+    }
+
+    return {
+      affiliate: {
+        id: customer.affiliate.id,
+        code: customer.affiliate.code,
+        commissionRate: Number(customer.affiliate.commissionRate) || DEFAULT_COMMISSION_RATE,
+      },
+    };
+  }
+
+  /**
+   * @deprecated Use getAffiliateForCustomer instead. Kept for backward compatibility.
+   */
+  async getAffiliateSpreadForCustomer(customerId: string): Promise<{
+    affiliate: { id: string; code: string; spreadRate: number } | null;
+    spreadAffiliate: number;
+  }> {
+    const result = await this.getAffiliateForCustomer(customerId);
+
+    if (!result.affiliate) {
+      return { affiliate: null, spreadAffiliate: 0 };
+    }
+
+    return {
+      affiliate: {
+        id: result.affiliate.id,
+        code: result.affiliate.code,
+        spreadRate: 0, // No longer adds to spread
+      },
+      spreadAffiliate: 0, // No longer adds to spread
+    };
   }
 
   async getCommissions(affiliateId: string, page: number = 1, limit: number = 20) {
@@ -211,13 +446,17 @@ export class AffiliatesService {
         id: c.id,
         customerId: c.customerId,
         transactionId: c.transactionId,
+        conversionId: c.conversionId,
+        conversionType: c.conversionType,
         transactionAmount: Number(c.transactionAmount),
-        spreadTotal: Number(c.spreadTotal),
-        spreadBase: Number(c.spreadBase),
-        spreadAffiliate: Number(c.spreadAffiliate),
+        spreadBrl: Number(c.spreadBrl),
+        commissionRate: Number(c.commissionRate),
         commissionBrl: Number(c.commissionBrl),
+        commissionUsdt: Number(c.commissionUsdt),
+        exchangeRate: Number(c.exchangeRate),
         status: c.status,
         paidAt: c.paidAt,
+        settlementTxId: c.settlementTxId,
         createdAt: c.createdAt,
       })),
       total,
@@ -239,8 +478,12 @@ export class AffiliatesService {
       throw new NotFoundException('Nenhuma comissão pendente encontrada');
     }
 
-    const totalPaid = commissions.reduce(
+    const totalPaidBrl = commissions.reduce(
       (sum, c) => sum + Number(c.commissionBrl),
+      0,
+    );
+    const totalPaidUsdt = commissions.reduce(
+      (sum, c) => sum + Number(c.commissionUsdt),
       0,
     );
 
@@ -252,41 +495,15 @@ export class AffiliatesService {
       this.prisma.affiliate.update({
         where: { id: affiliateId },
         data: {
-          pendingEarnings: { decrement: totalPaid },
-          totalEarnings: { increment: totalPaid },
+          pendingEarnings: { decrement: totalPaidBrl },
+          totalEarnings: { increment: totalPaidBrl },
+          pendingEarningsUsdt: { decrement: totalPaidUsdt },
+          totalEarningsUsdt: { increment: totalPaidUsdt },
         },
       }),
     ]);
 
-    return { paidCount: commissions.length, totalPaid };
-  }
-
-  async getAffiliateSpreadForCustomer(customerId: string): Promise<{
-    affiliate: { id: string; code: string; spreadRate: number } | null;
-    spreadAffiliate: number;
-  }> {
-    const customer = await this.prisma.customer.findUnique({
-      where: { id: customerId },
-      include: { affiliate: true },
-    });
-
-    if (!customer?.affiliate || !customer.affiliate.isActive) {
-      return {
-        affiliate: null,
-        spreadAffiliate: 0,
-      };
-    }
-
-    const spreadAffiliate = Number(customer.affiliate.spreadRate);
-
-    return {
-      affiliate: {
-        id: customer.affiliate.id,
-        code: customer.affiliate.code,
-        spreadRate: spreadAffiliate,
-      },
-      spreadAffiliate,
-    };
+    return { paidCount: commissions.length, totalPaidBrl, totalPaidUsdt };
   }
 
   async activateForCustomer(customerId: string) {
@@ -308,13 +525,12 @@ export class AffiliatesService {
         success: true,
         data: {
           referralCode: existingAffiliate.code,
-          commissionRate: Number(existingAffiliate.spreadRate),
+          commissionRate: Number(existingAffiliate.commissionRate),
         },
       };
     }
 
     const code = await this.generateUniqueCode(customer.name);
-    const defaultSpreadRate = 0.005;
 
     const affiliate = await this.prisma.affiliate.create({
       data: {
@@ -322,7 +538,8 @@ export class AffiliatesService {
         email: customer.email,
         phone: customer.phone,
         code,
-        spreadRate: defaultSpreadRate,
+        commissionRate: DEFAULT_COMMISSION_RATE,
+        spreadRate: 0,
         isActive: true,
       },
     });
@@ -331,7 +548,7 @@ export class AffiliatesService {
       success: true,
       data: {
         referralCode: affiliate.code,
-        commissionRate: Number(affiliate.spreadRate),
+        commissionRate: Number(affiliate.commissionRate),
       },
     };
   }
@@ -404,7 +621,9 @@ export class AffiliatesService {
         totalEarnings: Number(affiliate.totalEarnings),
         pendingEarnings: Number(affiliate.pendingEarnings),
         paidEarnings: paidEarnings > 0 ? paidEarnings : 0,
-        commissionRate: Number(affiliate.spreadRate),
+        totalEarningsUsdt: Number(affiliate.totalEarningsUsdt),
+        pendingEarningsUsdt: Number(affiliate.pendingEarningsUsdt),
+        commissionRate: Number(affiliate.commissionRate),
       },
     };
   }
@@ -439,22 +658,23 @@ export class AffiliatesService {
     const commissionsByCustomer = await this.prisma.affiliateCommission.groupBy({
       by: ['customerId'],
       where: { affiliateId: affiliate.id },
-      _sum: { commissionBrl: true, transactionAmount: true },
+      _sum: { commissionBrl: true, transactionAmount: true, commissionUsdt: true },
     });
 
-    const commissionMap = new Map(
-      commissionsByCustomer.map((c) => [
+    const commissionMap = new Map<string, { totalVolume: number; commissionEarned: number; commissionEarnedUsdt: number }>(
+      commissionsByCustomer.map((c: any) => [
         c.customerId,
         {
           totalVolume: Number(c._sum.transactionAmount || 0),
           commissionEarned: Number(c._sum.commissionBrl || 0),
+          commissionEarnedUsdt: Number(c._sum.commissionUsdt || 0),
         },
       ]),
     );
 
     return {
-      data: referrals.map((r) => {
-        const stats = commissionMap.get(r.id) || { totalVolume: 0, commissionEarned: 0 };
+      data: referrals.map((r: any) => {
+        const stats = commissionMap.get(r.id) || { totalVolume: 0, commissionEarned: 0, commissionEarnedUsdt: 0 };
         return {
           id: r.id,
           name: r.name,
@@ -462,6 +682,7 @@ export class AffiliatesService {
           registeredAt: r.createdAt,
           totalVolume: stats.totalVolume,
           commissionEarned: stats.commissionEarned,
+          commissionEarnedUsdt: stats.commissionEarnedUsdt,
           status: Number(r.account?.balance || 0) > 0 ? 'active' : 'inactive',
         };
       }),
@@ -504,10 +725,13 @@ export class AffiliatesService {
         referralId: c.customerId,
         referralName: customerMap.get(c.customerId) || null,
         amount: Number(c.commissionBrl),
+        amountUsdt: Number(c.commissionUsdt),
         transactionAmount: Number(c.transactionAmount),
+        conversionType: c.conversionType,
         status: c.status.toLowerCase(),
         createdAt: c.createdAt,
         paidAt: c.paidAt,
+        settlementTxId: c.settlementTxId,
       })),
     };
   }
