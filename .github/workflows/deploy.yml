@@ -59,8 +59,9 @@ jobs:
             # instala somente deps de runtime
             npm_config_jobs=2 npm ci --omit=dev --no-audit --no-fund
 
-            # resolve migração que falhou anteriormente no banco
+            # resolve migrações que falharam anteriormente no banco
             npx --yes prisma migrate resolve --applied 20260131000000_schema_improvements --schema prisma/schema.prisma || true
+            npx --yes prisma migrate resolve --rolled-back 20260201020000_add_bank_provider_and_system_settings --schema prisma/schema.prisma || true
 
             # aplica migrações (usa prisma/.env do servidor)
             npx --yes prisma migrate deploy --schema prisma/schema.prisma
