@@ -336,32 +336,24 @@ export class AdminUsersService {
   }
 
   async deleteAllUsers() {
-    const count = await this.prisma.customer.count();
+    const customerCount = await this.prisma.customer.count();
 
-    if (count === 0) {
-      return { success: true, message: 'Nenhum usuário para deletar', deletedCount: 0 };
+    if (customerCount > 0) {
+      await this.prisma.customer.deleteMany();
     }
 
-    const userIds = (
-      await this.prisma.customer.findMany({
-        where: { userId: { not: null } },
-        select: { userId: true },
-      })
-    ).map(c => c.userId).filter((uid): uid is string => uid !== null);
+    // Delete all non-ADMIN users (covers both linked and orphaned records)
+    const userResult = await this.prisma.user.deleteMany({
+      where: { role: { not: 'ADMIN' } },
+    });
 
-    await this.prisma.customer.deleteMany();
-
-    if (userIds.length > 0) {
-      await this.prisma.user.deleteMany({
-        where: { id: { in: userIds }, role: { not: 'ADMIN' } },
-      });
-    }
-
-    this.logger.log(`${count} usuários deletados com todos os dados relacionados`);
+    const total = customerCount + userResult.count;
+    this.logger.log(`${customerCount} customers e ${userResult.count} users deletados`);
     return {
       success: true,
-      message: `${count} usuário(s) deletado(s) com sucesso`,
-      deletedCount: count,
+      message: `${customerCount} customer(s) e ${userResult.count} user(s) deletado(s)`,
+      deletedCustomers: customerCount,
+      deletedUsers: userResult.count,
     };
   }
 
