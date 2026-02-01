@@ -4,6 +4,7 @@ import { TronService } from '../tron/tron.service';
 import { OkxService } from '../okx/services/okx.service';
 
 const DEFAULT_COMMISSION_RATE = 0.03; // 3% of OTSEM's spread (default for new affiliates)
+const DEFAULT_AFFILIATE_CODE = '0X'; // Default affiliate for signups without a referral code
 const MIN_SETTLEMENT_USDT = 1; // Minimum USDT to trigger auto-settlement
 
 @Injectable()
@@ -228,13 +229,8 @@ export class AffiliatesService {
       this.logger.warn(`[Affiliate] Referral code "${affiliateCode}" invalid or inactive, falling back to default`);
     }
 
-    // Fall back to default affiliate
-    const defaultCode = process.env.DEFAULT_AFFILIATE_CODE;
-    if (!defaultCode) {
-      return; // No default configured, skip
-    }
-
-    const defaultAffiliate = await this.findByCode(defaultCode);
+    // Fall back to default affiliate (0X)
+    const defaultAffiliate = await this.findByCode(DEFAULT_AFFILIATE_CODE);
     if (defaultAffiliate && defaultAffiliate.isActive) {
       await this.prisma.customer.update({
         where: { id: customerId },
