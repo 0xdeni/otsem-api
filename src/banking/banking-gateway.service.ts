@@ -98,6 +98,40 @@ export class BankingGatewayService {
     }
 
     /**
+     * Validate PIX key via micro-transfer (R$ 0.01)
+     * Currently only Inter supports this; FDBank falls back to Inter.
+     */
+    async validatePixKeyByMicroTransfer(customerId: string, pixKeyId: string): Promise<any> {
+        return this.interPixService.validatePixKeyByMicroTransfer(customerId, pixKeyId);
+    }
+
+    /**
+     * List charges for the last N days - routes to active bank
+     */
+    async listCobrancas(dias: number): Promise<any> {
+        const provider = await this.getActiveProvider();
+
+        if (provider === 'FDBANK') {
+            return this.fdbankPixService.reconciliarCobrancas(dias);
+        }
+
+        return this.interPixService.listCobrancas(dias);
+    }
+
+    /**
+     * Reconcile pending charges - routes to active bank
+     */
+    async reconciliarCobrancas(dias: number): Promise<any> {
+        const provider = await this.getActiveProvider();
+
+        if (provider === 'FDBANK') {
+            return this.fdbankPixService.reconciliarCobrancas(dias);
+        }
+
+        return this.interPixService.reconciliarCobrancas(dias);
+    }
+
+    /**
      * Explicitly use a specific bank provider (override active setting)
      */
     async sendPixVia(provider: BankProvider, customerId: string, dto: SendPixDto): Promise<PixPaymentResponseDto> {
