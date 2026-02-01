@@ -1,8 +1,12 @@
--- CreateEnum
-CREATE TYPE "BankProvider" AS ENUM ('INTER', 'FDBANK');
+-- CreateEnum (idempotent)
+DO $$ BEGIN
+    CREATE TYPE "BankProvider" AS ENUM ('INTER', 'FDBANK');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
--- CreateTable
-CREATE TABLE "system_settings" (
+-- CreateTable (idempotent)
+CREATE TABLE IF NOT EXISTS "system_settings" (
     "id" TEXT NOT NULL DEFAULT 'singleton',
     "activeBankProvider" "BankProvider" NOT NULL DEFAULT 'INTER',
     "interEnabled" BOOLEAN NOT NULL DEFAULT true,
@@ -15,13 +19,13 @@ CREATE TABLE "system_settings" (
 );
 
 -- AlterTable: Add bankProvider to Payment
-ALTER TABLE "Payment" ADD COLUMN "bankProvider" "BankProvider";
+ALTER TABLE "Payment" ADD COLUMN IF NOT EXISTS "bankProvider" "BankProvider";
 
 -- AlterTable: Add bankProvider to Deposit
-ALTER TABLE "Deposit" ADD COLUMN "bankProvider" "BankProvider";
+ALTER TABLE "Deposit" ADD COLUMN IF NOT EXISTS "bankProvider" "BankProvider";
 
 -- AlterTable: Add bankProvider to Transaction
-ALTER TABLE "Transaction" ADD COLUMN "bankProvider" "BankProvider";
+ALTER TABLE "transactions" ADD COLUMN IF NOT EXISTS "bankProvider" "BankProvider";
 
 -- Insert default settings
 INSERT INTO "system_settings" ("id", "activeBankProvider", "interEnabled", "fdbankEnabled", "updatedAt")
