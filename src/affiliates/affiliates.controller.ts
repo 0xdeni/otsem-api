@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Param,
   Body,
   Query,
@@ -68,6 +69,12 @@ export class AffiliatesController {
     },
   ) {
     return this.affiliatesService.updateAffiliate(id, body);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Deletar afiliado (desvincula clientes e remove comissões)' })
+  async delete(@Param('id') id: string) {
+    return this.affiliatesService.deleteAffiliate(id);
   }
 
   @Patch(':id/toggle-active')

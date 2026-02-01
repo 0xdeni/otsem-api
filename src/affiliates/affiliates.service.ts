@@ -143,6 +143,44 @@ export class AffiliatesService {
     });
   }
 
+  async deleteAffiliate(id: string) {
+    const affiliate = await this.prisma.affiliate.findUnique({
+      where: { id },
+      include: { _count: { select: { commissions: true, referredCustomers: true } } },
+    });
+    if (!affiliate) {
+      throw new NotFoundException('Afiliado não encontrado');
+    }
+
+    await this.prisma.$transaction([
+      // Unlink all referred customers
+      this.prisma.customer.updateMany({
+        where: { affiliateId: id },
+        data: { affiliateId: null },
+      }),
+      // Delete all commissions (removes RESTRICT constraint issue)
+      this.prisma.affiliateCommission.deleteMany({
+        where: { affiliateId: id },
+      }),
+      // Unlink conversions
+      this.prisma.conversion.updateMany({
+        where: { affiliateId: id },
+        data: { affiliateId: null },
+      }),
+      // Delete the affiliate
+      this.prisma.affiliate.delete({
+        where: { id },
+      }),
+    ]);
+
+    this.logger.log(
+      `[Affiliate] Deleted affiliate ${affiliate.code} (${affiliate.name}). ` +
+      `Unlinked ${affiliate._count.referredCustomers} customers, deleted ${affiliate._count.commissions} commissions.`,
+    );
+
+    return { deleted: true, code: affiliate.code, name: affiliate.name };
+  }
+
   async toggleActive(id: string) {
     const affiliate = await this.prisma.affiliate.findUnique({ where: { id } });
     if (!affiliate) {
