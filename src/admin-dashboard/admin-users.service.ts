@@ -280,6 +280,68 @@ export class AdminUsersService {
     return descriptions[type] || type;
   }
 
+  async deleteUser(id: string) {
+    const customer = await this.prisma.customer.findUnique({
+      where: { id },
+      select: { id: true, name: true, email: true },
+    });
+
+    if (!customer) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+
+    await this.prisma.customer.delete({ where: { id } });
+
+    this.logger.log(`Usuário ${customer.email} (${id}) deletado com todos os dados relacionados`);
+    return {
+      success: true,
+      message: 'Usuário deletado com sucesso',
+      deleted: { id: customer.id, name: customer.name, email: customer.email },
+    };
+  }
+
+  async deleteUsers(ids: string[]) {
+    if (!ids || ids.length === 0) {
+      throw new BadRequestException('Nenhum ID fornecido');
+    }
+
+    const customers = await this.prisma.customer.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, name: true, email: true },
+    });
+
+    if (customers.length === 0) {
+      throw new NotFoundException('Nenhum usuário encontrado com os IDs fornecidos');
+    }
+
+    await this.prisma.customer.deleteMany({ where: { id: { in: ids } } });
+
+    this.logger.log(`${customers.length} usuários deletados: ${customers.map(c => c.email).join(', ')}`);
+    return {
+      success: true,
+      message: `${customers.length} usuário(s) deletado(s) com sucesso`,
+      deletedCount: customers.length,
+      deleted: customers.map(c => ({ id: c.id, name: c.name, email: c.email })),
+    };
+  }
+
+  async deleteAllUsers() {
+    const count = await this.prisma.customer.count();
+
+    if (count === 0) {
+      return { success: true, message: 'Nenhum usuário para deletar', deletedCount: 0 };
+    }
+
+    await this.prisma.customer.deleteMany();
+
+    this.logger.log(`${count} usuários deletados com todos os dados relacionados`);
+    return {
+      success: true,
+      message: `${count} usuário(s) deletado(s) com sucesso`,
+      deletedCount: count,
+    };
+  }
+
   async updateSpread(customerId: string, spreadPercent: number) {
     if (spreadPercent < 0 || spreadPercent > 100) {
       throw new BadRequestException('Spread deve estar entre 0 e 100%');
