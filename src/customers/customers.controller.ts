@@ -156,6 +156,20 @@ export class CustomersController {
     return this.statements.getCustomerStatement(id, query);
   }
 
+  @Delete('all')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Apagar todos os customers, accounts e wallets' })
+  async eraseAll() {
+    return this.customers.eraseAll();
+  }
+
+  @Delete(':id')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Deletar customer e todos os dados relacionados' })
+  async delete(@Param('id') id: string) {
+    return this.customers.delete(id);
+  }
+
   // KYC flows
   @Post(':id/kyc/request')
   @ApiOperation({ summary: 'Solicitar KYC - retorna URL de verificação Didit' })

@@ -310,7 +310,7 @@ model KycLevelConfig {
 model KycUpgradeRequest {
   id            String       @id @default(uuid())
   customerId    String
-  customer      Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  customer      Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
 
   currentLevel  KycLevel
   targetLevel   KycLevel
@@ -754,7 +754,7 @@ model AffiliateCommission {
   updatedAt DateTime @updatedAt
 
   affiliate   Affiliate    @relation(fields: [affiliateId], references: [id], onDelete: Restrict)
-  customer    Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  customer    Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
   transaction Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
 
   @@index([affiliateId])
@@ -828,8 +828,8 @@ model Conversion {
   updatedAt   DateTime  @updatedAt
   completedAt DateTime?
 
-  customer  Customer   @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  account   Account    @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  customer  Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  account   Account    @relation(fields: [accountId], references: [id], onDelete: Cascade)
   wallet    Wallet?    @relation(fields: [walletId], references: [id], onDelete: SetNull)
   affiliate Affiliate? @relation(fields: [affiliateId], references: [id], onDelete: SetNull)
 
