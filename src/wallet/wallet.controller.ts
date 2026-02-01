@@ -193,7 +193,17 @@ export class WalletController {
     @Body('label') label?: string,
   ) {
     const customerId = this.getCustomerId(req);
-    return this.walletService.importWallet(customerId, network, address, label);
+
+    const validNetworks: string[] = Object.values(WalletNetwork);
+    if (!network || !validNetworks.includes(network)) {
+      throw new BadRequestException(`Rede inválida. Redes suportadas: ${validNetworks.join(', ')}`);
+    }
+
+    if (!address || typeof address !== 'string' || address.trim().length === 0) {
+      throw new BadRequestException('Endereço da wallet é obrigatório');
+    }
+
+    return this.walletService.importWallet(customerId, network, address.trim(), label);
   }
 
   @Patch(':id/set-main')

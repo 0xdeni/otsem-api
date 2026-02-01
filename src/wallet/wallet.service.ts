@@ -57,17 +57,28 @@ export class WalletService {
       });
     }
 
-    return this.prisma.wallet.create({
-      data: {
-        customerId,
-        network,
-        externalAddress,
-        currency: options?.currency || 'USDT',
-        label: options?.label,
-        isMain: options?.isMain ?? false,
-        balance: 0,
-      },
-    });
+    try {
+      return await this.prisma.wallet.create({
+        data: {
+          customerId,
+          network,
+          externalAddress,
+          currency: options?.currency || 'USDT',
+          label: options?.label,
+          isMain: options?.isMain ?? false,
+          balance: 0,
+        },
+      });
+    } catch (err: any) {
+      this.logger.error(`Erro ao criar wallet: ${err.message}`);
+      if (err.code === 'P2002') {
+        throw new BadRequestException('Wallet com este endereço já existe nesta rede');
+      }
+      if (err.code === 'P2003') {
+        throw new BadRequestException('Cliente não encontrado');
+      }
+      throw new BadRequestException('Erro ao criar wallet. Verifique os dados e tente novamente.');
+    }
   }
 
   async createSolanaWallet(customerId: string, label?: string) {
@@ -156,6 +167,25 @@ export class WalletService {
     externalAddress: string,
     label?: string,
   ) {
+    // Validate address format for the specified network
+    try {
+      if (network === 'TRON') {
+        const isValid = await this.tronService.isValidAddress(externalAddress);
+        if (!isValid) {
+          throw new BadRequestException('Endereço Tron inválido');
+        }
+      } else if (network === 'SOLANA') {
+        const isValid = await this.solanaService.isValidAddress(externalAddress);
+        if (!isValid) {
+          throw new BadRequestException('Endereço Solana inválido');
+        }
+      }
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      this.logger.error(`Erro ao validar endereço ${network}: ${err}`);
+      throw new BadRequestException(`Não foi possível validar o endereço para a rede ${network}`);
+    }
+
     const existingMain = await this.prisma.wallet.findFirst({
       where: { customerId, network, isMain: true },
     });
