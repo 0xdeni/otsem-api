@@ -230,10 +230,11 @@ export class InterPixService {
             const axios = this.authService.getAxiosInstance();
 
             // ✅ Payload da Inter (conforme documentação)
+            // Inter espera tipo = CHAVE (método de pagamento), não o tipo da chave (CPF, CNPJ, etc.)
             const payload = {
                 valor: dto.valor.toFixed(2),
                 destinatario: {
-                    tipo: dto.tipoChave,
+                    tipo: 'CHAVE',
                     chave: dto.chaveDestino,
                     ...(dto.nomeFavorecido && { nome: dto.nomeFavorecido }),
                 },
@@ -302,7 +303,7 @@ export class InterPixService {
             const payload = {
                 valor: dto.valor.toFixed(2),
                 destinatario: {
-                    tipo: dto.tipoChave,
+                    tipo: 'CHAVE',
                     chave: dto.chaveDestino,
                     ...(dto.nomeFavorecido && { nome: dto.nomeFavorecido }),
                 },
