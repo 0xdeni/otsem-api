@@ -710,8 +710,8 @@ model Affiliate {
   phone String?
   code  String  @unique // Código único para indicação (ex: "JOAO123")
 
-  // Taxa de comissão do afiliado (ex: 0.10 = 10% do spread da OTSEM)
-  commissionRate Decimal @default(0.10) @db.Decimal(10, 6)
+  // Taxa de comissão do afiliado (ex: 0.03 = 3% do spread da OTSEM)
+  commissionRate Decimal @default(0.03) @db.Decimal(10, 6)
 
   // Legacy: mantido para compatibilidade, não mais usado no cálculo de spread
   spreadRate Decimal @default(0) @db.Decimal(10, 6)

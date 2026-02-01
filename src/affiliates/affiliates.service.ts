@@ -3,7 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TronService } from '../tron/tron.service';
 import { OkxService } from '../okx/services/okx.service';
 
-const DEFAULT_COMMISSION_RATE = 0.10; // 10% of OTSEM's spread
+const DEFAULT_COMMISSION_RATE = 0.03; // 3% of OTSEM's spread (default for new affiliates)
 const MIN_SETTLEMENT_USDT = 1; // Minimum USDT to trigger auto-settlement
 
 @Injectable()
