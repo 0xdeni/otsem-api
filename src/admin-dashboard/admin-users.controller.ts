@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Param, Query, Body, UseGuards, ParseIntPipe, DefaultValuePipe } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Query, Body, UseGuards, ParseIntPipe, DefaultValuePipe } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags, ApiBody } from '@nestjs/swagger';
 import { SendEmailDto } from './dto/send-email.dto';
 import { AdminUsersService } from './admin-users.service';
@@ -53,6 +53,29 @@ export class AdminUsersController {
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
   ) {
     return this.service.getUserTransactions(id, limit);
+  }
+
+  @Delete('all')
+  @ApiOperation({ summary: 'Deletar todos os customers, accounts e wallets' })
+  @ApiResponse({ status: 200, description: 'Todos os usuários deletados' })
+  async deleteAllUsers() {
+    return this.service.deleteAllUsers();
+  }
+
+  @Post('delete-batch')
+  @ApiOperation({ summary: 'Deletar múltiplos usuários por IDs' })
+  @ApiBody({ schema: { type: 'object', properties: { ids: { type: 'array', items: { type: 'string' } } }, required: ['ids'] } })
+  @ApiResponse({ status: 200, description: 'Usuários deletados' })
+  async deleteUsers(@Body('ids') ids: string[]) {
+    return this.service.deleteUsers(ids);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Deletar usuário e todos os dados relacionados' })
+  @ApiResponse({ status: 200, description: 'Usuário deletado' })
+  @ApiResponse({ status: 404, description: 'Usuário não encontrado' })
+  async deleteUser(@Param('id') id: string) {
+    return this.service.deleteUser(id);
   }
 
   @Post(':id/block')
