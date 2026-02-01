@@ -191,31 +191,20 @@ export class CustomersService {
   /**
    * 🗑️ Apagar todos os customers, accounts e wallets do banco
    */
-  async eraseAll(): Promise<{ deletedCount: number }> {
-    const count = await this.prisma.customer.count();
+  async eraseAll(): Promise<{ deletedCustomers: number; deletedUsers: number }> {
+    const customerCount = await this.prisma.customer.count();
 
-    if (count === 0) {
-      this.logger.log('🗑️ Nenhum customer para apagar');
-      return { deletedCount: 0 };
+    if (customerCount > 0) {
+      await this.prisma.customer.deleteMany();
     }
 
-    const userIds = (
-      await this.prisma.customer.findMany({
-        where: { userId: { not: null } },
-        select: { userId: true },
-      })
-    ).map(c => c.userId).filter((uid): uid is string => uid !== null);
+    // Delete all non-ADMIN users (covers both linked and orphaned records)
+    const userResult = await this.prisma.user.deleteMany({
+      where: { role: { not: 'ADMIN' } },
+    });
 
-    await this.prisma.customer.deleteMany();
-
-    if (userIds.length > 0) {
-      await this.prisma.user.deleteMany({
-        where: { id: { in: userIds }, role: { not: 'ADMIN' } },
-      });
-    }
-
-    this.logger.log(`🗑️ ${count} customers apagados com todos os dados relacionados`);
-    return { deletedCount: count };
+    this.logger.log(`🗑️ ${customerCount} customers e ${userResult.count} users apagados`);
+    return { deletedCustomers: customerCount, deletedUsers: userResult.count };
   }
 
   /**
