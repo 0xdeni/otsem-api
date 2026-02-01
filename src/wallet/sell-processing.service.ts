@@ -3,6 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { OkxService } from '../okx/services/okx.service';
 import { InterPixService } from '../inter/services/inter-pix.service';
+import { AffiliatesService } from '../affiliates/affiliates.service';
 import { Decimal } from '@prisma/client/runtime/library';
 
 @Injectable()
@@ -14,6 +15,7 @@ export class SellProcessingService {
     private readonly prisma: PrismaService,
     private readonly okxService: OkxService,
     private readonly interPixService: InterPixService,
+    private readonly affiliatesService: AffiliatesService,
   ) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
@@ -21,7 +23,7 @@ export class SellProcessingService {
     if (this.isProcessing) {
       return;
     }
-    
+
     this.isProcessing = true;
     try {
       await this.checkAndProcessSellConversions();
@@ -39,9 +41,9 @@ export class SellProcessingService {
       where: { okxDepositId: { not: null } },
       select: { okxDepositId: true },
     });
-    
+
     const processedSet = new Set(processedDepIds.map(c => c.okxDepositId));
-    
+
     const orphanDeposits = deposits.filter((dep: any) => {
       if (dep.state !== '2') return false;
       if (processedSet.has(dep.depId)) return false;
@@ -50,9 +52,9 @@ export class SellProcessingService {
       const hoursDiff = (now.getTime() - depTime.getTime()) / (1000 * 60 * 60);
       return hoursDiff <= 24;
     });
-    
+
     if (orphanDeposits.length > 0) {
-      this.logger.warn(`[SELL-POLLING] ⚠️ Detectados ${orphanDeposits.length} depósitos não processados:`);
+      this.logger.warn(`[SELL-POLLING] Detectados ${orphanDeposits.length} depósitos não processados:`);
       for (const dep of orphanDeposits) {
         this.logger.warn(`  - ${dep.amt} USDT (${dep.chain}) - depId: ${dep.depId}, txId: ${dep.txId}`);
       }
@@ -78,7 +80,7 @@ export class SellProcessingService {
     this.logger.log(`[SELL-POLLING] Encontradas ${pendingConversions.length} conversões pendentes`);
 
     const deposits = await this.okxService.getRecentDeposits();
-    
+
     for (const conversion of pendingConversions) {
       try {
         await this.processConversion(conversion, deposits);
@@ -96,7 +98,7 @@ export class SellProcessingService {
 
   private async processConversion(conversion: any, deposits: any[]) {
     const status = conversion.status;
-    
+
     if (status === 'PENDING') {
       await this.checkDepositConfirmation(conversion, deposits);
     } else if (status === 'USDT_RECEIVED') {
@@ -111,7 +113,7 @@ export class SellProcessingService {
       if (conversion.txHash && dep.txId === conversion.txHash) {
         return true;
       }
-      
+
       const chain = conversion.network === 'SOLANA' ? 'USDT-Solana' : 'USDT-TRC20';
       if (dep.chain === chain && dep.state === '2') {
         const usdtAmount = parseFloat(conversion.usdtPurchased.toString());
@@ -130,7 +132,7 @@ export class SellProcessingService {
 
     if (matchingDeposit) {
       this.logger.log(`[SELL] Depósito confirmado para conversão ${conversion.id}: ${matchingDeposit.amt} USDT`);
-      
+
       await this.prisma.conversion.update({
         where: { id: conversion.id },
         data: {
@@ -145,14 +147,14 @@ export class SellProcessingService {
 
   private async sellUsdtForBrl(conversion: any) {
     this.logger.log(`[SELL] Vendendo ${conversion.usdtPurchased} USDT por BRL...`);
-    
+
     const usdtAmount = parseFloat(conversion.usdtPurchased.toString());
     const sellResult = await this.okxService.sellUsdtForBrl(usdtAmount);
-    
+
     const spreadPercent = parseFloat(conversion.spreadPercent.toString());
     const spreadBrl = sellResult.brlReceived * spreadPercent;
     const brlToCustomer = sellResult.brlReceived - spreadBrl;
-    
+
     await this.prisma.conversion.update({
       where: { id: conversion.id },
       data: {
@@ -179,7 +181,7 @@ export class SellProcessingService {
         externalId: conversion.id,
       },
     });
-    
+
     if (existingTransaction) {
       this.logger.log(`[SELL] Transação já existe para conversão ${conversion.id}, apenas atualizando status`);
       await this.prisma.conversion.update({
@@ -188,43 +190,78 @@ export class SellProcessingService {
       });
       return;
     }
-    
+
     const usdtAmount = parseFloat(conversion.usdtPurchased.toString());
     const spreadPercent = parseFloat(conversion.spreadPercent.toString());
     const brlExchanged = parseFloat(conversion.brlExchanged.toString());
     const okxTradingFee = parseFloat(conversion.okxTradingFee?.toString() || '0');
     const exchangeRate = parseFloat(conversion.exchangeRate?.toString() || (brlExchanged / usdtAmount).toString());
-    
+
     const spreadBrl = brlExchanged * spreadPercent;
     const totalFees = spreadBrl + okxTradingFee;
     const brlToCustomer = brlExchanged - totalFees;
-    
+
+    // Calculate affiliate commission (10% of OTSEM's spread)
+    let affiliateCommissionBrl = 0;
+    let affiliateCommission = null;
+    const affiliateInfo = await this.affiliatesService.getAffiliateForCustomer(conversion.customerId);
+
+    if (affiliateInfo.affiliate && spreadBrl > 0) {
+      affiliateCommission = await this.affiliatesService.recordCommission({
+        affiliateId: affiliateInfo.affiliate.id,
+        customerId: conversion.customerId,
+        conversionId: conversion.id,
+        conversionType: 'SELL',
+        transactionAmount: brlExchanged,
+        spreadBrl,
+        exchangeRate,
+      });
+
+      if (affiliateCommission) {
+        affiliateCommissionBrl = Number(affiliateCommission.commissionBrl);
+        this.logger.log(
+          `[SELL][Affiliate] Commission recorded: R$ ${affiliateCommissionBrl.toFixed(2)} / ` +
+          `${Number(affiliateCommission.commissionUsdt).toFixed(6)} USDT for ${affiliateInfo.affiliate.code}`,
+        );
+
+        // Try auto-settlement
+        const settlement = await this.affiliatesService.settleCommissionUsdt(affiliateInfo.affiliate.id);
+        if (settlement.settled) {
+          this.logger.log(`[SELL][Affiliate] Auto-settled ${settlement.amountUsdt.toFixed(6)} USDT, txId: ${settlement.txId}`);
+        } else {
+          this.logger.log(`[SELL][Affiliate] Settlement deferred: ${settlement.reason}`);
+        }
+      }
+    }
+
     const grossProfit = spreadBrl;
-    const netProfit = spreadBrl - okxTradingFee;
-    
+    const netProfit = spreadBrl - okxTradingFee - affiliateCommissionBrl;
+
     const balanceBefore = parseFloat(conversion.account.balance.toString());
     const balanceAfter = balanceBefore + brlToCustomer;
-    
+
     this.logger.log(`[SELL] Creditando R$ ${brlToCustomer.toFixed(2)} no saldo OTSEM`);
-    this.logger.log(`[SELL] Detalhes: USDT=${usdtAmount}, BRL bruto=${brlExchanged.toFixed(2)}, spread=${spreadBrl.toFixed(2)}, taxaOKX=${okxTradingFee.toFixed(2)}, líquido=${brlToCustomer.toFixed(2)}`);
+    this.logger.log(`[SELL] Detalhes: USDT=${usdtAmount}, BRL bruto=${brlExchanged.toFixed(2)}, spread=${spreadBrl.toFixed(2)}, taxaOKX=${okxTradingFee.toFixed(2)}, affiliateComm=${affiliateCommissionBrl.toFixed(2)}, líquido=${brlToCustomer.toFixed(2)}`);
     this.logger.log(`[SELL] Saldo: R$ ${balanceBefore.toFixed(2)} → R$ ${balanceAfter.toFixed(2)}`);
-    
+
     await this.prisma.$transaction([
       this.prisma.account.update({
         where: { id: conversion.accountId },
         data: { balance: new Decimal(balanceAfter) },
       }),
-      
+
       this.prisma.conversion.update({
         where: { id: conversion.id },
         data: {
           status: 'COMPLETED',
+          affiliateId: affiliateInfo.affiliate?.id || null,
+          affiliateCommission: affiliateCommissionBrl,
           grossProfit: new Decimal(grossProfit),
           netProfit: new Decimal(netProfit),
           completedAt: new Date(),
         },
       }),
-      
+
       this.prisma.transaction.create({
         data: {
           accountId: conversion.accountId,
@@ -247,6 +284,7 @@ export class SellProcessingService {
             exchangeRate,
             grossProfit,
             netProfit,
+            affiliateCommissionBrl,
             network: conversion.network,
             txHash: conversion.txHash,
           },
@@ -254,7 +292,7 @@ export class SellProcessingService {
       }),
     ]);
 
-    this.logger.log(`[SELL] ✅ Conversão ${conversion.id} concluída! Novo saldo: R$ ${balanceAfter.toFixed(2)}`);
+    this.logger.log(`[SELL] Conversão ${conversion.id} concluída! Novo saldo: R$ ${balanceAfter.toFixed(2)}`);
   }
 
   async manualProcessConversion(conversionId: string) {
@@ -286,19 +324,19 @@ export class SellProcessingService {
     network: 'SOLANA' | 'TRON';
   }) {
     const { customerId, accountId, usdtAmount, txHash, network } = params;
-    
+
     const customer = await this.prisma.customer.findUnique({
       where: { id: customerId },
     });
-    
+
     if (!customer) {
       throw new Error('Cliente não encontrado');
     }
-    
+
     const account = await this.prisma.account.findUnique({
       where: { id: accountId },
     });
-    
+
     if (!account) {
       throw new Error('Conta não encontrada');
     }
@@ -308,6 +346,32 @@ export class SellProcessingService {
     const brlBruto = usdtAmount * rate;
     const spreadBrl = brlBruto * spreadPercent;
     const brlLiquido = brlBruto - spreadBrl;
+
+    // Calculate affiliate commission for manual sell
+    let affiliateCommissionBrl = 0;
+    const affiliateInfo = await this.affiliatesService.getAffiliateForCustomer(customerId);
+
+    if (affiliateInfo.affiliate && spreadBrl > 0) {
+      const commission = await this.affiliatesService.recordCommission({
+        affiliateId: affiliateInfo.affiliate.id,
+        customerId,
+        conversionType: 'SELL',
+        transactionAmount: brlBruto,
+        spreadBrl,
+        exchangeRate: rate,
+      });
+
+      if (commission) {
+        affiliateCommissionBrl = Number(commission.commissionBrl);
+        this.logger.log(`[SELL-MANUAL][Affiliate] Commission: R$ ${affiliateCommissionBrl.toFixed(2)} for ${affiliateInfo.affiliate.code}`);
+
+        // Try auto-settlement
+        const settlement = await this.affiliatesService.settleCommissionUsdt(affiliateInfo.affiliate.id);
+        if (settlement.settled) {
+          this.logger.log(`[SELL-MANUAL][Affiliate] Auto-settled ${settlement.amountUsdt.toFixed(6)} USDT`);
+        }
+      }
+    }
 
     this.logger.log(`[SELL-MANUAL] Creditando R$ ${brlLiquido.toFixed(2)} para ${customer.name}`);
 
@@ -329,8 +393,10 @@ export class SellProcessingService {
         okxTradingFee: 0,
         okxWithdrawFee: 0,
         totalOkxFees: 0,
+        affiliateId: affiliateInfo.affiliate?.id || null,
+        affiliateCommission: affiliateCommissionBrl,
         grossProfit: new Decimal(spreadBrl),
-        netProfit: new Decimal(spreadBrl),
+        netProfit: new Decimal(spreadBrl - affiliateCommissionBrl),
         status: 'COMPLETED',
         completedAt: new Date(),
       },
@@ -344,7 +410,7 @@ export class SellProcessingService {
         where: { id: accountId },
         data: { balance: new Decimal(balanceAfter) },
       }),
-      
+
       this.prisma.transaction.create({
         data: {
           accountId,
@@ -366,7 +432,8 @@ export class SellProcessingService {
             brlToCustomer: brlLiquido,
             exchangeRate: rate,
             grossProfit: spreadBrl,
-            netProfit: spreadBrl,
+            netProfit: spreadBrl - affiliateCommissionBrl,
+            affiliateCommissionBrl,
             network,
             txHash,
             manual: true,
@@ -375,7 +442,7 @@ export class SellProcessingService {
       }),
     ]);
 
-    this.logger.log(`[SELL-MANUAL] ✅ Conversão ${conversion.id} creditada! Novo saldo: R$ ${balanceAfter.toFixed(2)}`);
+    this.logger.log(`[SELL-MANUAL] Conversão ${conversion.id} creditada! Novo saldo: R$ ${balanceAfter.toFixed(2)}`);
 
     return {
       conversionId: conversion.id,

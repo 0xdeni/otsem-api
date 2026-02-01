@@ -15,6 +15,6 @@ import { SellProcessingService } from './sell-processing.service';
     imports: [InterModule, OkxModule, TronModule, SolanaModule, forwardRef(() => AffiliatesModule), forwardRef(() => CustomersModule)],
     providers: [WalletService, PrismaService, InterPixService, SellProcessingService],
     controllers: [WalletController],
-    exports: [SellProcessingService],
+    exports: [WalletService, SellProcessingService],
 })
 export class WalletModule { }

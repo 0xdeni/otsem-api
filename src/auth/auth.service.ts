@@ -3,6 +3,7 @@ import {
   UnauthorizedException,
   BadRequestException,
   ConflictException,
+  Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -10,6 +11,7 @@ import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { Role, CustomerType, KycLevel } from '@prisma/client';
 import { MailService } from '../mail/mail.service';
+import { AffiliatesService } from '../affiliates/affiliates.service';
 import { validateCPF, validateCNPJ, cleanDocument } from './utils/document-validator';
 
 const SALT_ROUNDS = 10;
@@ -17,10 +19,13 @@ type JwtPayload = { sub: string; email: string; role: Role; customerId?: string 
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private prisma: PrismaService,
     private jwt: JwtService,
     private mail: MailService,
+    private affiliatesService: AffiliatesService,
   ) { }
 
   async validateUser(email: string, password: string) {
@@ -101,7 +106,7 @@ export class AuthService {
     };
   }
 
-  async register(dto: { email: string; password: string; name?: string; type?: CustomerType; cpf?: string; cnpj?: string }) {
+  async register(dto: { email: string; password: string; name?: string; type?: CustomerType; cpf?: string; cnpj?: string; affiliateCode?: string }) {
     const exists = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
@@ -193,6 +198,13 @@ export class AuthService {
       });
     } catch (err) {
       console.error('Erro ao criar account:', err);
+    }
+
+    // Link customer to affiliate (referral code or default)
+    try {
+      await this.affiliatesService.linkCustomerOnRegistration(customer.id, dto.affiliateCode);
+    } catch (err) {
+      this.logger.error(`Erro ao vincular afiliado no registro: ${err}`);
     }
 
     // Gera tokens

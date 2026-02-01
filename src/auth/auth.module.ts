@@ -9,31 +9,28 @@ import { JwtStrategy } from './jwt.strategy';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailModule } from '../mail/mail.module';
-
-// Se existir UserModule e AuthService use UserService, pode haver dependência circular.
-// Use forwardRef se precisar:
-// import { UserModule } from "@/user/user.module";
+import { AffiliatesModule } from '../affiliates/affiliates.module';
 
 @Module({
   imports: [
     MailModule,
+    forwardRef(() => AffiliatesModule),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({
       secret: process.env.JWT_SECRET!,
       signOptions: { expiresIn: '8h' },
     }),
-    // forwardRef(() => UserModule),
   ],
   controllers: [AuthController],
   providers: [
     AuthService,
-    PrismaService, // necessário se o service usa Prisma
+    PrismaService,
     JwtStrategy,
     JwtAuthGuard,
   ],
   exports: [
-    AuthService, // exporte se outro módulo precisar do AuthService
-    JwtModule, // opcional
+    AuthService,
+    JwtModule,
   ],
 })
 export class AuthModule {}

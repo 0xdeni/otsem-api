@@ -467,14 +467,11 @@ export class WalletService {
       select: { user: { select: { spreadValue: true } } },
     });
 
+    // Spread calculation: only base spread, no affiliate addition
     const userSpreadMultiplier = customer?.user?.spreadValue ? Number(customer.user.spreadValue) : 1;
     const baseSpreadRate = Number.isFinite(userSpreadMultiplier) && userSpreadMultiplier > 0 ? userSpreadMultiplier : 1;
     const baseSpreadPercent = 1 - baseSpreadRate;
-
-    const affiliateSpread = await this.affiliatesService.getAffiliateSpreadForCustomer(customerId);
-    const affiliateSpreadPercent = affiliateSpread.spreadAffiliate;
-    const totalSpreadPercent = baseSpreadPercent + affiliateSpreadPercent;
-    const spreadRate = 1 - totalSpreadPercent;
+    const spreadRate = 1 - baseSpreadPercent;
 
     const brlExchanged = Number((brlAmount * spreadRate).toFixed(2));
     const spreadBrl = Number((brlAmount - brlExchanged).toFixed(2));
@@ -485,21 +482,21 @@ export class WalletService {
 
     const network = wallet?.network || 'SOLANA';
     const networkFee = network === 'TRON' ? 2.1 : 1.0;
-    const usdtNet = usdtEstimate; // Cliente recebe 100%, OTSEM paga a taxa
+    const usdtNet = Number((usdtEstimate - networkFee).toFixed(2)); // Buyer pays network fee
 
-    const minBrl = 10; // Mínimo absoluto
+    const minBrl = 10;
 
     return {
       brlAmount,
       brlExchanged,
-      spreadPercent: Math.round(totalSpreadPercent * 10000) / 100,
+      spreadPercent: Math.round(baseSpreadPercent * 10000) / 100,
       spreadBrl,
       exchangeRate,
       usdtEstimate,
       network,
       networkFeeUsdt: networkFee,
       networkFeeBrl: Number((networkFee * exchangeRate).toFixed(2)),
-      networkFeePaidBy: 'OTSEM',
+      networkFeePaidBy: 'BUYER',
       usdtNet,
       wallet: wallet ? {
         id: wallet.id,
@@ -508,11 +505,11 @@ export class WalletService {
         whitelisted: wallet.okxWhitelisted,
       } : null,
       balanceBrl: balance,
-      canProceed: balance >= brlAmount && brlAmount >= 10 && usdtEstimate > 0 && wallet?.okxWhitelisted,
+      canProceed: balance >= brlAmount && brlAmount >= 10 && usdtNet > 0 && wallet?.okxWhitelisted,
       minBrlRecommended: minBrl,
-      message: usdtEstimate <= 0 
-        ? `Valor mínimo: R$ ${minBrl}` 
-        : `Você receberá ${usdtNet.toFixed(2)} USDT (taxa de rede paga pela OTSEM)`,
+      message: usdtNet <= 0
+        ? `Valor mínimo: R$ ${minBrl}`
+        : `Você receberá ${usdtNet.toFixed(2)} USDT (taxa de rede: ${networkFee} USDT)`,
     };
   }
 
@@ -528,29 +525,27 @@ export class WalletService {
       throw new BadRequestException(limitCheck.message);
     }
 
-    // Obter spread base do User.spreadValue (legacy) + spread do afiliado
+    // Obter spread base do User.spreadValue (sem spread adicional do afiliado)
     const customer = await this.prisma.customer.findUnique({
       where: { id: customerId },
       select: { user: { select: { spreadValue: true } }, affiliateId: true },
     });
-    
-    // User.spreadValue é um multiplicador (ex: 0.95 = 5% spread, 1.0 = sem spread)
+
     const userSpreadMultiplier = customer?.user?.spreadValue ? Number(customer.user.spreadValue) : 1;
     const baseSpreadRate = Number.isFinite(userSpreadMultiplier) && userSpreadMultiplier > 0 ? userSpreadMultiplier : 1;
-    const baseSpreadPercent = 1 - baseSpreadRate; // ex: 1 - 0.95 = 0.05 (5%)
-    
-    // Obter spread adicional do afiliado
-    const affiliateSpread = await this.affiliatesService.getAffiliateSpreadForCustomer(customerId);
-    const affiliateSpreadPercent = affiliateSpread.spreadAffiliate; // ex: 0.0035 (0.35%)
-    
-    // Spread total = base + afiliado
-    const totalSpreadPercent = baseSpreadPercent + affiliateSpreadPercent;
+    const baseSpreadPercent = 1 - baseSpreadRate;
+
+    // No affiliate spread addition — affiliate gets 10% of OTSEM's spread instead
+    const totalSpreadPercent = baseSpreadPercent;
     const spreadRate = 1 - totalSpreadPercent;
-    
+
     const brlToExchange = Number((brlAmount * spreadRate).toFixed(2));
     const spreadAmount = Number((brlAmount - brlToExchange).toFixed(2));
-    
-    this.logger.log(`[Conversion] Spread: userBase=${baseSpreadPercent.toFixed(4)}, affiliate=${affiliateSpreadPercent.toFixed(4)}, total=${totalSpreadPercent.toFixed(4)}, rate=${spreadRate.toFixed(4)}`);
+
+    // Get affiliate info for commission recording
+    const affiliateInfo = await this.affiliatesService.getAffiliateForCustomer(customerId);
+
+    this.logger.log(`[Conversion] Spread: base=${baseSpreadPercent.toFixed(4)}, total=${totalSpreadPercent.toFixed(4)}, rate=${spreadRate.toFixed(4)}, affiliate=${affiliateInfo.affiliate?.code || 'none'}`);
 
     // Determinar carteira de destino antes de iniciar
     let wallet;
@@ -584,7 +579,7 @@ export class WalletService {
         network: wallet.network,
         walletAddress: wallet.externalAddress,
         walletId: wallet.id,
-        affiliateId: affiliateSpread.affiliate?.id || null,
+        affiliateId: affiliateInfo.affiliate?.id || null,
         status: 'PENDING',
       },
     });
@@ -636,7 +631,7 @@ export class WalletService {
       const exchangeRate = usdtAmount > 0 ? brlToExchange / usdtAmount : 0;
       await this.prisma.conversion.update({
         where: { id: conversion.id },
-        data: { 
+        data: {
           usdtPurchased: usdtAmount,
           exchangeRate,
           okxOrderId: okxBuyResult?.orderId || null,
@@ -720,19 +715,22 @@ export class WalletService {
         data: { status: 'USDT_WITHDRAWN' },
       });
 
-      // Determinar rede e taxa (OTSEM paga a taxa, cliente recebe 100% do USDT comprado)
+      // Buyer pays network fee — deducted from USDT received
       const isTron = wallet.network === 'TRON';
-      const networkFee = isTron ? 2.1 : 1; // TRC20: 2.1 USDT, Solana: 1 USDT
-      const usdtToWithdraw = usdtAmount; // Cliente recebe exatamente o que foi comprado
+      const networkFee = isTron ? 2.1 : 1;
+      const usdtToWithdraw = usdtAmount - networkFee; // Buyer pays network fee
 
-      // 4a) Transferir da conta trading para funding (valor + taxa para cobrir saque)
-      const totalToTransfer = (usdtAmount + networkFee).toFixed(2);
-      this.logger.log(`[OKX] Transferindo ${totalToTransfer} USDT de trading para funding (${usdtAmount} + ${networkFee} taxa)`);
-      await this.okxService.transferFromTradingToFunding('USDT', totalToTransfer);
+      if (usdtToWithdraw <= 0) {
+        throw new Error(`USDT comprado (${usdtAmount}) insuficiente para cobrir taxa de rede (${networkFee})`);
+      }
 
-      // 4b) OKX → Cliente direto (Solana ou Tron) - cliente recebe 100%
+      // 4a) Transferir da conta trading para funding (valor exato comprado)
+      this.logger.log(`[OKX] Transferindo ${usdtAmount.toFixed(2)} USDT de trading para funding`);
+      await this.okxService.transferFromTradingToFunding('USDT', usdtAmount.toFixed(2));
+
+      // 4b) OKX → Cliente (USDT menos taxa de rede)
       const network = isTron ? 'TRC20' : 'Solana';
-      this.logger.log(`[${network}] Sacando ${usdtToWithdraw} USDT para: ${wallet.externalAddress} (taxa ${networkFee} paga pela OTSEM)`);
+      this.logger.log(`[${network}] Sacando ${usdtToWithdraw.toFixed(2)} USDT para: ${wallet.externalAddress} (taxa ${networkFee} paga pelo comprador)`);
 
       withdrawResult = await this.okxService.withdrawUsdtSimple(
         usdtToWithdraw.toFixed(2),
@@ -741,30 +739,39 @@ export class WalletService {
         networkFee.toString(),
       );
 
-      // 5) Registrar comissão do afiliado (se aplicável)
+      // 5) Registrar comissão do afiliado (10% do spread da OTSEM)
       let affiliateCommission = null;
-      if (affiliateSpread.affiliate && affiliateSpreadPercent > 0) {
+      if (affiliateInfo.affiliate && spreadAmount > 0) {
         affiliateCommission = await this.affiliatesService.recordCommission({
-          affiliateId: affiliateSpread.affiliate.id,
+          affiliateId: affiliateInfo.affiliate.id,
           customerId,
+          conversionId: conversion.id,
+          conversionType: 'BUY',
           transactionId: conversion.id,
           transactionAmount: brlAmount,
-          spreadTotal: totalSpreadPercent,
-          spreadBase: baseSpreadPercent,
-          spreadAffiliate: affiliateSpreadPercent,
+          spreadBrl: spreadAmount,
+          exchangeRate,
         });
-        this.logger.log(`[Affiliate] Commission recorded: R$ ${(brlAmount * affiliateSpreadPercent).toFixed(2)} for ${affiliateSpread.affiliate.code}`);
+
+        if (affiliateCommission) {
+          this.logger.log(`[Affiliate] Commission recorded: R$ ${Number(affiliateCommission.commissionBrl).toFixed(2)} / ${Number(affiliateCommission.commissionUsdt).toFixed(6)} USDT for ${affiliateInfo.affiliate.code}`);
+
+          // Try auto-settlement
+          const settlement = await this.affiliatesService.settleCommissionUsdt(affiliateInfo.affiliate.id);
+          if (settlement.settled) {
+            this.logger.log(`[Affiliate] Auto-settled ${settlement.amountUsdt.toFixed(6)} USDT, txId: ${settlement.txId}`);
+          } else {
+            this.logger.log(`[Affiliate] Settlement deferred: ${settlement.reason}`);
+          }
+        }
       }
 
       // 6) Calcular fees e atualizar Conversion para COMPLETED
       const okxWithdrawFeeUsdt = networkFee;
       const okxTradingFee = brlToExchange * 0.001;
-      const currentExchangeRate = usdtAmount > 0 ? brlToExchange / usdtAmount : 0;
-      const okxWithdrawFeeBrl = okxWithdrawFeeUsdt * currentExchangeRate;
-      const totalOkxFees = okxWithdrawFeeBrl + okxTradingFee;
       const affiliateCommissionBrl = affiliateCommission ? Number(affiliateCommission.commissionBrl) : 0;
       const grossProfit = spreadAmount;
-      const netProfit = grossProfit - totalOkxFees - affiliateCommissionBrl;
+      const netProfit = grossProfit - okxTradingFee - affiliateCommissionBrl;
 
       const conversionTx = await this.prisma.transaction.findFirst({
         where: { externalId: conversion.id },
@@ -774,40 +781,40 @@ export class WalletService {
         where: { id: conversion.id },
         data: {
           transactionId: conversionTx?.id,
-          usdtWithdrawn: usdtAmount,
+          usdtWithdrawn: usdtToWithdraw,
           okxWithdrawId: withdrawResult?.wdId || null,
           affiliateCommission: affiliateCommissionBrl,
           okxWithdrawFee: okxWithdrawFeeUsdt,
           okxTradingFee,
-          totalOkxFees,
+          totalOkxFees: okxTradingFee,
           grossProfit,
           netProfit,
           status: 'COMPLETED',
           completedAt: new Date(),
         },
       });
-      this.logger.log(`[BUY] Conversion ${conversion.id} COMPLETED: R$ ${brlAmount} → ${usdtAmount} USDT`);
+      this.logger.log(`[BUY] Conversion ${conversion.id} COMPLETED: R$ ${brlAmount} → ${usdtToWithdraw.toFixed(2)} USDT (sent to customer)`);
 
       return {
         conversionId: conversion.id,
         status: 'COMPLETED',
         message: 'Compra e transferência de USDT concluída',
         usdtBought: usdtAmount,
-        usdtWithdrawn: usdtAmount,
+        usdtWithdrawn: usdtToWithdraw,
         networkFee,
-        networkFeePaidBy: 'OTSEM',
+        networkFeePaidBy: 'BUYER',
         spread: {
           chargedBrl: brlAmount,
           exchangedBrl: brlToExchange,
           spreadBrl: spreadAmount,
           spreadRate,
           base: baseSpreadPercent,
-          affiliate: affiliateSpreadPercent,
           total: totalSpreadPercent,
         },
         affiliateCommission: affiliateCommission ? {
-          affiliateCode: affiliateSpread.affiliate?.code,
+          affiliateCode: affiliateInfo.affiliate?.code,
           commissionBrl: Number(affiliateCommission.commissionBrl),
+          commissionUsdt: Number(affiliateCommission.commissionUsdt),
         } : null,
         wallet: { id: wallet.id, network: wallet.network, address: wallet.externalAddress },
       };
