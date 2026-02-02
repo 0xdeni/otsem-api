@@ -326,19 +326,35 @@ export class FdbankPixIntegrationService {
             }
 
             // Extract PIX credit transactions from statement
-            const transactions = statement?.items || statement?.data || statement || [];
+            // FDBank returns nested: { result: { result: { result: [...] } } }
+            const transactions =
+                statement?.result?.result?.result ||
+                statement?.result?.result ||
+                statement?.result ||
+                statement?.items ||
+                statement?.data ||
+                statement ||
+                [];
             if (!Array.isArray(transactions)) {
-                this.logger.log('No transactions found in FDBank statement');
+                this.logger.log('No transactions array found in FDBank statement');
                 return resultado;
             }
+
+            this.logger.log(`FDBank statement returned ${transactions.length} entries`);
 
             for (const entry of transactions) {
                 try {
                     // Look for PIX credit entries (incoming PIX)
-                    const entryType = entry.type || entry.transactionType || '';
-                    const isPixCredit = entryType.includes('PIX') && (entry.direction === 'CREDIT' || entry.creditDebit === 'C' || Number(entry.value || entry.amount || 0) > 0);
+                    // FDBank uses method:"pix" + direction:"cashin" for incoming PIX
+                    const entryMethod = (entry.method || '').toLowerCase();
+                    const entryDirection = (entry.direction || '').toLowerCase();
+                    const entryStatus = (entry.status || '').toLowerCase();
+                    const isPixCredit =
+                        (entryMethod === 'pix' && entryDirection === 'cashin') ||
+                        ((entry.type || '').toUpperCase().includes('PIX') && (entry.direction === 'CREDIT' || entry.creditDebit === 'C'));
 
                     if (!isPixCredit) continue;
+                    if (entryStatus !== 'completed') continue;
 
                     const endToEnd = entry.endToEndId || entry.e2eId || entry.externalId || '';
                     const valor = Math.abs(Number(entry.value || entry.amount || 0));
@@ -395,6 +411,7 @@ export class FdbankPixIntegrationService {
                                     balanceBefore,
                                     balanceAfter,
                                     payerName: entry.payerName || entry.senderName || 'FDBank PIX',
+                                    payerTaxNumber: entry.payerTaxNumber || undefined,
                                     externalData: entry as any,
                                     completedAt: new Date(),
                                 },
