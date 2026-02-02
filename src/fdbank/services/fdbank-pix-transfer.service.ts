@@ -45,7 +45,8 @@ export class FdbankPixTransferService {
             const response = await axios.post(`${this.baseUrl}GeneratePixDynamicQrCode`, payload, {
                 headers: this.getHeaders(),
             });
-            this.logger.log('QR Code gerado com sucesso');
+            this.logger.log(`QR Code gerado com sucesso. Response keys: ${JSON.stringify(Object.keys(response.data || {}))}`);
+            this.logger.log(`QR Code response: ${JSON.stringify(response.data)}`);
             return response.data;
         } catch (error: any) {
             this.logger.error('Erro ao gerar QR Code PIX:', error.response?.data || error.message);
