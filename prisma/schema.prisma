@@ -215,6 +215,7 @@ model Customer {
   conversions          Conversion[]
   kycUpgradeRequests   KycUpgradeRequest[]
   affiliateCommissions AffiliateCommission[]
+  pushSubscriptions  PushSubscription[]
 
   @@index([email])
   @@index([cpf])
@@ -496,6 +497,94 @@ model Transaction {
   @@index([externalId])
   @@index([endToEnd])
   @@map("transactions")
+}
+
+// ==================== CARD TRANSACTIONS ====================
+
+model CardTransaction {
+  id         String @id @default(uuid())
+  customerId String
+
+  amount   Int
+  currency String                @default("BRL")
+  type     CardTransactionType
+  status   CardTransactionStatus @default(PENDING)
+
+  cardLast4 String
+  cardBrand String
+
+  authorizationCode String?
+  nsu               String?
+  tid               String?
+
+  merchantName     String?
+  merchantCategory String?
+  description      String?
+
+  hasChargeback Boolean @default(false)
+  chargebackId  String? @unique
+
+  externalTxId String? @unique
+  bankPayload  Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  customer   Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  chargeback Chargeback?
+
+  @@index([customerId, status, createdAt])
+  @@index([status])
+}
+
+model Chargeback {
+  id                String @id @default(uuid())
+  cardTransactionId String @unique
+  customerId        String
+
+  amount Int
+  reason ChargebackReason
+  status ChargebackStatus @default(OPENED)
+
+  customerEvidence Json?
+  bankEvidence     Json?
+
+  openedAt   DateTime  @default(now())
+  deadlineAt DateTime?
+  resolvedAt DateTime?
+
+  favoredParty String?
+  notes        String? @db.Text
+
+  externalCaseId String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cardTransaction CardTransaction @relation(fields: [cardTransactionId], references: [id], onDelete: Cascade)
+  customer        Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, status])
+  @@index([status, openedAt])
+}
+
+// ==================== PUSH SUBSCRIPTIONS ====================
+
+model PushSubscription {
+  id         String   @id @default(cuid())
+  customerId String
+  endpoint   String
+  p256dh     String
+  auth       String
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([customerId, endpoint])
+  @@index([customerId])
+  @@map("push_subscriptions")
 }
 
 // ==================== SYSTEM SETTINGS ====================
