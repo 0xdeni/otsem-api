@@ -228,21 +228,23 @@ export class FdbankPixIntegrationService {
 
             const pixResponse = await this.pixTransferService.createPixTransfer(payload);
 
-            // FDBank wraps responses in { result: {...}, isValid, message }
-            const pixData = pixResponse.result || pixResponse;
+            // FDBank wraps responses in { result: { transfers: [...], ... }, isValid, message }
+            const pixResult = pixResponse.result || pixResponse;
+            // The actual transfer data is in the first item of the transfers array
+            const transfer = pixResult.transfers?.[0] || pixResult;
 
-            this.logger.log(`FDBank PIX sent: ${pixData.endToEndId || pixData.id || 'unknown'}`);
+            this.logger.log(`FDBank PIX sent: ${transfer.endToEndId || transfer.id || 'unknown'}`);
 
             // Record in database
-            await this.createPaymentRecord(customerId, dto, pixData);
+            await this.createPaymentRecord(customerId, dto, transfer);
 
             return {
-                endToEndId: pixData.endToEndId || pixData.id || externalId,
+                endToEndId: transfer.endToEndId || transfer.id || externalId,
                 valor: dto.valor,
-                horario: pixData.createdAt || pixData.date || new Date().toISOString(),
-                status: pixData.status || 'PROCESSANDO',
-                transacaoId: pixData.id || pixData.transactionId,
-                destinatario: pixData.destinatario || pixData.receiver,
+                horario: transfer.createdAt || new Date().toISOString(),
+                status: transfer.status === 'completed' ? 'PROCESSANDO' : (transfer.status || 'PROCESSANDO'),
+                transacaoId: transfer.id || externalId,
+                destinatario: transfer.receiverName || transfer.receiver,
             };
         } catch (error: any) {
             const message = error.response?.data?.message || error.message;
@@ -302,17 +304,18 @@ export class FdbankPixIntegrationService {
             };
 
             const pixResponse = await this.pixTransferService.createPixTransfer(payload);
-            const pixData = pixResponse.result || pixResponse;
+            const pixResult = pixResponse.result || pixResponse;
+            const transfer = pixResult.transfers?.[0] || pixResult;
 
-            this.logger.log(`[INTERNAL] FDBank PIX sent: ${pixData.endToEndId || pixData.id || 'unknown'}`);
+            this.logger.log(`[INTERNAL] FDBank PIX sent: ${transfer.endToEndId || transfer.id || 'unknown'}`);
 
             return {
-                endToEndId: pixData.endToEndId || pixData.id || externalId,
+                endToEndId: transfer.endToEndId || transfer.id || externalId,
                 valor: dto.valor,
-                horario: pixData.createdAt || pixData.date || new Date().toISOString(),
-                status: pixData.status || 'PROCESSANDO',
-                transacaoId: pixData.id || pixData.transactionId,
-                destinatario: pixData.destinatario || pixData.receiver,
+                horario: transfer.createdAt || new Date().toISOString(),
+                status: transfer.status === 'completed' ? 'PROCESSANDO' : (transfer.status || 'PROCESSANDO'),
+                transacaoId: transfer.id || externalId,
+                destinatario: transfer.receiverName || transfer.receiver,
             };
         } catch (error: any) {
             const message = error.response?.data?.message || error.message;
