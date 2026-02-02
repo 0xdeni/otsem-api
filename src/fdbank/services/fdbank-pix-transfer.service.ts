@@ -15,13 +15,18 @@ export class FdbankPixTransferService {
     }
 
     async createPixTransfer(data: any) {
+        this.logger.log(`Creating PIX transfer - URL: ${this.baseUrl}`);
+        this.logger.log(`Transfer payload: ${JSON.stringify(data)}`);
         try {
             const response = await axios.post(this.baseUrl, data, {
                 headers: this.getHeaders(),
             });
+            this.logger.log(`Transfer response: ${JSON.stringify(response.data)}`);
             return response.data;
         } catch (error: any) {
-            this.logger.error('Erro ao criar transferência PIX:', error.response?.data || error.message);
+            this.logger.error(`Transfer error status: ${error.response?.status}`);
+            this.logger.error(`Transfer error data: ${JSON.stringify(error.response?.data)}`);
+            this.logger.error(`Transfer error headers: ${JSON.stringify(error.response?.headers)}`);
             throw error;
         }
     }

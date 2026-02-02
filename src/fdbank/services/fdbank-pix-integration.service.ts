@@ -189,14 +189,32 @@ export class FdbankPixIntegrationService {
         await this.validateLimits(customerId, dto.valor);
 
         try {
-            // FDBank PIX transfer payload
-            const payload = {
-                pixKeyId: dto.chaveDestino,
-                value: dto.valor,
-                message: dto.descricao || '',
+            // Map tipoChave to FDBank pixKeyType
+            const pixKeyTypeMap: Record<string, string> = {
+                CPF: 'cpf',
+                CNPJ: 'cnpj',
+                EMAIL: 'email',
+                TELEFONE: 'phone',
+                CHAVE_ALEATORIA: 'random',
+                CHAVE: 'random',
             };
 
-            const pixData = await this.pixTransferService.createPixTransfer(payload);
+            const externalId = `FDBNK-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+
+            // FDBank PIX transfer payload per API docs
+            const payload = {
+                pixKey: dto.chaveDestino,
+                pixKeyType: pixKeyTypeMap[dto.tipoChave] || 'cpf',
+                value: dto.valor,
+                endToEndId: externalId,
+                message: dto.descricao || 'PIX Transfer',
+                externalId,
+            };
+
+            const pixResponse = await this.pixTransferService.createPixTransfer(payload);
+
+            // FDBank wraps responses in { result: {...}, isValid, message }
+            const pixData = pixResponse.result || pixResponse;
 
             this.logger.log(`FDBank PIX sent: ${pixData.endToEndId || pixData.id || 'unknown'}`);
 
@@ -204,11 +222,11 @@ export class FdbankPixIntegrationService {
             await this.createPaymentRecord(customerId, dto, pixData);
 
             return {
-                endToEndId: pixData.endToEndId || pixData.id || `FDBNK-${Date.now()}`,
+                endToEndId: pixData.endToEndId || pixData.id || externalId,
                 valor: dto.valor,
-                horario: pixData.date || new Date().toISOString(),
+                horario: pixData.createdAt || pixData.date || new Date().toISOString(),
                 status: pixData.status || 'PROCESSANDO',
-                transacaoId: pixData.transactionId || pixData.id,
+                transacaoId: pixData.id || pixData.transactionId,
                 destinatario: pixData.destinatario || pixData.receiver,
             };
         } catch (error: any) {
@@ -234,22 +252,37 @@ export class FdbankPixIntegrationService {
         this.logger.log(`[INTERNAL] Sending FDBank PIX: R$ ${dto.valor} to ${dto.chaveDestino}`);
 
         try {
-            const payload = {
-                pixKeyId: dto.chaveDestino,
-                value: dto.valor,
-                message: dto.descricao || '',
+            const pixKeyTypeMap: Record<string, string> = {
+                CPF: 'cpf',
+                CNPJ: 'cnpj',
+                EMAIL: 'email',
+                TELEFONE: 'phone',
+                CHAVE_ALEATORIA: 'random',
+                CHAVE: 'random',
             };
 
-            const pixData = await this.pixTransferService.createPixTransfer(payload);
+            const externalId = `FDBNK-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+
+            const payload = {
+                pixKey: dto.chaveDestino,
+                pixKeyType: pixKeyTypeMap[dto.tipoChave] || 'cpf',
+                value: dto.valor,
+                endToEndId: externalId,
+                message: dto.descricao || 'PIX Transfer',
+                externalId,
+            };
+
+            const pixResponse = await this.pixTransferService.createPixTransfer(payload);
+            const pixData = pixResponse.result || pixResponse;
 
             this.logger.log(`[INTERNAL] FDBank PIX sent: ${pixData.endToEndId || pixData.id || 'unknown'}`);
 
             return {
-                endToEndId: pixData.endToEndId || pixData.id || `FDBNK-${Date.now()}`,
+                endToEndId: pixData.endToEndId || pixData.id || externalId,
                 valor: dto.valor,
-                horario: pixData.date || new Date().toISOString(),
+                horario: pixData.createdAt || pixData.date || new Date().toISOString(),
                 status: pixData.status || 'PROCESSANDO',
-                transacaoId: pixData.transactionId || pixData.id,
+                transacaoId: pixData.id || pixData.transactionId,
                 destinatario: pixData.destinatario || pixData.receiver,
             };
         } catch (error: any) {
