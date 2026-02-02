@@ -5,12 +5,12 @@ import axios from 'axios';
 export class FdbankPixTransferService {
     private readonly logger = new Logger(FdbankPixTransferService.name);
     private baseUrl = 'https://api-baas.fdbank.com.br/v1.0/Pix/Transfer/';
-    private token = process.env.FDBANK_API_TOKEN;
+    private token = process.env.FDBANK_API_KEY;
 
     private getHeaders() {
         return {
             'Content-Type': 'application/json',
-            'x-api-url': this.token,
+            'x-api-key': this.token,
         };
     }
 
