@@ -80,26 +80,13 @@ export class FdbankPixIntegrationService {
 
             this.logger.log(`QR Code created via FDBank: externalId=${txid}, response keys: ${JSON.stringify(Object.keys(qrCodeResult || {}))}`);
 
-            // Normalize: FDBank may return the PIX copy-paste string under a
-            // different field name than Inter's `pixCopiaECola`. Check common
-            // BaaS field names and also look inside a nested `data` object.
-            if (!qrCodeResult.pixCopiaECola) {
-                const source = qrCodeResult.data || qrCodeResult;
-                const pixCode =
-                    source.textContent ||
-                    source.emv ||
-                    source.qrCodeText ||
-                    source.qrCode ||
-                    source.brCode ||
-                    source.copyPaste ||
-                    source.copyPasteCode ||
-                    source.pixCopiaECola;
-                if (pixCode) {
-                    qrCodeResult.pixCopiaECola = pixCode;
-                    this.logger.log(`Mapped FDBank QR field to pixCopiaECola (${pixCode.substring(0, 40)}...)`);
-                } else {
-                    this.logger.warn(`Could not find pixCopiaECola in FDBank response. Keys: ${JSON.stringify(Object.keys(source || {}))}`);
-                }
+            // FDBank returns { result: { copyPaste, image, ... }, isValid, message }
+            // Inter returns { pixCopiaECola, ... } at the top level.
+            // Normalize so the frontend always gets `pixCopiaECola`.
+            const resultObj = qrCodeResult.result || qrCodeResult;
+            if (!qrCodeResult.pixCopiaECola && resultObj.copyPaste) {
+                qrCodeResult.pixCopiaECola = resultObj.copyPaste;
+                this.logger.log(`Mapped FDBank result.copyPaste to pixCopiaECola`);
             }
 
             if (customerId) {
