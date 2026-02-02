@@ -24,6 +24,7 @@ import { SolanaModule } from './solana/solana.module';
 import { AffiliatesModule } from './affiliates/affiliates.module';
 import { BankingModule } from './banking/banking.module';
 import { SystemSettingsModule } from './system-settings/system-settings.module';
+import { PushNotificationsModule } from './push-notifications/push-notifications.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { SystemSettingsModule } from './system-settings/system-settings.module';
     AffiliatesModule,
     BankingModule,
     SystemSettingsModule,
+    PushNotificationsModule,
     ScheduleModule.forRoot(),
   ],
   controllers: [AppController],

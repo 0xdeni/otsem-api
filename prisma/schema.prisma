@@ -259,6 +259,7 @@ model Customer {
   conversions      Conversion[]
   kycUpgradeRequests KycUpgradeRequest[]
   affiliateCommissions AffiliateCommission[]
+  pushSubscriptions  PushSubscription[]
 
   @@index([email])
   @@index([cpf])
@@ -685,6 +686,25 @@ model Chargeback {
 
   @@index([customerId, status])
   @@index([status, openedAt])
+}
+
+// ==================== PUSH SUBSCRIPTIONS ====================
+
+model PushSubscription {
+  id         String   @id @default(cuid())
+  customerId String
+  endpoint   String
+  p256dh     String
+  auth       String
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([customerId, endpoint])
+  @@index([customerId])
+  @@map("push_subscriptions")
 }
 
 // ==================== SYSTEM SETTINGS ====================
