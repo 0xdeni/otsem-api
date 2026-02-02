@@ -17,6 +17,7 @@ import { FdbankPixTransferController } from './controllers/fdbank-pix-transfer.c
 import { FdbankPixIntegrationService } from './services/fdbank-pix-integration.service';
 import { FdbankWebhookService } from './services/fdbank-webhook.service';
 import { FdbankWebhookController } from './controllers/fdbank-webhook.controller';
+import { FdbankWebhookLegacyController } from './controllers/fdbank-webhook-legacy.controller';
 import { FdbankPixPollingTask } from './tasks/fdbank-pix-polling.task';
 
 @Module({
@@ -40,6 +41,7 @@ import { FdbankPixPollingTask } from './tasks/fdbank-pix-polling.task';
         FdbankPixContactController,
         FdbankPixTransferController,
         FdbankWebhookController,
+        FdbankWebhookLegacyController,
     ],
     exports: [
         FdbankService,
