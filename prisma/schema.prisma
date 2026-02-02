@@ -29,9 +29,9 @@ enum AccountStatus {
 }
 
 enum KycLevel {
-  LEVEL_1  // PF: até R$30k/mês, PJ: até R$50k/mês
-  LEVEL_2  // PF: até R$100k/mês, PJ: até R$200k/mês
-  LEVEL_3  // Ilimitado (análise completa)
+  LEVEL_1 // PF: até R$30k/mês, PJ: até R$50k/mês
+  LEVEL_2 // PF: até R$100k/mês, PJ: até R$200k/mês
+  LEVEL_3 // Ilimitado (análise completa)
 }
 
 enum PixKeyType {
@@ -62,45 +62,6 @@ enum DepositStatus {
   CONFIRMED
   FAILED
   REFUNDED
-}
-
-enum PayoutStatus {
-  PENDING
-  PROCESSING
-  COMPLETED
-  FAILED
-  CANCELED
-}
-
-enum CardTransactionStatus {
-  PENDING
-  AUTHORIZED
-  CAPTURED
-  CANCELED
-  REFUNDED
-  FAILED
-}
-
-enum CardTransactionType {
-  DEBIT
-  CREDIT
-}
-
-enum ChargebackStatus {
-  OPENED
-  UNDER_ANALYSIS
-  WON
-  LOST
-  CANCELED
-}
-
-enum ChargebackReason {
-  FRAUD
-  PRODUCT_NOT_RECEIVED
-  PRODUCT_DEFECTIVE
-  DUPLICATE_CHARGE
-  CANCELED_RECURRING
-  OTHER
 }
 
 enum TransactionType {
@@ -232,7 +193,7 @@ model Customer {
   diditVerificationUrl String?
 
   // Spread personalizado (0.0095 = 0.95%)
-  spreadPercent    Decimal?      @db.Decimal(6, 4)
+  spreadPercent Decimal? @db.Decimal(6, 4)
 
   mainPixKey String? @unique
 
@@ -243,21 +204,16 @@ model Customer {
   // Extras
   metadata Json?
 
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  address          Address?
-  pixLimits        PixLimits?
-  ownerships       Ownership[]
-  pixKeys          PixKey[]
-  payments         Payment[]
-  deposits         Deposit[]
-  refunds          Refund[]
-  wallets          Wallet[]
-  account          Account?
-  cardTransactions CardTransaction[]
-  chargebacks      Chargeback[]
-  conversions      Conversion[]
-  kycUpgradeRequests KycUpgradeRequest[]
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  address              Address?
+  pixKeys              PixKey[]
+  payments             Payment[]
+  deposits             Deposit[]
+  wallets              Wallet[]
+  account              Account?
+  conversions          Conversion[]
+  kycUpgradeRequests   KycUpgradeRequest[]
   affiliateCommissions AffiliateCommission[]
   pushSubscriptions  PushSubscription[]
 
@@ -279,76 +235,48 @@ model Address {
   city         String?
   state        String?
 
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @default(now()) @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
 
   customer   Customer? @relation(fields: [customerId], references: [id])
   customerId String?   @unique
 }
 
-model PixLimits {
-  id             String  @id @default(uuid())
-  customerId     String  @unique
-  singleTransfer Decimal @db.Decimal(15, 2)
-  daytime        Decimal @db.Decimal(15, 2)
-  nighttime      Decimal @db.Decimal(15, 2)
-  monthly        Decimal @db.Decimal(15, 2)
-  serviceId      Int
-
-  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-}
-
 // Configuração de limites por nível KYC
 model KycLevelConfig {
-  id            String       @id @default(cuid())
-  level         KycLevel
-  customerType  CustomerType
-  monthlyLimit  Decimal      @db.Decimal(18, 2)  // 0 = ilimitado
-  description   String?
+  id           String       @id @default(cuid())
+  level        KycLevel
+  customerType CustomerType
+  monthlyLimit Decimal      @db.Decimal(18, 2) // 0 = ilimitado
+  description  String?
 
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([level, customerType])
   @@map("kyc_level_configs")
 }
 
 model KycUpgradeRequest {
-  id            String       @id @default(uuid())
-  customerId    String
-  customer      Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  id         String   @id @default(uuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
 
-  currentLevel  KycLevel
-  targetLevel   KycLevel
-  status        KycUpgradeRequestStatus @default(PENDING)
-  documents     Json         @default("[]")       // [{ name, objectPath }]
+  currentLevel KycLevel
+  targetLevel  KycLevel
+  status       KycUpgradeRequestStatus @default(PENDING)
+  documents    Json                    @default("[]") // [{ name, objectPath }]
 
-  adminNotes    String?
-  reviewedBy    String?
-  reviewedAt    DateTime?
+  adminNotes String?
+  reviewedBy String?
+  reviewedAt DateTime?
 
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([customerId])
   @@index([status])
   @@map("kyc_upgrade_requests")
-}
-
-model Ownership {
-  id              String   @id @default(uuid())
-  customerId      String
-  name            String
-  cpf             String
-  birthday        DateTime
-  isAdministrator Boolean
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now()) @updatedAt
-
-  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-
-  @@index([customerId])
 }
 
 model PixKey {
@@ -384,8 +312,8 @@ model PixKey {
 // ==================== TRANSACTIONS ====================
 
 model Payment {
-  id           String  @id @default(cuid())
-  endToEnd     String  @unique
+  id           String        @id @default(cuid())
+  endToEnd     String        @unique
   identifier   String?
   paymentValue Int
   bankProvider BankProvider?
@@ -415,8 +343,8 @@ model Payment {
 }
 
 model Deposit {
-  id           String   @id @default(cuid())
-  endToEnd     String   @unique
+  id           String        @id @default(cuid())
+  endToEnd     String        @unique
   receiptValue Int
   receiptDate  DateTime
   bankProvider BankProvider?
@@ -443,25 +371,7 @@ model Deposit {
   @@index([endToEnd])
 }
 
-model Refund {
-  id          String    @id @default(uuid())
-  endToEnd    String    @unique
-  status      String?
-  statusId    Int?
-  valueCents  Int?
-  refundDate  DateTime?
-  bankPayload Json
-
-  customerId String?
-  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now()) @updatedAt
-
-  @@index([customerId])
-}
-
-// ==================== WALLET & PAYOUT ====================
+// ==================== WALLET ====================
 
 enum WalletNetwork {
   SOLANA
@@ -493,7 +403,6 @@ model Wallet {
   updatedAt DateTime @updatedAt
 
   customer    Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  payouts     Payout[]
   conversions Conversion[]
 
   @@unique([customerId, network, externalAddress])
@@ -501,34 +410,6 @@ model Wallet {
   @@index([customerId, network])
   @@index([customerId, currency])
   @@index([customerId, isMain])
-}
-
-model Payout {
-  id         String       @id @default(cuid())
-  walletId   String
-  amount     Decimal      @db.Decimal(18, 2)
-  status     PayoutStatus @default(PENDING)
-  requestId  String       @unique
-  endToEndId String?      @unique
-
-  bankRequest  Json?
-  bankResponse Json?
-  error        String? @db.Text
-
-  beneficiaryName      String
-  beneficiaryTaxNumber String
-  pixKey               String
-  pixKeyType           PixKeyType
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  wallet    Wallet       @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  debitTx   Transaction? @relation(fields: [debitTxId], references: [id], onDelete: SetNull)
-  debitTxId String?      @unique
-
-  @@index([walletId, createdAt])
-  @@index([status])
 }
 
 // ==================== ACCOUNT & TRANSACTIONS ====================
@@ -562,9 +443,9 @@ model Transaction {
   id        String @id @default(uuid())
   accountId String
 
-  type    TransactionType
-  subType String?
-  status  TransactionStatus
+  type         TransactionType
+  subType      String?
+  status       TransactionStatus
   bankProvider BankProvider?
 
   amount        Decimal @db.Decimal(15, 2)
@@ -605,10 +486,9 @@ model Transaction {
   processedAt DateTime?
   completedAt DateTime?
 
-  account       Account      @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  relatedTx     Transaction? @relation("RelatedTransactions", fields: [relatedTxId], references: [id], onDelete: SetNull)
-  counterpartTx Transaction? @relation("RelatedTransactions")
-  payouts       Payout[]
+  account              Account               @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  relatedTx            Transaction?          @relation("RelatedTransactions", fields: [relatedTxId], references: [id], onDelete: SetNull)
+  counterpartTx        Transaction?          @relation("RelatedTransactions")
   affiliateCommissions AffiliateCommission[]
 
   @@index([accountId, createdAt])
@@ -710,13 +590,13 @@ model PushSubscription {
 // ==================== SYSTEM SETTINGS ====================
 
 model SystemSettings {
-  id        String   @id @default("singleton")
+  id                 String       @id @default("singleton")
   activeBankProvider BankProvider @default(INTER)
-  interEnabled       Boolean     @default(true)
-  fdbankEnabled      Boolean     @default(false)
+  interEnabled       Boolean      @default(true)
+  fdbankEnabled      Boolean      @default(false)
   metadata           Json?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
 
   @@map("system_settings")
 }
@@ -794,17 +674,17 @@ model AffiliateCommission {
   conversionType String? // BUY ou SELL
 
   // Valores
-  transactionAmount Decimal  @db.Decimal(18, 2) // Valor da transação em BRL
-  spreadBrl         Decimal  @db.Decimal(18, 2) @default(0) // Spread total da OTSEM em BRL
-  commissionRate    Decimal  @db.Decimal(10, 6) @default(0.10) // Taxa de comissão (ex: 0.10 = 10%)
-  commissionBrl     Decimal  @db.Decimal(18, 2) // Comissão em BRL
-  commissionUsdt    Decimal  @db.Decimal(18, 6) @default(0) // Comissão em USDT
-  exchangeRate      Decimal  @db.Decimal(10, 4) @default(0) // Taxa BRL/USDT no momento
+  transactionAmount Decimal @db.Decimal(18, 2) // Valor da transação em BRL
+  spreadBrl         Decimal @default(0) @db.Decimal(18, 2) // Spread total da OTSEM em BRL
+  commissionRate    Decimal @default(0.10) @db.Decimal(10, 6) // Taxa de comissão (ex: 0.10 = 10%)
+  commissionBrl     Decimal @db.Decimal(18, 2) // Comissão em BRL
+  commissionUsdt    Decimal @default(0) @db.Decimal(18, 6) // Comissão em USDT
+  exchangeRate      Decimal @default(0) @db.Decimal(10, 4) // Taxa BRL/USDT no momento
 
   // Legacy fields (mantidos para compatibilidade)
-  spreadTotal     Decimal @db.Decimal(10, 6) @default(0)
-  spreadBase      Decimal @db.Decimal(10, 6) @default(0)
-  spreadAffiliate Decimal @db.Decimal(10, 6) @default(0)
+  spreadTotal     Decimal @default(0) @db.Decimal(10, 6)
+  spreadBase      Decimal @default(0) @db.Decimal(10, 6)
+  spreadAffiliate Decimal @default(0) @db.Decimal(10, 6)
 
   // Settlement
   status         CommissionStatus @default(PENDING)
