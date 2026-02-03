@@ -32,8 +32,21 @@ interface WithdrawUsdtParams {
 @Injectable()
 export class OkxService {
     private readonly logger = new Logger(OkxService.name);
-    
+
     constructor(private readonly authService: OkxAuthService) { }
+
+    /**
+     * Validate OKX API response — OKX returns HTTP 200 even on errors,
+     * with the actual error code in response.data.code
+     */
+    private validateOkxResponse(response: any, operation: string): void {
+        const code = response?.code;
+        if (code && code !== '0') {
+            const msg = response?.msg || 'Unknown OKX error';
+            this.logger.error(`[OKX] ${operation} failed: code=${code} msg=${msg} data=${JSON.stringify(response?.data)}`);
+            throw new Error(`OKX ${operation}: ${msg} (code: ${code})`);
+        }
+    }
 
     async getAccountBalance() {
         const method = 'GET';
@@ -108,11 +121,14 @@ export class OkxService {
 
         const apiUrl = process.env.OKX_API_URL || 'https://www.okx.com';
 
+        this.logger.log(`[OKX] Buying USDT with R$ ${brlAmount}...`);
         const response = await axios.post(
             `${apiUrl}${requestPath}`,
             bodyObj,
             { headers }
         );
+        this.validateOkxResponse(response.data, 'buyUsdtWithBrl');
+        this.logger.log(`[OKX] Buy order placed: ${JSON.stringify(response.data?.data?.[0]?.ordId || 'no ordId')}`);
         return response.data;
     }
 
@@ -211,20 +227,24 @@ export class OkxService {
     async buyAndCheckHistory(brlAmount: number): Promise<any> {
         // 1. Comprar USDT com BRL
         const buyResponse = await this.buyUsdtWithBrl(brlAmount);
-        const ordId = buyResponse.data[0]?.ordId;
+        const ordId = buyResponse.data?.[0]?.ordId;
         if (!ordId) {
-            throw new Error('Ordem não criada');
+            this.logger.error(`[OKX] Ordem não criada. Response: ${JSON.stringify(buyResponse)}`);
+            throw new Error(`Ordem OKX não criada: ${buyResponse?.msg || JSON.stringify(buyResponse)}`);
         }
 
-        // 2. Aguardar 10 segundos
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // 2. Buscar fills com retry (market orders podem demorar alguns segundos)
+        let detalhes: any[] = [];
+        for (let attempt = 1; attempt <= 3; attempt++) {
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            detalhes = await this.getOrderFills(ordId);
+            if (detalhes.length > 0) break;
+            this.logger.warn(`[OKX] Fills attempt ${attempt}/3 empty for order ${ordId}, retrying...`);
+        }
 
-        // 3. Buscar histórico de fills
-        const fillsResponse = await this.getUsdtBuyHistory();
-        const fills = fillsResponse.data?.data || [];
-
-        // 4. Filtrar pelo ordId
-        const detalhes = fills.filter((f: any) => f.ordId === ordId);
+        if (detalhes.length === 0) {
+            this.logger.error(`[OKX] No fills found for order ${ordId} after 3 attempts`);
+        }
 
         return {
             ordId,
@@ -254,8 +274,10 @@ export class OkxService {
 
         const headers = this.authService.getAuthHeaders(method, requestPath, body);
 
-        const url = `https://www.okx.com${requestPath}`;
-        const response = await axios.post(url, bodyObj, { headers });
+        const apiUrl = process.env.OKX_API_URL || 'https://www.okx.com';
+        this.logger.log(`[OKX] Withdrawing ${amount} USDT to ${toAddress} via ${network}...`);
+        const response = await axios.post(`${apiUrl}${requestPath}`, bodyObj, { headers });
+        this.validateOkxResponse(response.data, `withdraw USDT to ${toAddress}`);
         return response.data;
     }
 
@@ -274,8 +296,10 @@ export class OkxService {
 
         const headers = this.authService.getAuthHeaders(method, requestPath, body);
 
-        const url = `https://www.okx.com${requestPath}`;
-        const response = await axios.post(url, bodyObj, { headers });
+        const apiUrl = process.env.OKX_API_URL || 'https://www.okx.com';
+        this.logger.log(`[OKX] Withdrawing ${amount} USDT to ${toAddress} via ${network} (fee: ${fee})...`);
+        const response = await axios.post(`${apiUrl}${requestPath}`, bodyObj, { headers });
+        this.validateOkxResponse(response.data, `withdraw USDT to ${toAddress}`);
         return response.data;
     }
 
@@ -386,7 +410,7 @@ export class OkxService {
     }
 
     /**
-     * Transfere BRL da conta funding (principal) para a conta trading.
+     * Transfere BRL da conta funding para a conta trading.
      * @param amount Valor em BRL a transferir (string ou number)
      */
     async transferBrlToTrading(amount: string | number) {
@@ -395,14 +419,16 @@ export class OkxService {
         const bodyObj = {
             ccy: 'BRL',
             amt: amount.toString(),
-            from: 18,   // 6 = funding
-            to: 6     // 18 = trading
+            from: 6,    // funding
+            to: 18      // trading
         };
         const body = JSON.stringify(bodyObj);
         const headers = this.authService.getAuthHeaders(method, requestPath, body);
         const apiUrl = process.env.OKX_API_URL || 'https://www.okx.com';
 
+        this.logger.log(`[OKX] Transferring R$ ${amount} from funding to trading...`);
         const response = await axios.post(`${apiUrl}${requestPath}`, bodyObj, { headers });
+        this.validateOkxResponse(response.data, 'transfer BRL funding→trading');
         return response.data;
     }
 
@@ -458,7 +484,9 @@ export class OkxService {
         const headers = this.authService.getAuthHeaders(method, requestPath, body);
         const apiUrl = process.env.OKX_API_URL || 'https://www.okx.com';
 
+        this.logger.log(`[OKX] Transferring ${amount} ${currency} from trading to funding...`);
         const response = await axios.post(`${apiUrl}${requestPath}`, bodyObj, { headers });
+        this.validateOkxResponse(response.data, `transfer ${currency} trading→funding`);
         return response.data;
     }
 
