@@ -330,13 +330,13 @@ export class InterWebhookService {
                     continue;
                 }
 
-                // ✅ Verificar se já processamos este endToEnd
+                // ✅ Verificar se já processamos este endToEnd (só pular se COMPLETED)
                 const existingTx = await this.prisma.transaction.findFirst({
                     where: { endToEnd },
                 });
 
-                if (existingTx) {
-                    this.logger.warn(`⚠️ Pix duplicado: ${endToEnd}`);
+                if (existingTx && existingTx.status === 'COMPLETED') {
+                    this.logger.warn(`⚠️ Pix duplicado (já COMPLETED): ${endToEnd}`);
                     await this.prisma.webhookLog.create({
                         data: {
                             source: 'INTER',
@@ -345,7 +345,7 @@ export class InterWebhookService {
                             endToEnd,
                             txid,
                             processed: true,
-                            error: 'Duplicado - ignorado',
+                            error: 'Duplicado - já completado',
                         },
                     });
                     continue;
@@ -369,46 +369,18 @@ export class InterWebhookService {
                     // Verificar se valor pago corresponde ao solicitado (0 = valor aberto, aceita qualquer valor)
                     const valorSolicitado = parseFloat(pendingTx.amount.toString());
                     const isValorAberto = valorSolicitado === 0;
-                    
+
                     if (!isValorAberto && Math.abs(valorReais - valorSolicitado) > 0.01) {
-                        this.logger.warn(`⚠️ Valor diferente! Solicitado: R$ ${valorSolicitado} | Pago: R$ ${valorReais}`);
-                        // Atualizar transaction como erro para revisão manual
-                        await this.prisma.$transaction([
-                            this.prisma.transaction.update({
-                                where: { id: pendingTx.id },
-                                data: {
-                                    endToEnd,
-                                    amount: valorReais,
-                                    payerName: pix.pagador?.nome,
-                                    payerTaxNumber: pix.pagador?.cpfCnpj || pix.pagador?.cpf || pix.pagador?.cnpj,
-                                    payerMessage: pix.infoPagador,
-                                    pixKey: chave,
-                                    status: 'PENDING',
-                                    errorMessage: `Valor diferente: solicitado R$ ${valorSolicitado}, pago R$ ${valorReais}`,
-                                    bankPayload: pix as Prisma.InputJsonValue,
-                                    processedAt: new Date(),
-                                },
-                            }),
-                            this.prisma.webhookLog.create({
-                                data: {
-                                    source: 'INTER',
-                                    type: 'pix_received',
-                                    payload: pix as Prisma.InputJsonValue,
-                                    endToEnd,
-                                    txid,
-                                    processed: true,
-                                    error: `Valor diferente: solicitado R$ ${valorSolicitado}, pago R$ ${valorReais}`,
-                                    processedAt: new Date(),
-                                },
-                            }),
-                        ]);
-                        this.logger.log(`📝 Pix salvo como PENDING (valor diferente) para revisão manual: ${endToEnd}`);
-                        continue;
+                        this.logger.warn(`⚠️ Valor diferente! Solicitado: R$ ${valorSolicitado} | Pago: R$ ${valorReais}. Creditando valor efetivamente pago.`);
+                        // Creditar o valor efetivamente pago (não bloquear o pagamento)
                     }
 
                     const valorDecimal = new Prisma.Decimal(valorReais);
                     const balanceBefore = txAccount.balance;
                     const balanceAfter = balanceBefore.add(valorDecimal);
+
+                    const payerName = pix.pagador?.nome || 'Pagador não identificado';
+                    const payerTaxNumber = pix.pagador?.cpfCnpj || pix.pagador?.cpf || pix.pagador?.cnpj || '';
 
                     await this.prisma.$transaction([
                         // Atualizar Transaction para COMPLETED
@@ -419,11 +391,12 @@ export class InterWebhookService {
                                 amount: valorDecimal,
                                 balanceBefore,
                                 balanceAfter,
-                                payerName: pix.pagador?.nome,
-                                payerTaxNumber: pix.pagador?.cpfCnpj || pix.pagador?.cpf || pix.pagador?.cnpj,
+                                payerName,
+                                payerTaxNumber,
                                 payerMessage: pix.infoPagador,
                                 pixKey: chave,
                                 status: 'COMPLETED',
+                                bankProvider: 'INTER',
                                 bankPayload: pix as Prisma.InputJsonValue,
                                 processedAt: new Date(),
                                 completedAt: new Date(),
@@ -433,6 +406,33 @@ export class InterWebhookService {
                         this.prisma.account.update({
                             where: { id: txAccount.id },
                             data: { balance: balanceAfter },
+                        }),
+                        // Criar Payment record (para summary.payments no dashboard)
+                        this.prisma.payment.create({
+                            data: {
+                                endToEnd,
+                                paymentValue: Math.round(valorReais * 100),
+                                paymentDate: new Date(),
+                                receiverName: payerName,
+                                receiverPixKey: chave,
+                                status: 'CONFIRMED',
+                                bankPayload: {
+                                    valor: String(valorReais),
+                                    titulo: `Depósito PIX de ${payerName}`,
+                                    descricao: pix.infoPagador || `Depósito PIX de ${payerName}`,
+                                    detalhes: {
+                                        nomePagador: payerName,
+                                        cpfCnpjPagador: payerTaxNumber,
+                                        nomeEmpresaPagador: '',
+                                        endToEndId: endToEnd,
+                                        txId: txid,
+                                        descricaoPix: pix.infoPagador || '',
+                                    },
+                                    dataTransacao: new Date().toISOString(),
+                                    tipoTransacao: 'PIX',
+                                } as Prisma.InputJsonValue,
+                                customerId: customerId!,
+                            },
                         }),
                         // Log do webhook
                         this.prisma.webhookLog.create({

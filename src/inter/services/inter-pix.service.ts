@@ -132,6 +132,7 @@ export class InterPixService {
                             description: dto.descricao || `Aguardando depósito PIX de ${customerName}`,
                             txid,
                             pixKey: chave,
+                            bankProvider: 'INTER',
                             bankPayload: cobData as Prisma.InputJsonValue,
                         },
                     });
@@ -700,7 +701,16 @@ export class InterPixService {
                     where: { endToEnd: e2eId },
                 });
                 if (alreadyProcessed) {
-                    this.logger.warn(`🔁 Pix já processado: ${e2eId}`);
+                    this.logger.warn(`🔁 Pix já processado (Payment): ${e2eId}`);
+                    continue;
+                }
+
+                // Also check Transaction table to avoid double-credit with webhook handler
+                const alreadyInTransaction = await this.prisma.transaction.findFirst({
+                    where: { endToEnd: e2eId, status: 'COMPLETED' },
+                });
+                if (alreadyInTransaction) {
+                    this.logger.warn(`🔁 Pix já processado (Transaction): ${e2eId}`);
                     continue;
                 }
 
