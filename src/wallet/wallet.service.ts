@@ -546,7 +546,7 @@ export class WalletService {
   async buyUsdtWithBrl(customerId: string, brlAmount: number, walletId?: string) {
     const account = await this.prisma.account.findFirst({ where: { customerId } });
     if (!account || Number(account.balance) < brlAmount || brlAmount < 10) {
-      throw new Error('Saldo insuficiente em BRL (mínimo R$10)');
+      throw new BadRequestException('Saldo insuficiente em BRL (mínimo R$10)');
     }
 
     // Validar limite mensal KYC
@@ -589,11 +589,11 @@ export class WalletService {
     }
 
     if (!wallet || !wallet.externalAddress) {
-      throw new Error('Carteira (Solana ou Tron) não encontrada para o cliente');
+      throw new BadRequestException('Carteira (Solana ou Tron) não encontrada para o cliente');
     }
 
     if (!wallet.okxWhitelisted) {
-      throw new Error('Carteira não está na whitelist da OKX. Adicione o endereço na OKX e marque como whitelistada antes de converter.');
+      throw new BadRequestException('Carteira não está na whitelist da OKX. Adicione o endereço na OKX e marque como whitelistada antes de converter.');
     }
 
     // Criar Conversion com status PENDING para tracking em tempo real
