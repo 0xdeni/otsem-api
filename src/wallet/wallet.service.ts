@@ -848,16 +848,17 @@ export class WalletService {
         } : null,
         wallet: { id: wallet.id, network: wallet.network, address: wallet.externalAddress },
       };
-    } catch (error) {
+    } catch (error: any) {
       // Atualizar Conversion para FAILED
-      const errorMsg = error instanceof Error ? error.message : 'Erro na compra/transferência USDT';
+      const axiosMsg = error?.response?.data?.msg || error?.response?.data?.message;
+      const errorMsg = axiosMsg || (error instanceof Error ? error.message : 'Erro na compra/transferência USDT');
       await this.prisma.conversion.update({
         where: { id: conversion.id },
         data: { status: 'FAILED', errorMessage: errorMsg },
       });
-      this.logger.error(`[BUY] Conversion ${conversion.id} FAILED: ${errorMsg}`);
+      this.logger.error(`[BUY] Conversion ${conversion.id} FAILED: ${errorMsg}`, error?.stack || error);
 
-      throw error;
+      throw new BadRequestException(`Erro na compra USDT: ${errorMsg}`);
     }
   }
 
