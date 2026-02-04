@@ -16,12 +16,14 @@ import {
     ApiTags,
     ApiQuery,
     ApiParam,
+    ApiResponse,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { Role } from '@prisma/client';
 import { TransactionsService } from './transactions.service';
+import { TransactionReceiptDto } from './dto/transaction-receipt.dto';
 import { Request as ExpressRequest } from 'express';
 
 @ApiTags('Transactions')
@@ -62,6 +64,44 @@ export class TransactionsController {
         const limitNumber = Math.min(100, Math.max(1, parseInt(limit || '20', 10)));
 
         return this.service.findByAccount(account.id, pageNumber, limitNumber);
+    }
+
+    @Get(':id/details')
+    @Roles(Role.CUSTOMER, Role.ADMIN)
+    @ApiOperation({
+        summary: 'Detalhes completos da transação (para tela de detalhes ao clicar)',
+        description: 'Retorna informações detalhadas da transação incluindo dados de pagador/recebedor para PIX, indicando se comprovante está disponível.',
+    })
+    @ApiParam({ name: 'id', example: 'tx-uuid', description: 'ID da transação' })
+    async getDetails(
+        @Request() req: ExpressRequest & { user: { customerId: string } },
+        @Param('id') id: string,
+    ) {
+        const customerId = req.user.customerId;
+        return this.service.getTransactionDetails(id, customerId);
+    }
+
+    @Get(':id/receipt')
+    @Roles(Role.CUSTOMER, Role.ADMIN)
+    @ApiOperation({
+        summary: 'Comprovante de transação PIX (depósito ou envio)',
+        description: 'Gera comprovante formatado para transações PIX (PIX_IN e PIX_OUT) com dados de pagador, recebedor, valores e identificadores. Disponível apenas para transações PIX do próprio customer.',
+    })
+    @ApiParam({ name: 'id', example: 'tx-uuid', description: 'ID da transação' })
+    @ApiResponse({
+        status: 200,
+        description: 'Comprovante gerado com sucesso',
+        type: TransactionReceiptDto,
+    })
+    @ApiResponse({ status: 400, description: 'Transação não é do tipo PIX' })
+    @ApiResponse({ status: 403, description: 'Transação não pertence ao customer' })
+    @ApiResponse({ status: 404, description: 'Transação não encontrada' })
+    async getReceipt(
+        @Request() req: ExpressRequest & { user: { customerId: string } },
+        @Param('id') id: string,
+    ) {
+        const customerId = req.user.customerId;
+        return this.service.getReceipt(id, customerId);
     }
 
     @Get(':id')

@@ -1,8 +1,9 @@
 // src/transactions/transactions.service.ts
 
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
+import { TransactionReceiptDto } from './dto/transaction-receipt.dto';
 
 @Injectable()
 export class TransactionsService {
@@ -243,6 +244,30 @@ export class TransactionsService {
                 orderBy: { createdAt: 'desc' },
                 skip,
                 take: limit,
+                select: {
+                    id: true,
+                    type: true,
+                    status: true,
+                    amount: true,
+                    description: true,
+                    createdAt: true,
+                    completedAt: true,
+                    endToEnd: true,
+                    txid: true,
+                    bankProvider: true,
+                    payerName: true,
+                    payerTaxNumber: true,
+                    payerMessage: true,
+                    receiverName: true,
+                    receiverTaxNumber: true,
+                    receiverPixKey: true,
+                    receiverBankCode: true,
+                    pixKey: true,
+                    balanceBefore: true,
+                    balanceAfter: true,
+                    subType: true,
+                    metadata: true,
+                },
             }),
             this.prisma.transaction.count({
                 where: { accountId },
@@ -364,5 +389,202 @@ export class TransactionsService {
 
             return reverseTx;
         });
+    }
+
+    /**
+     * Gerar comprovante de transação PIX
+     */
+    async getReceipt(transactionId: string, customerId: string): Promise<TransactionReceiptDto> {
+        const transaction = await this.prisma.transaction.findUnique({
+            where: { id: transactionId },
+            include: {
+                account: {
+                    select: {
+                        customerId: true,
+                        pixKey: true,
+                        customer: {
+                            select: {
+                                id: true,
+                                name: true,
+                                cpf: true,
+                                cnpj: true,
+                                type: true,
+                            },
+                        },
+                    },
+                },
+            },
+        });
+
+        if (!transaction) {
+            throw new NotFoundException('Transação não encontrada');
+        }
+
+        if (transaction.account.customerId !== customerId) {
+            throw new ForbiddenException('Você não tem permissão para acessar este comprovante');
+        }
+
+        if (transaction.type !== 'PIX_IN' && transaction.type !== 'PIX_OUT') {
+            throw new BadRequestException('Comprovante disponível apenas para transações PIX');
+        }
+
+        const customer = transaction.account.customer;
+        const customerTaxNumber = customer.type === 'PF' ? customer.cpf : customer.cnpj;
+
+        if (transaction.type === 'PIX_IN') {
+            return {
+                title: 'Comprovante de Depósito PIX',
+                transactionId: transaction.id,
+                type: transaction.type,
+                status: transaction.status,
+                amount: Number(transaction.amount),
+                date: transaction.createdAt.toISOString(),
+                completedAt: transaction.completedAt?.toISOString() || undefined,
+                endToEnd: transaction.endToEnd || undefined,
+                txid: transaction.txid || undefined,
+                description: transaction.description || undefined,
+                payer: {
+                    name: transaction.payerName || undefined,
+                    taxNumber: this.maskTaxNumber(transaction.payerTaxNumber) || undefined,
+                },
+                receiver: {
+                    name: customer.name,
+                    taxNumber: this.maskTaxNumber(customerTaxNumber) || undefined,
+                    pixKey: transaction.pixKey || transaction.account.pixKey || undefined,
+                },
+                bankProvider: transaction.bankProvider || undefined,
+                payerMessage: transaction.payerMessage || undefined,
+            };
+        }
+
+        // PIX_OUT
+        return {
+            title: 'Comprovante de Envio PIX',
+            transactionId: transaction.id,
+            type: transaction.type,
+            status: transaction.status,
+            amount: Number(transaction.amount),
+            date: transaction.createdAt.toISOString(),
+            completedAt: transaction.completedAt?.toISOString() || undefined,
+            endToEnd: transaction.endToEnd || transaction.externalId || undefined,
+            txid: transaction.txid || undefined,
+            description: transaction.description || undefined,
+            payer: {
+                name: customer.name,
+                taxNumber: this.maskTaxNumber(customerTaxNumber) || undefined,
+            },
+            receiver: {
+                name: transaction.receiverName || undefined,
+                taxNumber: this.maskTaxNumber(transaction.receiverTaxNumber) || undefined,
+                pixKey: transaction.receiverPixKey || undefined,
+                bankCode: transaction.receiverBankCode || undefined,
+            },
+            bankProvider: transaction.bankProvider || undefined,
+        };
+    }
+
+    /**
+     * Buscar detalhes completos de uma transação PIX (para tela de detalhes)
+     */
+    async getTransactionDetails(transactionId: string, customerId: string) {
+        const transaction = await this.prisma.transaction.findUnique({
+            where: { id: transactionId },
+            include: {
+                account: {
+                    select: {
+                        customerId: true,
+                        pixKey: true,
+                        customer: {
+                            select: {
+                                id: true,
+                                name: true,
+                                cpf: true,
+                                cnpj: true,
+                                type: true,
+                            },
+                        },
+                    },
+                },
+            },
+        });
+
+        if (!transaction) {
+            throw new NotFoundException('Transação não encontrada');
+        }
+
+        if (transaction.account.customerId !== customerId) {
+            throw new ForbiddenException('Você não tem permissão para acessar esta transação');
+        }
+
+        const customer = transaction.account.customer;
+        const customerTaxNumber = customer.type === 'PF' ? customer.cpf : customer.cnpj;
+        const isPix = transaction.type === 'PIX_IN' || transaction.type === 'PIX_OUT';
+
+        return {
+            transactionId: transaction.id,
+            type: transaction.type,
+            subType: transaction.subType || null,
+            status: transaction.status,
+            amount: Number(transaction.amount),
+            balanceBefore: Number(transaction.balanceBefore),
+            balanceAfter: Number(transaction.balanceAfter),
+            description: transaction.description || null,
+            createdAt: transaction.createdAt.toISOString(),
+            completedAt: transaction.completedAt?.toISOString() || null,
+            bankProvider: transaction.bankProvider || null,
+            endToEnd: transaction.endToEnd || transaction.externalId || null,
+            txid: transaction.txid || null,
+            payer: isPix ? {
+                name: transaction.type === 'PIX_IN'
+                    ? (transaction.payerName || null)
+                    : customer.name,
+                taxNumber: transaction.type === 'PIX_IN'
+                    ? (this.maskTaxNumber(transaction.payerTaxNumber) || null)
+                    : (this.maskTaxNumber(customerTaxNumber) || null),
+            } : null,
+            receiver: isPix ? {
+                name: transaction.type === 'PIX_OUT'
+                    ? (transaction.receiverName || null)
+                    : customer.name,
+                taxNumber: transaction.type === 'PIX_OUT'
+                    ? (this.maskTaxNumber(transaction.receiverTaxNumber) || null)
+                    : (this.maskTaxNumber(customerTaxNumber) || null),
+                pixKey: transaction.type === 'PIX_OUT'
+                    ? (transaction.receiverPixKey || null)
+                    : (transaction.pixKey || transaction.account.pixKey || null),
+                bankCode: transaction.type === 'PIX_OUT'
+                    ? (transaction.receiverBankCode || null)
+                    : null,
+            } : null,
+            payerMessage: transaction.payerMessage || null,
+            hasReceipt: isPix && transaction.status === 'COMPLETED',
+        };
+    }
+
+    /**
+     * Mascarar CPF/CNPJ para exibição no comprovante
+     * CPF: ***456789** | CNPJ: **345678000***
+     */
+    private maskTaxNumber(taxNumber: string | null | undefined): string | null {
+        if (!taxNumber) return null;
+
+        const cleaned = taxNumber.replace(/\D/g, '');
+
+        if (cleaned.length === 11) {
+            // CPF: mostra apenas os dígitos do meio
+            return `***${cleaned.substring(3, 9)}**`;
+        }
+
+        if (cleaned.length === 14) {
+            // CNPJ: mostra apenas os dígitos do meio
+            return `**${cleaned.substring(2, 12)}**`;
+        }
+
+        // Fallback: mascara início e fim
+        if (cleaned.length > 4) {
+            return `***${cleaned.substring(3, cleaned.length - 2)}**`;
+        }
+
+        return '***';
     }
 }
