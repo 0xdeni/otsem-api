@@ -9,8 +9,12 @@ import * as fs from 'fs';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  const allowedOrigins = process.env.FRONTEND_BASE_URL
+    ? process.env.FRONTEND_BASE_URL.split(',').map((o) => o.trim().replace(/\/+$/, ''))
+    : null;
+
   app.enableCors({
-    origin: process.env.FRONTEND_BASE_URL || true,
+    origin: allowedOrigins ?? true,
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     exposedHeaders: ['Authorization'],
