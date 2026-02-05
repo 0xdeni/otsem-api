@@ -211,32 +211,32 @@ export class AffiliatesService {
   }
 
   /**
-   * Links a customer to a default affiliate or a specific referral code.
-   * Called during registration.
+   * Links a customer to the default 0X affiliate.
+   * Called during registration. All other referral codes are disabled.
    */
   async linkCustomerOnRegistration(customerId: string, affiliateCode?: string) {
-    // If a specific code was provided, try it first
-    if (affiliateCode) {
-      const affiliate = await this.findByCode(affiliateCode);
-      if (affiliate && affiliate.isActive) {
-        await this.prisma.customer.update({
-          where: { id: customerId },
-          data: { affiliateId: affiliate.id },
-        });
-        this.logger.log(`[Affiliate] Customer ${customerId} linked to affiliate ${affiliate.code} (referral code)`);
-        return;
-      }
-      this.logger.warn(`[Affiliate] Referral code "${affiliateCode}" invalid or inactive, falling back to default`);
+    if (affiliateCode && affiliateCode.toUpperCase() !== DEFAULT_AFFILIATE_CODE) {
+      this.logger.warn(`[Affiliate] Referral code "${affiliateCode}" ignored — only default affiliate (${DEFAULT_AFFILIATE_CODE}) is active`);
     }
 
-    // Fall back to default affiliate (0X)
+    // Always link to the default affiliate (0X)
     const defaultAffiliate = await this.findByCode(DEFAULT_AFFILIATE_CODE);
-    if (defaultAffiliate && defaultAffiliate.isActive) {
+    if (defaultAffiliate) {
+      // Ensure default affiliate is always active
+      if (!defaultAffiliate.isActive) {
+        await this.prisma.affiliate.update({
+          where: { id: defaultAffiliate.id },
+          data: { isActive: true },
+        });
+        this.logger.log(`[Affiliate] Auto-activated default affiliate ${DEFAULT_AFFILIATE_CODE}`);
+      }
       await this.prisma.customer.update({
         where: { id: customerId },
         data: { affiliateId: defaultAffiliate.id },
       });
       this.logger.log(`[Affiliate] Customer ${customerId} linked to default affiliate ${defaultAffiliate.code}`);
+    } else {
+      this.logger.error(`[Affiliate] Default affiliate ${DEFAULT_AFFILIATE_CODE} not found in database — customer ${customerId} has no affiliate`);
     }
   }
 
@@ -541,50 +541,8 @@ export class AffiliatesService {
   }
 
   async activateForCustomer(customerId: string) {
-    const customer = await this.prisma.customer.findUnique({
-      where: { id: customerId },
-      select: { id: true, email: true, name: true, phone: true },
-    });
-
-    if (!customer) {
-      throw new NotFoundException('Cliente não encontrado');
-    }
-
-    const existingAffiliate = await this.prisma.affiliate.findFirst({
-      where: { email: customer.email },
-    });
-
-    if (existingAffiliate) {
-      return {
-        success: true,
-        data: {
-          referralCode: existingAffiliate.code,
-          commissionRate: Number(existingAffiliate.commissionRate),
-        },
-      };
-    }
-
-    const code = await this.generateUniqueCode(customer.name);
-
-    const affiliate = await this.prisma.affiliate.create({
-      data: {
-        name: customer.name,
-        email: customer.email,
-        phone: customer.phone,
-        code,
-        commissionRate: DEFAULT_COMMISSION_RATE,
-        spreadRate: 0,
-        isActive: true,
-      },
-    });
-
-    return {
-      success: true,
-      data: {
-        referralCode: affiliate.code,
-        commissionRate: Number(affiliate.commissionRate),
-      },
-    };
+    // Affiliate activation is disabled — only the default 0X affiliate is active
+    throw new ConflictException('Affiliate program is currently disabled. All customers use the default affiliate.');
   }
 
   private async generateUniqueCode(name: string): Promise<string> {
