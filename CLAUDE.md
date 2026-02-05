@@ -100,8 +100,11 @@ src/
 ├── statements/                # Balance & statement queries
 ├── transactions/              # Transaction ledger
 ├── payments/                  # Outbound Pix payments
+├── transfers/                 # Username-based internal BRL transfers
+├── boleto-payments/           # Boleto payments via crypto (admin approval flow)
 ├── pix-keys/                  # Pix key management
 ├── wallet/                    # Multi-network crypto wallets
+├── users/                     # User management (admin password changes)
 ├── inter/                     # Inter Bank integration
 │   ├── inter-banking.controller.ts
 │   ├── inter-banking.service.ts
@@ -127,13 +130,16 @@ src/
 └── scripts/                   # Internal utility scripts
 
 prisma/
-├── schema.prisma              # Full database schema (22 models, 13+ enums)
-├── migrations/                # 20+ sequential migrations
+├── schema.prisma              # Full database schema (20 models, 17 enums)
+├── migrations/                # 70+ sequential migrations
 ├── seed.ts                    # Default admin user creation
 └── erase-customers.ts         # Data cleanup utility
 
 scripts/
-└── change-password.js         # Admin password reset (direct DB)
+├── change-password.js         # Admin password reset (direct DB)
+├── migrate-conversions.ts     # Conversion data migration utility
+├── setup-webhooks.ts          # Webhook endpoint setup
+└── test-inter-auth.ts         # Inter Bank auth testing
 ```
 
 ## Architecture Patterns
@@ -317,6 +323,8 @@ GitHub Actions workflow (`.github/workflows/deploy.yml`):
 | **Pix** | Brazilian instant payment system — keys, payments, deposits |
 | **Wallet** | Multi-network crypto wallet (Solana, Tron, EVM chains) |
 | **Conversion** | BRL <-> USDT exchange via OKX (BUY or SELL flow) |
+| **Transfer** | Username-based internal BRL transfer between customers |
+| **Boleto Payment** | Pay boletos using crypto — admin approval workflow (PENDING_APPROVAL -> ADMIN_PAYING -> PAID/FAILED) |
 | **Affiliate** | Partner with referral code, earns commission on conversions |
 | **KYC Levels** | LEVEL_1/2/3 with increasing monthly transaction limits |
 | **Bank Provider** | Runtime-switchable between Inter and FDBank |
