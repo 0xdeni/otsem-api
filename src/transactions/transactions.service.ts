@@ -233,6 +233,128 @@ export class TransactionsService {
     }
 
     /**
+     * Transferência entre customers por username
+     */
+    async processTransferByUsername(
+        fromCustomerId: string,
+        toUsername: string,
+        amount: number,
+        description?: string,
+    ): Promise<any> {
+        this.logger.log(`🔄 Processando transferência por username: R$ ${amount} para @${toUsername}`);
+
+        return await this.prisma.$transaction(async (tx) => {
+            // 1. Buscar destinatário pelo username
+            const toCustomer = await tx.customer.findUnique({
+                where: { username: toUsername },
+            });
+
+            if (!toCustomer) {
+                throw new NotFoundException('username_not_found');
+            }
+
+            // 2. Buscar conta de origem
+            const fromAccount = await tx.account.findUnique({
+                where: { customerId: fromCustomerId },
+                include: { customer: { select: { name: true, username: true } } },
+            });
+
+            if (!fromAccount) {
+                throw new BadRequestException('Conta de origem não encontrada');
+            }
+
+            if (fromAccount.status !== 'active') {
+                throw new BadRequestException('Conta de origem inativa');
+            }
+
+            // 3. Buscar conta de destino
+            const toAccount = await tx.account.findUnique({
+                where: { customerId: toCustomer.id },
+            });
+
+            if (!toAccount) {
+                throw new BadRequestException('Conta de destino não encontrada');
+            }
+
+            if (toAccount.status !== 'active') {
+                throw new BadRequestException('Conta de destino inativa');
+            }
+
+            // 4. Impedir auto-transferência
+            if (fromAccount.id === toAccount.id) {
+                throw new BadRequestException('Não é possível transferir para si mesmo');
+            }
+
+            // 5. Verificar saldo
+            const availableBalance = new Prisma.Decimal(fromAccount.balance).sub(
+                fromAccount.blockedAmount,
+            );
+
+            if (availableBalance.lessThan(amount)) {
+                throw new BadRequestException('Saldo insuficiente');
+            }
+
+            const senderName = fromAccount.customer.name;
+            const senderUsername = fromAccount.customer.username;
+            const receiverName = toCustomer.name;
+            const receiverUsername = toCustomer.username;
+
+            // 6. Criar transação de débito (TRANSFER_OUT)
+            const txOut = await tx.transaction.create({
+                data: {
+                    accountId: fromAccount.id,
+                    type: 'TRANSFER_OUT',
+                    amount,
+                    balanceBefore: fromAccount.balance,
+                    balanceAfter: new Prisma.Decimal(fromAccount.balance).sub(amount),
+                    status: 'COMPLETED',
+                    description: description || `Transferência para @${receiverUsername}`,
+                    receiverName: receiverName,
+                    metadata: { toUsername: receiverUsername, fromUsername: senderUsername },
+                    completedAt: new Date(),
+                },
+            });
+
+            // 7. Criar transação de crédito (TRANSFER_IN)
+            const txIn = await tx.transaction.create({
+                data: {
+                    accountId: toAccount.id,
+                    type: 'TRANSFER_IN',
+                    amount,
+                    balanceBefore: toAccount.balance,
+                    balanceAfter: new Prisma.Decimal(toAccount.balance).add(amount),
+                    status: 'COMPLETED',
+                    description: description || `Transferência recebida de @${senderUsername}`,
+                    payerName: senderName,
+                    relatedTxId: txOut.id,
+                    metadata: { toUsername: receiverUsername, fromUsername: senderUsername },
+                    completedAt: new Date(),
+                },
+            });
+
+            // 8. Atualizar saldos
+            await tx.account.update({
+                where: { id: fromAccount.id },
+                data: { balance: new Prisma.Decimal(fromAccount.balance).sub(amount) },
+            });
+
+            await tx.account.update({
+                where: { id: toAccount.id },
+                data: { balance: new Prisma.Decimal(toAccount.balance).add(amount) },
+            });
+
+            this.logger.log(`✅ Transferência por username concluída: ${txOut.id} → ${txIn.id} (@${senderUsername} → @${receiverUsername})`);
+
+            return {
+                txOut,
+                txIn,
+                sender: { name: senderName, username: senderUsername },
+                receiver: { name: receiverName, username: receiverUsername },
+            };
+        });
+    }
+
+    /**
      * Listar transações de uma conta com paginação
      */
     async findByAccount(accountId: string, page = 1, limit = 20) {

@@ -17,6 +17,9 @@ export class CustomerResponse {
     email: string;
 
     @ApiPropertyOptional()
+    username?: string;
+
+    @ApiPropertyOptional()
     phone?: string;
 
     @ApiPropertyOptional()

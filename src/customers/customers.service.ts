@@ -38,6 +38,7 @@ export class CustomersService {
           type: dto.type,
           name: dto.name,
           email: dto.email,
+          username: dto.username,
           phone: dto.phone,
           cpf: dto.cpf,
           cnpj: dto.cnpj,
@@ -113,6 +114,7 @@ export class CustomersService {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
         { email: { contains: search, mode: 'insensitive' } },
+        { username: { contains: search, mode: 'insensitive' } },
         { cpf: { contains: search } },
         { cnpj: { contains: search } },
       ];
@@ -154,6 +156,7 @@ export class CustomersService {
       data: {
         name: dto.name,
         email: dto.email,
+        username: dto.username,
         phone: dto.phone,
         birthday: dto.birthday ? new Date(dto.birthday) : undefined,
         rg: dto.rg,
@@ -215,6 +218,7 @@ export class CustomersService {
 
     if (dto.cpf) where.push({ cpf: dto.cpf });
     if (dto.cnpj) where.push({ cnpj: dto.cnpj });
+    if (dto.username) where.push({ username: dto.username });
 
     const existing = await this.prisma.customer.findFirst({
       where: { OR: where },
@@ -230,7 +234,25 @@ export class CustomersService {
       if (existing.cnpj === dto.cnpj) {
         throw new ConflictException('CNPJ já cadastrado');
       }
+      if (dto.username && existing.username === dto.username) {
+        throw new ConflictException('Username já cadastrado');
+      }
     }
+  }
+
+  /**
+   * 🔍 Buscar por username
+   */
+  async findByUsername(username: string) {
+    const customer = await this.prisma.customer.findUnique({
+      where: { username },
+    });
+
+    if (!customer) {
+      throw new NotFoundException('Username não encontrado');
+    }
+
+    return customer;
   }
 
   /**
@@ -243,6 +265,7 @@ export class CustomersService {
       type: customer.type,
       name: customer.name,
       email: customer.email,
+      username: customer.username,
       phone: customer.phone,
       cpf: customer.cpf,
       cnpj: customer.cnpj,
