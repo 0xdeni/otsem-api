@@ -36,8 +36,8 @@ export class AuthService {
     if (!ok) throw new UnauthorizedException('invalid_credentials');
 
     // Busca o customer vinculado ao usuário
-    const customer = await this.prisma.customer.findUnique({
-      where: { email: user.email },
+    const customer = await this.prisma.customer.findFirst({
+      where: { userId: user.id },
       select: { id: true }
     });
 
@@ -212,8 +212,9 @@ export class AuthService {
       sub: user.id,
       email: user.email,
       role: user.role,
+      customerId: customer.id,
     };
-    const accessToken = await this.jwt.signAsync({ userId: user.id, email: user.email, type: 'access' }, { expiresIn: '15m' });
+    const accessToken = await this.jwt.signAsync(payload, { expiresIn: '15m' });
     const refreshToken = await this.jwt.signAsync({ userId: user.id, email: user.email, type: 'refresh' }, { expiresIn: '7d' });
 
     await this.prisma.refreshToken.create({
