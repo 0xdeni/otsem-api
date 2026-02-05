@@ -217,6 +217,7 @@ model Customer {
   kycUpgradeRequests   KycUpgradeRequest[]
   affiliateCommissions AffiliateCommission[]
   pushSubscriptions  PushSubscription[]
+  boletoPayments     BoletoPayment[]
 
   @@index([email])
   @@index([username])
@@ -404,8 +405,9 @@ model Wallet {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  customer    Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  conversions Conversion[]
+  customer       Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  conversions    Conversion[]
+  boletoPayments BoletoPayment[]
 
   @@unique([customerId, network, externalAddress])
   @@index([customerId])
@@ -634,6 +636,58 @@ model AffiliateCommission {
   @@index([affiliateId])
   @@index([customerId])
   @@index([status])
+}
+
+// ==================== BOLETO PAYMENTS (Crypto → Boleto) ====================
+
+enum BoletoPaymentStatus {
+  PENDING_APPROVAL // Aguardando admin pagar o boleto
+  ADMIN_PAYING // Admin está processando o pagamento
+  PAID // Admin confirmou pagamento do boleto
+  FAILED // Pagamento falhou
+  REFUNDED // Crypto devolvido ao cliente
+  CANCELLED // Cancelado pelo cliente antes do admin pagar
+}
+
+model BoletoPayment {
+  id         String @id @default(cuid())
+  customerId String
+
+  // Dados do boleto
+  barcode     String // Linha digitável do boleto
+  description String? @db.Text // Descrição opcional do pagamento
+
+  // Valores em BRL
+  boletoAmount Decimal @db.Decimal(15, 2) // Valor nominal do boleto
+  serviceFee   Decimal @db.Decimal(15, 2) // Taxa de 3% em BRL
+  totalBrl     Decimal @db.Decimal(15, 2) // Total em BRL (boleto + taxa)
+
+  // Detalhes crypto
+  cryptoAmount   Decimal       @db.Decimal(18, 8) // Quantidade de crypto debitada
+  cryptoCurrency String // USDT, SOL, TRX
+  network        WalletNetwork // Rede da wallet usada
+  walletId       String
+  exchangeRate   Decimal       @db.Decimal(10, 4) // Taxa BRL/crypto no momento
+
+  // Status
+  status       BoletoPaymentStatus @default(PENDING_APPROVAL)
+  adminNotes   String?             @db.Text
+  paidByAdminAt DateTime?
+  paidByAdminId String? // ID do admin que pagou
+
+  // Erro
+  errorMessage String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  wallet   Wallet   @relation(fields: [walletId], references: [id], onDelete: Restrict)
+
+  @@index([customerId])
+  @@index([status])
+  @@index([status, createdAt])
+  @@map("boleto_payments")
 }
 
 // ==================== CONVERSIONS ====================

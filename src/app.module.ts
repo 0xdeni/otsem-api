@@ -26,6 +26,7 @@ import { BankingModule } from './banking/banking.module';
 import { SystemSettingsModule } from './system-settings/system-settings.module';
 import { PushNotificationsModule } from './push-notifications/push-notifications.module';
 import { TransfersModule } from './transfers/transfers.module';
+import { BoletoPaymentsModule } from './boleto-payments/boleto-payments.module';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { TransfersModule } from './transfers/transfers.module';
     SystemSettingsModule,
     PushNotificationsModule,
     TransfersModule,
+    BoletoPaymentsModule,
     ScheduleModule.forRoot(),
   ],
   controllers: [AppController],
