@@ -165,10 +165,11 @@ model Customer {
   userId String?
   user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
-  type  CustomerType
-  name  String
-  email String       @unique
-  phone String?
+  type     CustomerType
+  name     String
+  email    String       @unique
+  username String?      @unique
+  phone    String?
 
   // PF
   cpf         String?   @unique
@@ -218,6 +219,7 @@ model Customer {
   pushSubscriptions  PushSubscription[]
 
   @@index([email])
+  @@index([username])
   @@index([cpf])
   @@index([cnpj])
   @@index([externalClientId])

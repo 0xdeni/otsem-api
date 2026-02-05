@@ -32,6 +32,12 @@ export class CreateCustomerLocalDto {
     @IsEmail()
     email: string;
 
+    @ApiPropertyOptional({ example: 'joaosilva', description: 'Nome de usuário único (3-20 caracteres, apenas letras minúsculas, números e _)' })
+    @IsOptional()
+    @IsString()
+    @Matches(/^[a-z0-9_]{3,20}$/, { message: 'Username deve ter 3-20 caracteres, apenas letras minúsculas, números e _' })
+    username?: string;
+
     @ApiPropertyOptional({ example: '+5511999999999' })
     @IsOptional()
     @IsString()

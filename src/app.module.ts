@@ -25,6 +25,7 @@ import { AffiliatesModule } from './affiliates/affiliates.module';
 import { BankingModule } from './banking/banking.module';
 import { SystemSettingsModule } from './system-settings/system-settings.module';
 import { PushNotificationsModule } from './push-notifications/push-notifications.module';
+import { TransfersModule } from './transfers/transfers.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { PushNotificationsModule } from './push-notifications/push-notifications
     BankingModule,
     SystemSettingsModule,
     PushNotificationsModule,
+    TransfersModule,
     ScheduleModule.forRoot(),
   ],
   controllers: [AppController],

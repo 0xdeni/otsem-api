@@ -114,6 +114,17 @@ export class CustomersController {
     return this.affiliates.activateForCustomer(customer.id);
   }
 
+  @Get('by-username/:username')
+  @ApiOperation({ summary: 'Buscar customer público por username (para transferências)' })
+  async findByUsername(@Param('username') username: string) {
+    const customer = await this.customers.findByUsername(username);
+    return {
+      id: customer.id,
+      name: customer.name,
+      username: customer.username,
+    };
+  }
+
   @Post()
   @ApiOperation({ summary: 'Criar customer' })
   async create(@Req() req: AuthRequest, @Body() dto: CreateCustomerLocalDto) {
