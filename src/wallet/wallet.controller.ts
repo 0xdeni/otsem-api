@@ -16,6 +16,80 @@ import { WalletService } from './wallet.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { WalletNetwork } from '@prisma/client';
 import type { AuthRequest } from '../auth/jwt-payload.type';
+import { OkxService } from '../okx/services/okx.service';
+
+const DEFAULT_SPREAD_VALUE = 0.9905; // 0.95% spread (matches User.spreadValue default)
+
+/**
+ * Public (unauthenticated) price quote endpoint for the landing page exchange widget.
+ * Returns the OKX rate with the default spread applied.
+ */
+@ApiTags('Public Quote')
+@Controller('public')
+export class PublicQuoteController {
+  constructor(private readonly okxService: OkxService) {}
+
+  @Get('quote')
+  @ApiOperation({ summary: 'Public price quote — OKX rate with default spread (no auth required)' })
+  @ApiQuery({ name: 'brlAmount', type: Number, required: false, description: 'BRL amount to convert (optional, for USDT estimate)' })
+  @ApiQuery({ name: 'usdtAmount', type: Number, required: false, description: 'USDT amount to convert (optional, for BRL estimate)' })
+  async getPublicQuote(
+    @Query('brlAmount') brlAmount?: string,
+    @Query('usdtAmount') usdtAmount?: string,
+  ) {
+    const okxRate = await this.okxService.getBrlToUsdtRate();
+    const exchangeRate = okxRate || 5.5;
+    const spreadPercent = (1 - DEFAULT_SPREAD_VALUE) * 100; // 0.95%
+
+    // Rate shown to customer (after spread)
+    const buyRate = exchangeRate / DEFAULT_SPREAD_VALUE; // Customer pays more BRL per USDT when buying
+    const sellRate = exchangeRate * DEFAULT_SPREAD_VALUE; // Customer gets less BRL per USDT when selling
+
+    const result: any = {
+      okxRate: exchangeRate,
+      spreadPercent: Math.round(spreadPercent * 100) / 100,
+      buyRate: Math.round(buyRate * 100) / 100,
+      sellRate: Math.round(sellRate * 100) / 100,
+      networkFees: {
+        SOLANA: 1.0,
+        TRON: 2.1,
+      },
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (brlAmount) {
+      const brl = Number(brlAmount);
+      if (brl > 0) {
+        const brlExchanged = brl * DEFAULT_SPREAD_VALUE;
+        const usdtEstimate = brlExchanged / exchangeRate;
+        result.buy = {
+          brlAmount: brl,
+          brlExchanged: Math.round(brlExchanged * 100) / 100,
+          spreadBrl: Math.round((brl - brlExchanged) * 100) / 100,
+          usdtBeforeFee: Math.round(usdtEstimate * 100) / 100,
+          usdtNetSolana: Math.round((usdtEstimate - 1.0) * 100) / 100,
+          usdtNetTron: Math.round((usdtEstimate - 2.1) * 100) / 100,
+        };
+      }
+    }
+
+    if (usdtAmount) {
+      const usdt = Number(usdtAmount);
+      if (usdt > 0) {
+        const brlFromExchange = usdt * exchangeRate;
+        const brlToReceive = brlFromExchange * DEFAULT_SPREAD_VALUE;
+        result.sell = {
+          usdtAmount: usdt,
+          brlFromExchange: Math.round(brlFromExchange * 100) / 100,
+          spreadBrl: Math.round((brlFromExchange - brlToReceive) * 100) / 100,
+          brlToReceive: Math.round(brlToReceive * 100) / 100,
+        };
+      }
+    }
+
+    return result;
+  }
+}
 
 @ApiTags('Wallet')
 @ApiBearerAuth()

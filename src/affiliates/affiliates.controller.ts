@@ -115,16 +115,9 @@ export class PublicAffiliatesController {
   constructor(private affiliatesService: AffiliatesService) {}
 
   @Get('validate/:code')
-  @ApiOperation({ summary: 'Validar código de afiliado' })
+  @ApiOperation({ summary: 'Validar código de afiliado (disabled — only default 0X affiliate is active)' })
   async validateCode(@Param('code') code: string) {
-    const affiliate = await this.affiliatesService.findByCode(code);
-    if (!affiliate || !affiliate.isActive) {
-      return { valid: false };
-    }
-    return {
-      valid: true,
-      name: affiliate.name,
-      code: affiliate.code,
-    };
+    // All referral codes are disabled except the default 0X
+    return { valid: false, message: 'Referral codes are currently disabled' };
   }
 }
