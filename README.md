@@ -158,7 +158,7 @@ MAIL_PASSWORD="sua-senha-app"
 MAIL_FROM="noreply@otsembank.com"
 
 # Frontend URL (para CORS e redirecionamentos)
-FRONTEND_URL="https://www.otsempay.com"
+FRONTEND_URL="https://otsem-web.fly.dev"
 
 # Porta da aplicação
 PORT=3333

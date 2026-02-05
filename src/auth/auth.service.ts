@@ -275,7 +275,7 @@ export class AuthService {
     });
 
     const frontendBase =
-      process.env.FRONTEND_BASE_URL ?? 'https://otsempay.com';
+      process.env.FRONTEND_BASE_URL ?? 'https://otsem-web.fly.dev';
     const resetUrl = `${frontendBase}/reset?token=${token}`;
 
     await this.mail.sendPasswordReset(user.email, resetUrl);
