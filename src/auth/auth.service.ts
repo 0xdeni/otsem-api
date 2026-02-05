@@ -326,6 +326,127 @@ export class AuthService {
     return { ok: true };
   }
 
+  async getAccountDetails(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        phone: true,
+        profileImage: true,
+        address: true,
+        createdAt: true,
+        updatedAt: true,
+        kycStatus: true,
+        has2FA: true,
+        hasBiometric: true,
+        hasPin: true,
+        preferredCurrency: true,
+        notificationsEnabled: true,
+        role: true,
+        spreadValue: true,
+        passwordChangedAt: true,
+        customers: {
+          select: {
+            id: true,
+            type: true,
+            name: true,
+            email: true,
+            phone: true,
+            cpf: true,
+            cnpj: true,
+            birthday: true,
+            companyName: true,
+            tradingName: true,
+            accountStatus: true,
+            kycLevel: true,
+            mainPixKey: true,
+            createdAt: true,
+            updatedAt: true,
+            address: {
+              select: {
+                street: true,
+                number: true,
+                complement: true,
+                neighborhood: true,
+                city: true,
+                state: true,
+                zipCode: true,
+              },
+            },
+            account: {
+              select: {
+                balance: true,
+                pixKey: true,
+                pixKeyType: true,
+                dailyLimit: true,
+                monthlyLimit: true,
+                status: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('user_not_found');
+    }
+
+    const customer = user.customers?.[0] ?? null;
+
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      phone: user.phone,
+      profileImage: user.profileImage,
+      address: user.address,
+      role: user.role,
+      createdAt: user.createdAt?.getTime() ?? null,
+      updatedAt: user.updatedAt?.getTime() ?? null,
+      kycStatus: user.kycStatus,
+      has2FA: user.has2FA,
+      hasBiometric: user.hasBiometric,
+      hasPin: user.hasPin,
+      preferredCurrency: user.preferredCurrency,
+      notificationsEnabled: user.notificationsEnabled,
+      spreadValue: user.spreadValue ? Number(user.spreadValue) : null,
+      passwordChangedAt: user.passwordChangedAt?.getTime() ?? null,
+      customer: customer
+        ? {
+            id: customer.id,
+            type: customer.type,
+            name: customer.name,
+            email: customer.email,
+            phone: customer.phone,
+            cpf: customer.cpf,
+            cnpj: customer.cnpj,
+            birthday: customer.birthday?.getTime() ?? null,
+            companyName: customer.companyName,
+            tradingName: customer.tradingName,
+            accountStatus: customer.accountStatus,
+            kycLevel: customer.kycLevel,
+            mainPixKey: customer.mainPixKey,
+            createdAt: customer.createdAt?.getTime() ?? null,
+            updatedAt: customer.updatedAt?.getTime() ?? null,
+            address: customer.address ?? null,
+            account: customer.account
+              ? {
+                  balance: Number(customer.account.balance),
+                  pixKey: customer.account.pixKey,
+                  pixKeyType: customer.account.pixKeyType,
+                  dailyLimit: Number(customer.account.dailyLimit),
+                  monthlyLimit: Number(customer.account.monthlyLimit),
+                  status: customer.account.status,
+                }
+              : null,
+          }
+        : null,
+    };
+  }
+
   async logout(refreshToken: string) {
     // Revoga o refreshToken no banco
     await this.prisma.refreshToken.updateMany({

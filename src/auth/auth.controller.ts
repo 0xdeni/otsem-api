@@ -58,17 +58,11 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Get('me')
   @ApiBearerAuth('JWT-auth')
-  @ApiOperation({ summary: 'Obter dados do usuário autenticado' })
-  @ApiResponse({ status: 200, description: 'Dados do usuário' })
+  @ApiOperation({ summary: 'Obter dados completos do usuário autenticado' })
+  @ApiResponse({ status: 200, description: 'Dados completos do usuário' })
   @ApiResponse({ status: 401, description: 'Não autenticado' })
-  me(@Req() req: any) {
-    // req.user vem do JwtStrategy.validate (returns sub, email, role, customerId)
+  async me(@Req() req: any) {
     const u = req.user;
-    return {
-      id: u.sub,
-      email: u.email,
-      role: u.role ?? null,
-      customerId: u.customerId ?? null,
-    };
+    return this.authService.getAccountDetails(u.sub);
   }
 }
