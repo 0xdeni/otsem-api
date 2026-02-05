@@ -118,6 +118,18 @@ export class AdminUsersController {
     return this.service.changePasswordByCustomerId(id, dto.newPassword);
   }
 
+  @Patch(':id/password')
+  @ApiOperation({ summary: 'Redefinir senha do usuário (por customer ID)' })
+  @ApiBody({ type: AdminChangePasswordDto })
+  @ApiResponse({ status: 200, description: 'Senha alterada com sucesso' })
+  @ApiResponse({ status: 404, description: 'Usuário não encontrado' })
+  async resetPassword(
+    @Param('id') id: string,
+    @Body() dto: AdminChangePasswordDto,
+  ) {
+    return this.service.changePasswordByCustomerId(id, dto.newPassword);
+  }
+
   @Post('change-password-by-email')
   @ApiOperation({ summary: 'Alterar senha do usuário (por email)' })
   @ApiBody({ type: AdminChangePasswordByEmailDto })
