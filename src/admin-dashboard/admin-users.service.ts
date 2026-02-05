@@ -1,6 +1,9 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService, EmailTemplate } from '../mail/mail.service';
+
+const SALT_ROUNDS = 10;
 
 interface ListUsersParams {
   page: number;
@@ -242,6 +245,54 @@ export class AdminUsersService {
       messageId: result.messageId,
       sentTo: customer.email,
       template: template || null,
+    };
+  }
+
+  async changePasswordByCustomerId(customerId: string, newPassword: string) {
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { userId: true, email: true, name: true },
+    });
+
+    if (!customer || !customer.userId) {
+      throw new NotFoundException('Cliente não encontrado ou sem usuário vinculado');
+    }
+
+    const hash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+    await this.prisma.user.update({
+      where: { id: customer.userId },
+      data: { password: hash, passwordChangedAt: new Date() },
+    });
+
+    this.logger.log(`Senha alterada pelo admin para ${customer.email} (customer: ${customerId})`);
+    return {
+      success: true,
+      message: 'Senha alterada com sucesso',
+      user: { email: customer.email, name: customer.name },
+    };
+  }
+
+  async changePasswordByEmail(email: string, newPassword: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { email: email.toLowerCase().trim() },
+      select: { id: true, email: true, name: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuário não encontrado com este email');
+    }
+
+    const hash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { password: hash, passwordChangedAt: new Date() },
+    });
+
+    this.logger.log(`Senha alterada pelo admin para ${user.email} (userId: ${user.id})`);
+    return {
+      success: true,
+      message: 'Senha alterada com sucesso',
+      user: { email: user.email, name: user.name },
     };
   }
 
