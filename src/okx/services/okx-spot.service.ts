@@ -49,7 +49,7 @@ export class OkxSpotService {
     });
   }
 
-  private async ensureBalances(customerId: string, currencies: string[]) {
+  private async ensureBalances(customerId: string, currencies: readonly string[]) {
     await this.prisma.$transaction(async (tx) => {
       for (const currency of currencies) {
         await this.upsertBalance(tx, customerId, currency);
@@ -61,7 +61,7 @@ export class OkxSpotService {
     await this.ensureBalances(customerId, SPOT_CURRENCIES);
 
     const balances = await this.prisma.spotBalance.findMany({
-      where: { customerId, currency: { in: SPOT_CURRENCIES } },
+      where: { customerId, currency: { in: [...SPOT_CURRENCIES] } },
       orderBy: { currency: 'asc' },
     });
 
@@ -426,7 +426,8 @@ export class OkxSpotService {
     if (order.ordType !== 'limit') {
       throw new BadRequestException('Apenas ordens limite podem ser canceladas');
     }
-    if (![SpotOrderStatus.OPEN, SpotOrderStatus.PARTIAL].includes(order.status)) {
+    const activeStatuses: SpotOrderStatus[] = [SpotOrderStatus.OPEN, SpotOrderStatus.PARTIAL];
+    if (!activeStatuses.includes(order.status)) {
       throw new BadRequestException('Ordem não está ativa');
     }
     if (!order.okxOrdId) {
