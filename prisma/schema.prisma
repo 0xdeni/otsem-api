@@ -225,6 +225,9 @@ model Customer {
   payments             Payment[]
   deposits             Deposit[]
   wallets              Wallet[]
+  spotBalances         SpotBalance[]
+  spotOrders           SpotOrder[]
+  spotTransfers        SpotTransfer[]
   account              Account?
   conversions          Conversion[]
   kycUpgradeRequests   KycUpgradeRequest[]
@@ -422,6 +425,7 @@ model Wallet {
   customer       Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)
   conversions    Conversion[]
   boletoPayments BoletoPayment[]
+  spotTransfers  SpotTransfer[]
 
   @@unique([customerId, network, externalAddress])
   @@index([customerId])
