@@ -16,7 +16,10 @@ OTSEM API is a Banking as a Service (BaaS) platform built with NestJS and TypeSc
 | ORM              | Prisma 6.19                                     |
 | Database         | PostgreSQL                                      |
 | Auth             | JWT (passport-jwt) with refresh tokens          |
-| Validation       | class-validator + class-transformer             |
+| Password Hashing | bcrypt + argon2                                 |
+| Validation       | class-validator + class-transformer + zod       |
+| Config           | @nestjs/config (ConfigModule, global)           |
+| Scheduling       | @nestjs/schedule (ScheduleModule, cron tasks)   |
 | API Docs         | Swagger UI (`/api/swagger`) + Scalar (`/api/docs`) |
 | Email            | Resend                                          |
 | Crypto           | @solana/web3.js, tronweb, ethers, alchemy-sdk   |
@@ -130,8 +133,8 @@ src/
 └── scripts/                   # Internal utility scripts
 
 prisma/
-├── schema.prisma              # Full database schema (20 models, 17 enums)
-├── migrations/                # 70+ sequential migrations
+├── schema.prisma              # Full database schema (23 models, 19 enums)
+├── migrations/                # 68 sequential migrations
 ├── seed.ts                    # Default admin user creation
 └── erase-customers.ts         # Data cleanup utility
 
@@ -191,6 +194,14 @@ Standard NestJS `HttpException` subclasses thrown from services:
 - `ForbiddenException`, `NotFoundException`
 - No custom global exception filter — relies on NestJS defaults
 - Error messages are often in pt-BR or use snake_case keys (e.g., `'invalid_credentials'`, `'email_already_exists'`)
+
+### CORS
+
+Configured in `main.ts`. `FRONTEND_BASE_URL` supports comma-separated origins:
+```
+FRONTEND_BASE_URL=https://app.example.com,https://admin.example.com
+```
+Falls back to allowing all origins if unset.
 
 ### Logging
 
@@ -304,9 +315,9 @@ GitHub Actions workflow (`.github/workflows/deploy.yml`):
 1. Triggers on push to `main` branch
 2. Uses Node.js 20
 3. Runs `npm ci`, `prisma generate`, `npm run build`
-4. Creates tarball of `dist/`, `package.json`, `prisma/` (schema + migrations)
+4. Creates tarball of `dist/`, `package.json`, `package-lock.json`, `ecosystem.config.js`, `prisma/` (schema + migrations)
 5. SCPs artifact to DigitalOcean droplet
-6. SSHs into server: extracts, installs production deps, runs `prisma migrate deploy`, reloads PM2
+6. SSHs into server: extracts, installs production deps, resolves stuck migrations, runs `prisma migrate deploy`, reloads PM2
 
 ## API Documentation
 
@@ -329,6 +340,8 @@ GitHub Actions workflow (`.github/workflows/deploy.yml`):
 | **KYC Levels** | LEVEL_1/2/3 with increasing monthly transaction limits |
 | **Bank Provider** | Runtime-switchable between Inter and FDBank |
 | **Transaction** | Ledger entry tracking all balance-affecting operations |
+| **Spot Trading** | SpotBalance, SpotOrder, SpotTransfer — OKX spot market operations |
+| **WebhookLog** | Audit log for incoming bank/provider webhooks |
 
 ## Important Notes for AI Assistants
 
