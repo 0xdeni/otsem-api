@@ -272,16 +272,22 @@ export class WalletService {
           saldo += Number(info.tokenAmount.amount);
         }
       }
-      const saldoUsdt = (saldo / 1e6).toString();
+      const onChain = saldo / 1e6;
 
       if (customerId) {
-        await this.prisma.wallet.updateMany({
-          where: { customerId, externalAddress: address },
-          data: { balance: saldoUsdt },
+        const wallet = await this.prisma.wallet.findFirst({
+          where: { customerId, externalAddress: address, network: 'SOLANA' },
         });
+        const reserved = wallet?.reserved ? Number(wallet.reserved) : 0;
+        const available = Math.max(onChain - reserved, 0);
+        await this.prisma.wallet.updateMany({
+          where: { customerId, externalAddress: address, network: 'SOLANA' },
+          data: { balance: available },
+        });
+        return available.toString();
       }
 
-      return saldoUsdt;
+      return onChain.toString();
     } catch (err: any) {
       if (err.message === 'Endereço Solana inválido') throw err;
       console.error('Erro ao consultar saldo USDT:', err);
@@ -292,16 +298,22 @@ export class WalletService {
   async getTronUsdtBalance(address: string, customerId?: string): Promise<string> {
     try {
       const balance = await this.tronService.getUsdtBalance(address);
-      const saldoUsdt = balance.toString();
+      const onChain = Number(balance);
 
       if (customerId) {
+        const wallet = await this.prisma.wallet.findFirst({
+          where: { customerId, externalAddress: address, network: 'TRON' },
+        });
+        const reserved = wallet?.reserved ? Number(wallet.reserved) : 0;
+        const available = Math.max(onChain - reserved, 0);
         await this.prisma.wallet.updateMany({
           where: { customerId, externalAddress: address, network: 'TRON' },
-          data: { balance: saldoUsdt },
+          data: { balance: available },
         });
+        return available.toString();
       }
 
-      return saldoUsdt;
+      return onChain.toString();
     } catch (err: any) {
       this.logger.error(`Erro ao consultar saldo USDT Tron: ${err.message}`);
       return '0';
@@ -318,6 +330,10 @@ export class WalletService {
 
     if (!wallet.encryptedPrivateKey) {
       throw new BadRequestException('Wallet não possui chave privada (não é custodial). Envie diretamente pela carteira externa.');
+    }
+
+    if (Number(wallet.balance) < amount) {
+      throw new BadRequestException('Saldo insuficiente na carteira');
     }
 
     let result: { txId: string; success: boolean };

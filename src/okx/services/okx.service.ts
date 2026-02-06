@@ -35,6 +35,10 @@ export class OkxService {
 
     constructor(private readonly authService: OkxAuthService) { }
 
+    private getApiUrl() {
+        return process.env.OKX_API_URL || 'https://www.okx.com';
+    }
+
     /**
      * Validate OKX API response — OKX returns HTTP 200 even on errors,
      * with the actual error code in response.data.code
@@ -46,6 +50,173 @@ export class OkxService {
             this.logger.error(`[OKX] ${operation} failed: code=${code} msg=${msg} data=${JSON.stringify(response?.data)}`);
             throw new Error(`OKX ${operation}: ${msg} (code: ${code})`);
         }
+    }
+
+    async getSpotInstruments(instIds: string[]) {
+        const apiUrl = this.getApiUrl();
+        const response = await axios.get(`${apiUrl}/api/v5/public/instruments?instType=SPOT`);
+        this.validateOkxResponse(response.data, 'getSpotInstruments');
+        const data = response.data?.data || [];
+        const filtered = instIds.length > 0
+            ? data.filter((item: any) => instIds.includes(item.instId))
+            : data;
+        return {
+            instruments: filtered.map((item: any) => ({
+                instId: item.instId,
+                baseCcy: item.baseCcy,
+                quoteCcy: item.quoteCcy,
+                tickSz: item.tickSz,
+                lotSz: item.lotSz,
+                minSz: item.minSz,
+                maxMktSz: item.maxMktSz,
+                maxLmtSz: item.maxLmtSz,
+                state: item.state,
+            })),
+        };
+    }
+
+    async getSpotTicker(instId: string) {
+        const apiUrl = this.getApiUrl();
+        const response = await axios.get(`${apiUrl}/api/v5/market/ticker?instId=${instId}`);
+        this.validateOkxResponse(response.data, 'getSpotTicker');
+        const ticker = response.data?.data?.[0] || {};
+        const last = parseFloat(ticker.last || '0');
+        const open = parseFloat(ticker.open24h || ticker.sodUtc0 || '0');
+        const changePct = open ? ((last - open) / open) * 100 : 0;
+        return {
+            instId: ticker.instId || instId,
+            last,
+            open24h: open,
+            high24h: parseFloat(ticker.high24h || '0'),
+            low24h: parseFloat(ticker.low24h || '0'),
+            vol24h: parseFloat(ticker.vol24h || '0'),
+            changePct,
+        };
+    }
+
+    async getSpotOrderBook(instId: string, depth: number) {
+        const apiUrl = this.getApiUrl();
+        const response = await axios.get(
+            `${apiUrl}/api/v5/market/books?instId=${instId}&sz=${depth}`
+        );
+        this.validateOkxResponse(response.data, 'getSpotOrderBook');
+        const book = response.data?.data?.[0] || {};
+        const asks = (book.asks || []).map((row: string[]) => ({
+            price: parseFloat(row[0]),
+            size: parseFloat(row[1]),
+        }));
+        const bids = (book.bids || []).map((row: string[]) => ({
+            price: parseFloat(row[0]),
+            size: parseFloat(row[1]),
+        }));
+        return {
+            instId,
+            ts: Number(book.ts || 0),
+            asks,
+            bids,
+        };
+    }
+
+    async getSpotTrades(instId: string, limit: number) {
+        const apiUrl = this.getApiUrl();
+        const response = await axios.get(
+            `${apiUrl}/api/v5/market/trades?instId=${instId}&limit=${limit}`
+        );
+        this.validateOkxResponse(response.data, 'getSpotTrades');
+        const data = response.data?.data || [];
+        return {
+            instId,
+            trades: data.map((trade: any) => ({
+                price: parseFloat(trade.px || '0'),
+                size: parseFloat(trade.sz || '0'),
+                side: trade.side,
+                ts: Number(trade.ts || 0),
+            })),
+        };
+    }
+
+    async getSpotCandles(instId: string, bar: string, limit: number) {
+        const apiUrl = this.getApiUrl();
+        const response = await axios.get(
+            `${apiUrl}/api/v5/market/candles?instId=${instId}&bar=${bar}&limit=${limit}`
+        );
+        this.validateOkxResponse(response.data, 'getSpotCandles');
+        const data = response.data?.data || [];
+        return {
+            instId,
+            bar,
+            candles: data.map((row: string[]) => ({
+                ts: Number(row[0]),
+                open: parseFloat(row[1]),
+                high: parseFloat(row[2]),
+                low: parseFloat(row[3]),
+                close: parseFloat(row[4]),
+                volume: parseFloat(row[5]),
+            })),
+        };
+    }
+
+    async placeSpotOrder(params: {
+        instId: string;
+        side: 'buy' | 'sell';
+        ordType: 'limit' | 'market';
+        sz: string | number;
+        px?: string | number;
+        tgtCcy?: 'base_ccy' | 'quote_ccy';
+    }) {
+        const method = 'POST';
+        const requestPath = '/api/v5/trade/order';
+        const bodyObj: Record<string, any> = {
+            instId: params.instId,
+            tdMode: 'cash',
+            side: params.side,
+            ordType: params.ordType,
+            sz: params.sz.toString(),
+        };
+        if (params.ordType === 'limit') {
+            bodyObj.px = params.px?.toString();
+        }
+        if (params.ordType === 'market' && params.tgtCcy) {
+            bodyObj.tgtCcy = params.tgtCcy;
+        }
+        const body = JSON.stringify(bodyObj);
+        const headers = this.authService.getAuthHeaders(method, requestPath, body);
+        const apiUrl = this.getApiUrl();
+        const response = await axios.post(`${apiUrl}${requestPath}`, bodyObj, { headers });
+        this.validateOkxResponse(response.data, 'placeSpotOrder');
+        return response.data;
+    }
+
+    async getSpotFills(instId: string, ordId: string) {
+        const method = 'GET';
+        const requestPath = `/api/v5/trade/fills?instId=${instId}&ordId=${ordId}`;
+        const headers = this.authService.getAuthHeaders(method, requestPath, '');
+        const apiUrl = this.getApiUrl();
+        const response = await axios.get(`${apiUrl}${requestPath}`, { headers });
+        this.validateOkxResponse(response.data, 'getSpotFills');
+        return response.data?.data || [];
+    }
+
+    async getSpotOrderStatus(instId: string, ordId: string) {
+        const method = 'GET';
+        const requestPath = `/api/v5/trade/order?instId=${instId}&ordId=${ordId}`;
+        const headers = this.authService.getAuthHeaders(method, requestPath, '');
+        const apiUrl = this.getApiUrl();
+        const response = await axios.get(`${apiUrl}${requestPath}`, { headers });
+        this.validateOkxResponse(response.data, 'getSpotOrderStatus');
+        return response.data?.data?.[0] || null;
+    }
+
+    async cancelSpotOrder(instId: string, ordId: string) {
+        const method = 'POST';
+        const requestPath = '/api/v5/trade/cancel-order';
+        const bodyObj = { instId, ordId };
+        const body = JSON.stringify(bodyObj);
+        const headers = this.authService.getAuthHeaders(method, requestPath, body);
+        const apiUrl = this.getApiUrl();
+        const response = await axios.post(`${apiUrl}${requestPath}`, bodyObj, { headers });
+        this.validateOkxResponse(response.data, 'cancelSpotOrder');
+        return response.data;
     }
 
     async getAccountBalance() {

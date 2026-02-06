@@ -1,11 +1,38 @@
-import { Controller, Get, Post, Body, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, BadRequestException, UseGuards, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { OkxService } from './services/okx.service';
+import { OkxSpotService } from './services/okx-spot.service';
+import { SPOT_PAIRS, type SpotPair } from './spot.constants';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import type { AuthRequest } from '../auth/jwt-payload.type';
+
+const SPOT_PAIR_SET = new Set(SPOT_PAIRS);
 
 @ApiTags('OKX')
+@UseGuards(JwtAuthGuard)
 @Controller('okx')
 export class OkxController {
-    constructor(private readonly okxService: OkxService) { }
+    constructor(
+        private readonly okxService: OkxService,
+        private readonly okxSpotService: OkxSpotService,
+    ) { }
+
+    private normalizePairs(instIds?: string): SpotPair[] {
+        if (!instIds) return [...SPOT_PAIRS];
+        const list = instIds
+            .split(',')
+            .map((id) => id.trim())
+            .filter(Boolean) as SpotPair[];
+        if (list.length === 0) return [...SPOT_PAIRS];
+        return list;
+    }
+
+    private assertPairs(instIds: string[]) {
+        const invalid = instIds.filter((id) => !SPOT_PAIR_SET.has(id as SpotPair));
+        if (invalid.length > 0) {
+            throw new BadRequestException(`Par não suportado: ${invalid.join(', ')}`);
+        }
+    }
 
     @Get('balance-brl')
     @ApiOperation({ summary: 'Saldo BRL na OKX' })
@@ -157,5 +184,211 @@ export class OkxController {
     @ApiOperation({ summary: 'Transferir crypto de trading para funding (para saque)' })
     async transferCryptoToFunding(@Body() body: { currency: string; amount: string }) {
         return await this.okxService.transferCryptoToFunding(body.currency, body.amount);
+    }
+
+    @Get('spot/pairs')
+    @ApiOperation({ summary: 'Pares spot suportados para o PRO' })
+    async getSpotPairs() {
+        return { pairs: SPOT_PAIRS };
+    }
+
+    @Get('spot/instruments')
+    @ApiOperation({ summary: 'Instrumentos spot (OKX) para os pares suportados' })
+    @ApiQuery({ name: 'instIds', required: false, type: String, description: 'Lista separada por vírgula' })
+    async getSpotInstruments(@Query('instIds') instIds?: string) {
+        const pairs = this.normalizePairs(instIds);
+        this.assertPairs(pairs);
+        return await this.okxService.getSpotInstruments(pairs);
+    }
+
+    @Get('spot/ticker')
+    @ApiOperation({ summary: 'Ticker spot (último preço, variação, volume)' })
+    @ApiQuery({ name: 'instId', required: true, type: String })
+    async getSpotTicker(@Query('instId') instId: string) {
+        this.assertPairs([instId]);
+        return await this.okxService.getSpotTicker(instId);
+    }
+
+    @Get('spot/orderbook')
+    @ApiOperation({ summary: 'Livro de ofertas (5 níveis por padrão)' })
+    @ApiQuery({ name: 'instId', required: true, type: String })
+    @ApiQuery({ name: 'depth', required: false, type: Number })
+    async getSpotOrderBook(
+        @Query('instId') instId: string,
+        @Query('depth') depth?: string
+    ) {
+        this.assertPairs([instId]);
+        const size = Math.min(Math.max(Number(depth) || 5, 1), 50);
+        return await this.okxService.getSpotOrderBook(instId, size);
+    }
+
+    @Get('spot/trades')
+    @ApiOperation({ summary: 'Últimos negócios (trades) spot' })
+    @ApiQuery({ name: 'instId', required: true, type: String })
+    @ApiQuery({ name: 'limit', required: false, type: Number })
+    async getSpotTrades(
+        @Query('instId') instId: string,
+        @Query('limit') limit?: string
+    ) {
+        this.assertPairs([instId]);
+        const size = Math.min(Math.max(Number(limit) || 20, 1), 100);
+        return await this.okxService.getSpotTrades(instId, size);
+    }
+
+    @Get('spot/candles')
+    @ApiOperation({ summary: 'Candles spot para o gráfico' })
+    @ApiQuery({ name: 'instId', required: true, type: String })
+    @ApiQuery({ name: 'bar', required: false, type: String })
+    @ApiQuery({ name: 'limit', required: false, type: Number })
+    async getSpotCandles(
+        @Query('instId') instId: string,
+        @Query('bar') bar?: string,
+        @Query('limit') limit?: string
+    ) {
+        this.assertPairs([instId]);
+        const size = Math.min(Math.max(Number(limit) || 60, 1), 300);
+        return await this.okxService.getSpotCandles(instId, bar || '1H', size);
+    }
+
+    @Get('spot/balances')
+    @ApiOperation({ summary: 'Saldos spot do usuário' })
+    async getSpotBalances(@Req() req: AuthRequest) {
+        const customerId = req.user?.customerId;
+        if (!customerId) {
+            throw new BadRequestException('Cliente não identificado');
+        }
+        return await this.okxSpotService.getBalances(customerId);
+    }
+
+    @Post('spot/transfer-to-pro')
+    @ApiOperation({ summary: 'Transferir USDT da carteira para PRO' })
+    async transferToPro(
+        @Req() req: AuthRequest,
+        @Body() body: { amount: number; walletId?: string },
+    ) {
+        const customerId = req.user?.customerId;
+        if (!customerId) {
+            throw new BadRequestException('Cliente não identificado');
+        }
+        return await this.okxSpotService.transferToPro(customerId, Number(body.amount), body.walletId);
+    }
+
+    @Post('spot/transfer-to-wallet')
+    @ApiOperation({ summary: 'Transferir USDT do PRO para carteira' })
+    async transferToWallet(
+        @Req() req: AuthRequest,
+        @Body() body: { amount: number; walletId?: string },
+    ) {
+        const customerId = req.user?.customerId;
+        if (!customerId) {
+            throw new BadRequestException('Cliente não identificado');
+        }
+        return await this.okxSpotService.transferToWallet(customerId, Number(body.amount), body.walletId);
+    }
+
+    @Get('spot/transfers')
+    @ApiOperation({ summary: 'Histórico de transferências PRO' })
+    @ApiQuery({ name: 'page', required: false, type: Number })
+    @ApiQuery({ name: 'limit', required: false, type: Number })
+    @ApiQuery({ name: 'direction', required: false, type: String })
+    async getSpotTransfers(
+        @Req() req: AuthRequest,
+        @Query('page') page?: string,
+        @Query('limit') limit?: string,
+        @Query('direction') direction?: string,
+    ) {
+        const customerId = req.user?.customerId;
+        if (!customerId) {
+            throw new BadRequestException('Cliente não identificado');
+        }
+        return await this.okxSpotService.getTransfers({
+            customerId,
+            page: Number(page) || 1,
+            limit: Number(limit) || 20,
+            direction: direction as any,
+        });
+    }
+
+    @Get('spot/orders')
+    @ApiOperation({ summary: 'Histórico de ordens PRO' })
+    @ApiQuery({ name: 'page', required: false, type: Number })
+    @ApiQuery({ name: 'limit', required: false, type: Number })
+    @ApiQuery({ name: 'instId', required: false, type: String })
+    @ApiQuery({ name: 'status', required: false, type: String })
+    async getSpotOrders(
+        @Req() req: AuthRequest,
+        @Query('page') page?: string,
+        @Query('limit') limit?: string,
+        @Query('instId') instId?: string,
+        @Query('status') status?: string,
+    ) {
+        const customerId = req.user?.customerId;
+        if (!customerId) {
+            throw new BadRequestException('Cliente não identificado');
+        }
+        return await this.okxSpotService.getOrders({
+            customerId,
+            page: Number(page) || 1,
+            limit: Number(limit) || 20,
+            instId: instId || undefined,
+            status: status as any,
+        });
+    }
+
+    @Post('spot/cancel-order')
+    @ApiOperation({ summary: 'Cancelar ordem limite' })
+    async cancelSpotOrder(
+        @Req() req: AuthRequest,
+        @Body() body: { orderId: string },
+    ) {
+        const customerId = req.user?.customerId;
+        if (!customerId) {
+            throw new BadRequestException('Cliente não identificado');
+        }
+        if (!body.orderId) {
+            throw new BadRequestException('orderId é obrigatório');
+        }
+        return await this.okxSpotService.cancelOrder(customerId, body.orderId);
+    }
+
+    @Post('spot/order')
+    @ApiOperation({ summary: 'Enviar ordem spot (limit/market)' })
+    async placeSpotOrder(@Req() req: AuthRequest, @Body() body: {
+        instId: string;
+        side: 'buy' | 'sell';
+        ordType: 'limit' | 'market';
+        sz: string | number;
+        px?: string | number;
+        tgtCcy?: 'base_ccy' | 'quote_ccy';
+    }) {
+        const customerId = req.user?.customerId;
+        if (!customerId) {
+            throw new BadRequestException('Cliente não identificado');
+        }
+        this.assertPairs([body.instId]);
+        if (!body.instId || !body.side || !body.ordType || !body.sz) {
+            throw new BadRequestException('Parâmetros inválidos');
+        }
+        const size = Number(body.sz);
+        if (!Number.isFinite(size) || size <= 0) {
+            throw new BadRequestException('Quantidade inválida');
+        }
+        if (body.ordType === 'limit' && !body.px) {
+            throw new BadRequestException('Preço é obrigatório para ordem limite');
+        }
+        if (body.ordType === 'limit') {
+            const price = Number(body.px);
+            if (!Number.isFinite(price) || price <= 0) {
+                throw new BadRequestException('Preço inválido');
+            }
+        }
+        return await this.okxSpotService.placeOrder(customerId, {
+            instId: body.instId,
+            side: body.side,
+            ordType: body.ordType,
+            sz: body.sz,
+            px: body.px,
+            tgtCcy: body.tgtCcy,
+        });
     }
 }

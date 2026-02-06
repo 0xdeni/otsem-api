@@ -85,6 +85,19 @@ enum TransactionStatus {
   CANCELED
 }
 
+enum SpotOrderStatus {
+  OPEN
+  PARTIAL
+  FILLED
+  CANCELED
+  FAILED
+}
+
+enum SpotTransferDirection {
+  TO_PRO
+  TO_WALLET
+}
+
 enum BankProvider {
   INTER
   FDBANK
@@ -212,6 +225,9 @@ model Customer {
   payments             Payment[]
   deposits             Deposit[]
   wallets              Wallet[]
+  spotBalances         SpotBalance[]
+  spotOrders           SpotOrder[]
+  spotTransfers        SpotTransfer[]
   account              Account?
   conversions          Conversion[]
   kycUpgradeRequests   KycUpgradeRequest[]
@@ -395,6 +411,7 @@ model Wallet {
   currency            String        @default("USDT")
   network             WalletNetwork @default(SOLANA)
   balance             Decimal       @db.Decimal(18, 8)
+  reserved            Decimal       @default(0) @db.Decimal(18, 8)
   externalAddress     String?
   encryptedPrivateKey String?
   label               String?
@@ -408,12 +425,67 @@ model Wallet {
   customer       Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)
   conversions    Conversion[]
   boletoPayments BoletoPayment[]
+  spotTransfers  SpotTransfer[]
 
   @@unique([customerId, network, externalAddress])
   @@index([customerId])
   @@index([customerId, network])
   @@index([customerId, currency])
   @@index([customerId, isMain])
+}
+
+model SpotBalance {
+  id         String   @id @default(cuid())
+  customerId String
+  currency   String
+  available  Decimal  @default(0) @db.Decimal(18, 8)
+  locked     Decimal  @default(0) @db.Decimal(18, 8)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([customerId, currency])
+  @@index([customerId])
+}
+
+model SpotOrder {
+  id            String          @id @default(cuid())
+  customerId    String
+  instId        String
+  side          String
+  ordType       String
+  sz            Decimal         @db.Decimal(18, 8)
+  px            Decimal?        @db.Decimal(18, 8)
+  lockedCurrency String
+  lockedAmount  Decimal         @db.Decimal(18, 8)
+  status        SpotOrderStatus @default(OPEN)
+  okxOrdId      String?
+  filledBase    Decimal         @default(0) @db.Decimal(18, 8)
+  filledQuote   Decimal         @default(0) @db.Decimal(18, 8)
+  avgPx         Decimal?        @db.Decimal(18, 8)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, status])
+  @@index([okxOrdId])
+}
+
+model SpotTransfer {
+  id         String               @id @default(cuid())
+  customerId String
+  walletId   String?
+  currency   String
+  amount     Decimal              @db.Decimal(18, 8)
+  direction  SpotTransferDirection
+  createdAt  DateTime             @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  wallet   Wallet?  @relation(fields: [walletId], references: [id], onDelete: SetNull)
+
+  @@index([customerId, createdAt])
 }
 
 // ==================== ACCOUNT & TRANSACTIONS ====================
