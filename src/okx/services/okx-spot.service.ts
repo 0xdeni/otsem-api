@@ -7,6 +7,11 @@ import { OkxService } from './okx.service';
 import { SPOT_CURRENCIES } from '../spot.constants';
 
 const MARKET_BUY_BUFFER = 1.01;
+const PRO_FEE_RATE = (() => {
+  const raw = Number(process.env.PRO_FEE_RATE ?? '0.0098');
+  if (!Number.isFinite(raw) || raw < 0) return 0;
+  return raw;
+})();
 
 @Injectable()
 export class OkxSpotService {
@@ -22,6 +27,15 @@ export class OkxSpotService {
       return new Decimal(0);
     }
     return new Decimal(value.toFixed(8));
+  }
+
+  private feeRateDecimal() {
+    return new Decimal(PRO_FEE_RATE);
+  }
+
+  private feeForQuote(quoteAmount: Decimal) {
+    if (quoteAmount.lte(0)) return new Decimal(0);
+    return quoteAmount.mul(this.feeRateDecimal());
   }
 
   private parseInstId(instId: string) {
@@ -231,7 +245,7 @@ export class OkxSpotService {
       if (!Number.isFinite(price) || price <= 0) {
         throw new BadRequestException('Preço inválido');
       }
-      required = payload.side === 'buy' ? size * price : size;
+      required = payload.side === 'buy' ? size * price * (1 + PRO_FEE_RATE) : size;
     } else {
       if (payload.side === 'buy') {
         const ticker = await this.okxService.getSpotTicker(payload.instId);
@@ -239,7 +253,7 @@ export class OkxSpotService {
         if (!Number.isFinite(price) || price <= 0) {
           throw new BadRequestException('Preço indisponível');
         }
-        required = size * price * MARKET_BUY_BUFFER;
+        required = size * price * MARKET_BUY_BUFFER * (1 + PRO_FEE_RATE);
       } else {
         required = size;
       }
@@ -499,6 +513,7 @@ export class OkxSpotService {
 
     const deltaBase = filledBase.sub(order.filledBase);
     const deltaQuote = filledQuote.sub(order.filledQuote);
+    const deltaFee = this.feeForQuote(deltaQuote);
 
     await this.prisma.$transaction(async (tx) => {
       if (order.side === 'buy') {
@@ -508,10 +523,11 @@ export class OkxSpotService {
             data: { available: { increment: deltaBase } },
           });
         }
-        if (deltaQuote.gt(0)) {
+        const lockedDelta = deltaQuote.add(deltaFee);
+        if (lockedDelta.gt(0)) {
           await tx.spotBalance.update({
             where: { customerId_currency: { customerId: order.customerId, currency: quote } },
-            data: { locked: { decrement: deltaQuote } },
+            data: { locked: { decrement: lockedDelta } },
           });
         }
       } else {
@@ -521,10 +537,11 @@ export class OkxSpotService {
             data: { locked: { decrement: deltaBase } },
           });
         }
-        if (deltaQuote.gt(0)) {
+        const netQuote = deltaQuote.sub(deltaFee);
+        if (netQuote.gt(0)) {
           await tx.spotBalance.update({
             where: { customerId_currency: { customerId: order.customerId, currency: quote } },
-            data: { available: { increment: deltaQuote } },
+            data: { available: { increment: netQuote } },
           });
         }
       }
@@ -562,7 +579,10 @@ export class OkxSpotService {
 
     const { base, quote } = this.parseInstId(order.instId);
     const lockedTotal = new Decimal(order.lockedAmount);
-    const spent = order.side === 'buy' ? new Decimal(order.filledQuote) : new Decimal(order.filledBase);
+    const spent =
+      order.side === 'buy'
+        ? new Decimal(order.filledQuote).mul(this.feeRateDecimal().add(1))
+        : new Decimal(order.filledBase);
     const remaining = lockedTotal.sub(spent);
 
     await this.prisma.$transaction(async (tx) => {
