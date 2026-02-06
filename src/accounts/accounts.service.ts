@@ -1,170 +1,261 @@
 // src/accounts/accounts.service.ts
 
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
-import { PixKeyType } from '@prisma/client';
+import { Prisma, PixKeyType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccountSummary } from './types/account-summary.type';
 import { PaymentSummary } from './types/payment-summary.type';
+import { AdjustBalanceDto, AdjustmentType } from './dto/adjust-balance.dto';
 
 @Injectable()
 export class AccountsService {
-    private readonly logger = new Logger(AccountsService.name);
+  private readonly logger = new Logger(AccountsService.name);
 
-    constructor(private readonly prisma: PrismaService) { }
+  constructor(private readonly prisma: PrismaService) {}
 
-    /**
-     * Criar conta para customer (ao aprovar cadastro)
-     * Versão SEM cadastro automático de chave Pix
-     */
-    async createAccount(customerId: string, pixKey?: string): Promise<any> {
-        this.logger.log(`🏦 Criando conta para customer ${customerId}`);
+  /**
+   * Criar conta para customer (ao aprovar cadastro)
+   * Versão SEM cadastro automático de chave Pix
+   */
+  async createAccount(customerId: string, pixKey?: string): Promise<any> {
+    this.logger.log(`🏦 Criando conta para customer ${customerId}`);
 
-        // Verificar se já existe
-        const existing = await this.prisma.account.findUnique({
-            where: { customerId },
-        });
+    // Verificar se já existe
+    const existing = await this.prisma.account.findUnique({
+      where: { customerId },
+    });
 
-        if (existing) {
-            throw new BadRequestException('Customer já possui conta');
-        }
-
-        try {
-            // Criar conta no banco de dados
-            const account = await this.prisma.account.create({
-                data: {
-                    customerId,
-                    balance: 0,
-                    status: 'active',
-                    pixKey: pixKey || null, // Chave Pix opcional (cadastrada manualmente)
-                    pixKeyType: pixKey ? PixKeyType.RANDOM : null,
-                },
-            });
-
-            this.logger.log(
-                `✅ Conta criada${pixKey ? ` com chave Pix: ${pixKey}` : ' (sem chave Pix)'}`
-            );
-
-            return account;
-        } catch (error) {
-            this.logger.error('❌ Erro ao criar conta:', error);
-            throw error;
-        }
+    if (existing) {
+      throw new BadRequestException('Customer já possui conta');
     }
 
-    /**
-     * Atualizar chave Pix da conta (Admin)
-     */
-    async updatePixKey(
-        customerId: string,
-        pixKey: string,
-        pixKeyType: PixKeyType = PixKeyType.RANDOM,
-    ): Promise<any> {
-        this.logger.log(`🔑 Atualizando chave Pix do customer ${customerId}: ${pixKey}`);
+    try {
+      // Criar conta no banco de dados
+      const account = await this.prisma.account.create({
+        data: {
+          customerId,
+          balance: 0,
+          status: 'active',
+          pixKey: pixKey || null, // Chave Pix opcional (cadastrada manualmente)
+          pixKeyType: pixKey ? PixKeyType.RANDOM : null,
+        },
+      });
 
-        const account = await this.prisma.account.findUnique({
-            where: { customerId },
-        });
+      this.logger.log(
+        `✅ Conta criada${pixKey ? ` com chave Pix: ${pixKey}` : ' (sem chave Pix)'}`,
+      );
 
-        if (!account) {
-            throw new BadRequestException('Conta não encontrada');
-        }
+      return account;
+    } catch (error) {
+      this.logger.error('❌ Erro ao criar conta:', error);
+      throw error;
+    }
+  }
 
-        return this.prisma.account.update({
-            where: { customerId },
-            data: {
-                pixKey,
-                pixKeyType,
-            },
-        });
+  /**
+   * Atualizar chave Pix da conta (Admin)
+   */
+  async updatePixKey(
+    customerId: string,
+    pixKey: string,
+    pixKeyType: PixKeyType = PixKeyType.RANDOM,
+  ): Promise<any> {
+    this.logger.log(
+      `🔑 Atualizando chave Pix do customer ${customerId}: ${pixKey}`,
+    );
+
+    const account = await this.prisma.account.findUnique({
+      where: { customerId },
+    });
+
+    if (!account) {
+      throw new BadRequestException('Conta não encontrada');
     }
 
-    /**
-     * Obter conta por chave Pix (para webhook)
-     */
-    async getAccountByPixKey(pixKey: string): Promise<any> {
-        return this.prisma.account.findUnique({
-            where: { pixKey },
-            include: {
-                customer: {
-                    select: {
-                        id: true,
-                        name: true,
-                        email: true,
-                    },
-                },
-            },
-        });
+    return this.prisma.account.update({
+      where: { customerId },
+      data: {
+        pixKey,
+        pixKeyType,
+      },
+    });
+  }
+
+  /**
+   * Obter conta por chave Pix (para webhook)
+   */
+  async getAccountByPixKey(pixKey: string): Promise<any> {
+    return this.prisma.account.findUnique({
+      where: { pixKey },
+      include: {
+        customer: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    });
+  }
+
+  /**
+   * Obter saldo do customer
+   */
+  async getBalance(customerId: string): Promise<any> {
+    const account = await this.prisma.account.findUnique({
+      where: { customerId },
+    });
+
+    if (!account) {
+      throw new BadRequestException('Conta não encontrada');
     }
 
-    /**
-     * Obter saldo do customer
-     */
-    async getBalance(customerId: string): Promise<any> {
-        const account = await this.prisma.account.findUnique({
-            where: { customerId },
-        });
+    return {
+      customerId: account.customerId,
+      balance: account.balance,
+      blockedAmount: account.blockedAmount,
+      availableBalance:
+        parseFloat(account.balance.toString()) -
+        parseFloat(account.blockedAmount.toString()),
+      pixKey: account.pixKey,
+      status: account.status,
+    };
+  }
 
-        if (!account) {
-            throw new BadRequestException('Conta não encontrada');
-        }
+  /**
+   * Obter resumo da conta e pagamentos do customer
+   */
+  async getAccountSummary(customerId: string): Promise<AccountSummary | null> {
+    const account = await this.prisma.account.findUnique({
+      where: { customerId },
+      select: {
+        id: true,
+        balance: true,
+        status: true,
+        pixKey: true,
+        pixKeyType: true,
+        dailyLimit: true,
+        monthlyLimit: true,
+        blockedAmount: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
 
-        return {
-            customerId: account.customerId,
-            balance: account.balance,
-            blockedAmount: account.blockedAmount,
-            availableBalance: parseFloat(account.balance.toString()) -
-                parseFloat(account.blockedAmount.toString()),
-            pixKey: account.pixKey,
-            status: account.status,
-        };
-    }
+    if (!account) return null;
 
-    /**
-     * Obter resumo da conta e pagamentos do customer
-     */
-    async getAccountSummary(customerId: string): Promise<AccountSummary | null> {
-        const account = await this.prisma.account.findUnique({
-            where: { customerId },
-            select: {
-                id: true,
-                balance: true,
-                status: true,
-                pixKey: true,
-                pixKeyType: true,
-                dailyLimit: true,
-                monthlyLimit: true,
-                blockedAmount: true,
-                createdAt: true,
-                updatedAt: true,
-            },
-        });
+    const payments = await this.prisma.payment.findMany({
+      where: {
+        customerId,
+        status: 'CONFIRMED',
+        paymentValue: { gt: 0 }, // apenas entradas
+      },
+      orderBy: { paymentDate: 'desc' },
+      select: {
+        id: true,
+        paymentValue: true,
+        paymentDate: true,
+        receiverPixKey: true,
+        endToEnd: true,
+        bankPayload: true,
+      },
+    });
 
-        if (!account) return null;
+    return {
+      ...account,
+      balance: parseFloat(account.balance.toString()),
+      dailyLimit: account.dailyLimit
+        ? parseFloat(account.dailyLimit.toString())
+        : 0,
+      monthlyLimit: account.monthlyLimit
+        ? parseFloat(account.monthlyLimit.toString())
+        : 0,
+      blockedAmount: account.blockedAmount
+        ? parseFloat(account.blockedAmount.toString())
+        : 0,
+      payments,
+    };
+  }
 
-        const payments = await this.prisma.payment.findMany({
-            where: {
-                customerId,
-                status: 'CONFIRMED',
-                paymentValue: { gt: 0 }, // apenas entradas
-            },
-            orderBy: { paymentDate: 'desc' },
-            select: {
-                id: true,
-                paymentValue: true,
-                paymentDate: true,
-                receiverPixKey: true,
-                endToEnd: true,
-                bankPayload: true,
-            },
-        });
+  /**
+   * Ajuste manual de saldo por admin (crédito ou débito)
+   */
+  async adjustBalance(
+    customerId: string,
+    dto: AdjustBalanceDto,
+    adminId: string,
+  ) {
+    this.logger.log(
+      `[ADMIN] Ajuste de saldo: ${dto.type} R$ ${dto.amount} para customer ${customerId} por admin ${adminId}`,
+    );
 
-        return {
-            ...account,
-            balance: parseFloat(account.balance.toString()),
-            dailyLimit: account.dailyLimit ? parseFloat(account.dailyLimit.toString()) : 0,
-            monthlyLimit: account.monthlyLimit ? parseFloat(account.monthlyLimit.toString()) : 0,
-            blockedAmount: account.blockedAmount ? parseFloat(account.blockedAmount.toString()) : 0,
-            payments,
-        };
-    }
+    return await this.prisma.$transaction(async (tx) => {
+      const account = await tx.account.findUnique({
+        where: { customerId },
+      });
+
+      if (!account) {
+        throw new BadRequestException('Conta não encontrada');
+      }
+
+      if (account.status !== 'active') {
+        throw new BadRequestException('Conta inativa');
+      }
+
+      const isCredit = dto.type === AdjustmentType.CREDIT;
+      const balanceBefore = account.balance;
+      const balanceAfter = isCredit
+        ? new Prisma.Decimal(balanceBefore).add(dto.amount)
+        : new Prisma.Decimal(balanceBefore).sub(dto.amount);
+
+      if (balanceAfter.lessThan(0)) {
+        throw new BadRequestException(
+          `Saldo insuficiente para débito. Saldo atual: R$ ${balanceBefore.toString()}`,
+        );
+      }
+
+      const transaction = await tx.transaction.create({
+        data: {
+          accountId: account.id,
+          type: isCredit ? 'DEPOSIT' : 'WITHDRAW',
+          subType: 'ADMIN_ADJUSTMENT',
+          amount: dto.amount,
+          balanceBefore,
+          balanceAfter,
+          status: 'COMPLETED',
+          description: dto.reason,
+          metadata: {
+            adminId,
+            adjustmentType: dto.type,
+          },
+          completedAt: new Date(),
+        },
+      });
+
+      await tx.account.update({
+        where: { id: account.id },
+        data: { balance: balanceAfter },
+      });
+
+      this.logger.log(
+        `[ADMIN] Ajuste concluído: R$ ${balanceBefore.toString()} → R$ ${balanceAfter.toString()} (${dto.type} R$ ${dto.amount})`,
+      );
+
+      return {
+        transaction: {
+          id: transaction.id,
+          type: transaction.type,
+          subType: transaction.subType,
+          amount: Number(transaction.amount),
+          balanceBefore: Number(transaction.balanceBefore),
+          balanceAfter: Number(transaction.balanceAfter),
+          description: transaction.description,
+          status: transaction.status,
+          completedAt: transaction.completedAt,
+        },
+        newBalance: Number(balanceAfter),
+      };
+    });
+  }
 }
