@@ -136,6 +136,61 @@ export class SolanaService implements OnModuleInit {
     }
   }
 
+  async sendUsdt(toAddress: string, amount: number): Promise<{ txId: string; success: boolean }> {
+    if (!this.hotWallet) {
+      throw new Error('Hot wallet Solana não configurada');
+    }
+
+    try {
+      const recipient = new PublicKey(toAddress);
+      const amountInMicroUnits = Math.floor(amount * 1_000_000);
+
+      const senderAta = await splToken.getAssociatedTokenAddress(USDT_MINT, this.hotWallet.publicKey);
+      const recipientAta = await splToken.getAssociatedTokenAddress(USDT_MINT, recipient);
+
+      const transaction = new Transaction();
+
+      // Create recipient ATA if it doesn't exist
+      try {
+        await splToken.getAccount(this.connection, recipientAta);
+      } catch {
+        transaction.add(
+          splToken.createAssociatedTokenAccountInstruction(
+            this.hotWallet.publicKey,
+            recipientAta,
+            recipient,
+            USDT_MINT,
+          )
+        );
+      }
+
+      transaction.add(
+        splToken.createTransferInstruction(
+          senderAta,
+          recipientAta,
+          this.hotWallet.publicKey,
+          amountInMicroUnits,
+        )
+      );
+
+      const signature = await sendAndConfirmTransaction(
+        this.connection,
+        transaction,
+        [this.hotWallet]
+      );
+
+      this.logger.log(`USDT enviado: ${amount} para ${toAddress}, tx: ${signature}`);
+
+      return {
+        txId: signature,
+        success: true,
+      };
+    } catch (error: any) {
+      this.logger.error(`Erro ao enviar USDT: ${error.message}`);
+      throw error;
+    }
+  }
+
   async isValidAddress(address: string): Promise<boolean> {
     try {
       new PublicKey(address);

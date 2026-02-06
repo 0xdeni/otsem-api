@@ -66,17 +66,21 @@ describe('WalletService', () => {
     createWallet: jest.fn(),
     getUsdtBalance: jest.fn(),
     isValidAddress: jest.fn(),
+    sendUsdt: jest.fn(),
     sendUsdtWithKey: jest.fn(),
     getTrxBalance: jest.fn(),
     sendTrx: jest.fn(),
+    getHotWalletAddress: jest.fn().mockReturnValue('TRON_HOT_WALLET_ADDR'),
   };
 
   const mockSolanaService = {
     isValidAddress: jest.fn(),
     getSolBalance: jest.fn(),
     sendSol: jest.fn(),
+    sendUsdt: jest.fn(),
     getAssociatedTokenAddress: jest.fn(),
     checkAtaExists: jest.fn(),
+    getHotWalletAddress: jest.fn().mockReturnValue('SOLANA_HOT_WALLET_ADDR'),
   };
 
   const mockAffiliatesService = {
@@ -462,7 +466,7 @@ describe('WalletService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should throw BadRequestException when wallet is not OKX whitelisted', async () => {
+    it('should proceed with wallet even if okxWhitelisted is false (hot wallet forwarding)', async () => {
       mockPrisma.account.findFirst.mockResolvedValue({
         id: 'acc-1',
         balance: 1000,
@@ -483,11 +487,25 @@ describe('WalletService', () => {
         network: 'SOLANA',
         okxWhitelisted: false,
       });
+      mockPrisma.conversion.create.mockResolvedValue({ id: 'conv-1' });
+      mockPrisma.conversion.update.mockResolvedValue({});
+      mockBankingGateway.sendPix.mockResolvedValue({ endToEndId: 'e2e-1' });
+      mockOkxService.buyAndCheckHistory.mockResolvedValue({
+        orderId: 'ord-1',
+        detalhes: [{ fillSz: '18' }],
+      });
+      mockOkxService.transferFromTradingToFunding.mockResolvedValue({});
+      mockOkxService.withdrawUsdtSimple.mockResolvedValue({});
+      mockSolanaService.sendUsdt.mockResolvedValue({ txId: 'tx-hot-wallet', success: true });
+      mockPrisma.transaction.create.mockResolvedValue({});
+      mockPrisma.payment.findUnique.mockResolvedValue(null);
+      mockPrisma.transaction.findFirst.mockResolvedValue(null);
 
-      await expect(
-        service.buyUsdtWithBrl('cust-1', 100),
-      ).rejects.toThrow(BadRequestException);
-    });
+      const result = await service.buyUsdtWithBrl('cust-1', 100);
+
+      expect(result.status).toBe('COMPLETED');
+      expect(mockSolanaService.sendUsdt).toHaveBeenCalledWith('addr', expect.any(Number));
+    }, 15000);
   });
 
   describe('sellUsdtForBrl', () => {

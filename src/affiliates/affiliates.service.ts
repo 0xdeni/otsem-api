@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ConflictException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TronService } from '../tron/tron.service';
+import { SolanaService } from '../solana/solana.service';
 import { OkxService } from '../okx/services/okx.service';
 
 const DEFAULT_COMMISSION_RATE = 0.03; // 3% of OTSEM's spread (default for new affiliates)
@@ -14,6 +15,7 @@ export class AffiliatesService {
   constructor(
     private prisma: PrismaService,
     private tronService: TronService,
+    private solanaService: SolanaService,
     private okxService: OkxService,
   ) {}
 
@@ -351,16 +353,9 @@ export class AffiliatesService {
         const result = await this.tronService.sendUsdt(affiliate.payoutWalletAddress, amountToSend);
         txId = result.txId;
       } else if (affiliate.payoutWalletNetwork === 'SOLANA') {
-        // Use OKX withdrawal for Solana
-        const fee = '1'; // Solana USDT withdrawal fee
-        await this.okxService.transferFromTradingToFunding('USDT', amountToSend.toString());
-        const result = await this.okxService.withdrawUsdtSimple(
-          amountToSend.toFixed(6),
-          affiliate.payoutWalletAddress,
-          'Solana',
-          fee,
-        );
-        txId = result?.wdId || 'okx-withdrawal';
+        // Send from Solana hot wallet
+        const result = await this.solanaService.sendUsdt(affiliate.payoutWalletAddress, amountToSend);
+        txId = result.txId;
       } else {
         return {
           settled: false,

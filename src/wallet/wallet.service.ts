@@ -499,11 +499,11 @@ export class WalletService {
       });
     } else {
       wallet = await this.prisma.wallet.findFirst({
-        where: { customerId, currency: 'USDT', isMain: true, okxWhitelisted: true },
+        where: { customerId, currency: 'USDT', isMain: true },
       });
       if (!wallet) {
         wallet = await this.prisma.wallet.findFirst({
-          where: { customerId, currency: 'USDT', okxWhitelisted: true },
+          where: { customerId, currency: 'USDT' },
         });
       }
     }
@@ -551,7 +551,7 @@ export class WalletService {
         whitelisted: wallet.okxWhitelisted,
       } : null,
       balanceBrl: balance,
-      canProceed: balance >= brlAmount && brlAmount >= 10 && usdtNet > 0 && wallet?.okxWhitelisted,
+      canProceed: balance >= brlAmount && brlAmount >= 10 && usdtNet > 0 && !!wallet,
       minBrlRecommended: minBrl,
       message: usdtNet <= 0
         ? `Valor mínimo: R$ ${minBrl}`
@@ -608,9 +608,7 @@ export class WalletService {
       throw new BadRequestException('Carteira (Solana ou Tron) não encontrada para o cliente');
     }
 
-    if (!wallet.okxWhitelisted) {
-      throw new BadRequestException('Carteira não está na whitelist da OKX. Adicione o endereço na OKX e marque como whitelistada antes de converter.');
-    }
+    // Hot wallet forwarding: no OKX whitelist needed for customer wallets
 
     // Criar Conversion com status PENDING para tracking em tempo real
     const conversion = await this.prisma.conversion.create({
@@ -770,20 +768,35 @@ export class WalletService {
         throw new Error(`USDT comprado (${usdtAmount}) insuficiente para cobrir taxa de rede (${networkFee})`);
       }
 
-      // 4a) Transferir da conta trading para funding (valor exato comprado)
+      // 4a) Send USDT from platform hot wallet to customer
+      this.logger.log(`[HOT WALLET] Enviando ${usdtToWithdraw.toFixed(6)} USDT para: ${wallet.externalAddress} via ${wallet.network}`);
+
+      if (isTron) {
+        withdrawResult = await this.tronService.sendUsdt(wallet.externalAddress, usdtToWithdraw);
+      } else {
+        withdrawResult = await this.solanaService.sendUsdt(wallet.externalAddress, usdtToWithdraw);
+      }
+
+      // 4b) Transfer USDT from trading to funding on OKX
       this.logger.log(`[OKX] Transferindo ${usdtAmount.toFixed(2)} USDT de trading para funding`);
       await this.okxService.transferFromTradingToFunding('USDT', usdtAmount.toFixed(2));
 
-      // 4b) OKX → Cliente (USDT menos taxa de rede)
-      const network = isTron ? 'TRC20' : 'Solana';
-      this.logger.log(`[${network}] Sacando ${usdtToWithdraw.toFixed(2)} USDT para: ${wallet.externalAddress} (taxa ${networkFee} paga pelo comprador)`);
+      // 4c) Replenish hot wallet from OKX (non-blocking)
+      const hotWalletAddress = isTron
+        ? this.tronService.getHotWalletAddress()
+        : this.solanaService.getHotWalletAddress();
+      const okxChain = isTron ? 'TRC20' : 'Solana';
 
-      withdrawResult = await this.okxService.withdrawUsdtSimple(
+      this.okxService.withdrawUsdtSimple(
         usdtToWithdraw.toFixed(2),
-        wallet.externalAddress,
-        network,
+        hotWalletAddress,
+        okxChain,
         networkFee.toString(),
-      );
+      ).then(() => {
+        this.logger.log(`[OKX] Hot wallet replenishment initiated: ${usdtToWithdraw.toFixed(2)} USDT to ${hotWalletAddress}`);
+      }).catch(err => {
+        this.logger.error(`[OKX] Failed to replenish hot wallet: ${err.message}`);
+      });
 
       // 5) Registrar comissão do afiliado (10% do spread da OTSEM)
       let affiliateCommission = null;
@@ -828,7 +841,7 @@ export class WalletService {
         data: {
           transactionId: conversionTx?.id,
           usdtWithdrawn: usdtToWithdraw,
-          okxWithdrawId: withdrawResult?.wdId || null,
+          okxWithdrawId: withdrawResult?.txId || null,
           affiliateCommission: affiliateCommissionBrl,
           okxWithdrawFee: okxWithdrawFeeUsdt,
           okxTradingFee,
