@@ -79,16 +79,20 @@ export class StatementsService {
     return this.normalizeBalance(raw as BalanceLike);
   }
 
-  // Mova aqui a chamada real ao provedor (BRX/Inter/DB). Mantém stub seguro se ainda não tiver.
   private async getBalanceInternal(accountHolderId: string): Promise<BalanceLike> {
-    // ...existing code que você já tinha para buscar o saldo externo...
+    const account = await this.resolveAccountByAccountHolderId(accountHolderId);
+    const balance = Number(account.balance);
+    const blocked = Number(account.blockedAmount);
+
     return {
-      accountId: accountHolderId,
-      availableBalance: 0,
-      blockedAmount: 0,
-      status: 'inactive',
-      pixKey: null,
-      updatedAt: new Date().toISOString(),
+      accountId: account.id,
+      balance,
+      availableBalance: balance - blocked,
+      blockedAmount: blocked,
+      blockedBalance: blocked,
+      status: account.status,
+      pixKey: account.pixKey ?? null,
+      updatedAt: account.updatedAt.toISOString(),
     };
   }
 
