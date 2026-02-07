@@ -1672,8 +1672,8 @@ export class WalletService {
     usdtAmount: number,
     network: 'SOLANA' | 'TRON',
   ) {
-    if (usdtAmount < 10) {
-      throw new BadRequestException('Quantidade mínima é 10 USDT');
+    if (usdtAmount < 5) {
+      throw new BadRequestException('Quantidade mínima é 5 USDT');
     }
 
     const wallet = await this.prisma.wallet.findFirst({
@@ -1721,20 +1721,52 @@ export class WalletService {
     }
 
     // Get OKX deposit address
-    const depositAddress = await this.getUsdtDepositAddress(network);
+    let depositAddress: { address: string };
+    try {
+      depositAddress = await this.getUsdtDepositAddress(network);
+    } catch (error: any) {
+      throw new BadRequestException(`Endereço de depósito ${network} não configurado`);
+    }
+
     const quote = await this.quoteSellUsdt(customerId, usdtAmount, network);
+
+    // Ensure wallet has enough gas for the transaction
+    try {
+      if (network === 'SOLANA') {
+        const solBalance = await this.solanaService.getSolBalance(wallet.externalAddress);
+        if (solBalance < SOL_FEE_FOR_USDT_TRANSFER) {
+          this.logger.log(`[SELL-CUSTODIAL] Enviando ${SOL_FEE_FOR_USDT_TRANSFER} SOL para ${wallet.externalAddress}`);
+          await this.solanaService.sendSol(wallet.externalAddress, SOL_FEE_FOR_USDT_TRANSFER);
+        }
+      } else {
+        const trxBalance = await this.tronService.getTrxBalance(wallet.externalAddress);
+        if (trxBalance < TRX_FEE_FOR_USDT_TRANSFER) {
+          this.logger.log(`[SELL-CUSTODIAL] Enviando ${TRX_FEE_FOR_USDT_TRANSFER} TRX para ${wallet.externalAddress}`);
+          await this.tronService.sendTrx(wallet.externalAddress, TRX_FEE_FOR_USDT_TRANSFER);
+        }
+      }
+    } catch (error: any) {
+      this.logger.error(`[SELL-CUSTODIAL] Erro ao enviar taxa de rede: ${error.message}`);
+      throw new BadRequestException(`Falha ao enviar taxa de rede: ${error.message}`);
+    }
 
     // Send USDT from custodial wallet to OKX deposit address using stored private key
     let sendResult: { txId: string; success: boolean };
 
-    if (network === 'SOLANA') {
-      sendResult = await this.sendSolanaUsdt(walletId, customerId, depositAddress.address, usdtAmount);
-    } else {
-      sendResult = await this.sendTronUsdt(walletId, customerId, depositAddress.address, usdtAmount);
+    try {
+      if (network === 'SOLANA') {
+        sendResult = await this.sendSolanaUsdt(walletId, customerId, depositAddress.address, usdtAmount);
+      } else {
+        sendResult = await this.sendTronUsdt(walletId, customerId, depositAddress.address, usdtAmount);
+      }
+    } catch (error: any) {
+      this.logger.error(`[SELL-CUSTODIAL] Erro ao enviar USDT: ${error.message}`);
+      const msg = error?.response?.message || error?.message || 'Erro ao enviar USDT';
+      throw new BadRequestException(msg);
     }
 
     // Sync balance after send
-    await this.syncWalletBalance(walletId, customerId);
+    await this.syncWalletBalance(walletId, customerId).catch(() => {});
 
     // Create conversion record with txHash
     const conversion = await this.prisma.conversion.create({
