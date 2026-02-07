@@ -174,17 +174,6 @@ export class InterWebhookController {
             }
             this.logger.log('✅ Assinatura validada');
 
-            const isValid = await this.service.validateWebhookSignature(
-                req.body,
-                signature,
-            );
-
-            if (!isValid) {
-                this.logger.error('❌ Assinatura inválida!');
-                throw new BadRequestException('Assinatura inválida');
-            }
-            this.logger.log('✅ Assinatura validada');
-
             // ✅ Processar webhook
             await this.service.handlePixReceived(req.body, String(ipAddress), String(userAgent));
 
