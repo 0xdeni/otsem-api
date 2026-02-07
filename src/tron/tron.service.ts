@@ -9,9 +9,19 @@ export class TronService implements OnModuleInit {
     private tronWeb: any;
     private hotWalletAddress: string;
     private initialized = false;
+    private tronGridApiKey: string | undefined;
 
     constructor(private configService: ConfigService) {
         this.hotWalletAddress = '';
+        this.tronGridApiKey = this.configService.get<string>('TRONGRID_API_KEY');
+    }
+
+    private getTronGridHeaders(): Record<string, string> {
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (this.tronGridApiKey) {
+            headers['TRON-PRO-API-KEY'] = this.tronGridApiKey;
+        }
+        return headers;
     }
 
     async onModuleInit() {
@@ -26,12 +36,17 @@ export class TronService implements OnModuleInit {
 
         const privateKey = this.configService.get<string>('TRON_HOT_WALLET_PRIVATE_KEY');
 
+        const tronWebOptions: any = {
+            fullHost: 'https://api.trongrid.io',
+        };
+        if (this.tronGridApiKey) {
+            tronWebOptions.headers = { 'TRON-PRO-API-KEY': this.tronGridApiKey };
+        }
+
         if (privateKey) {
-            this.tronWeb = new TronWebClass({
-                fullHost: 'https://api.trongrid.io',
-                privateKey: privateKey
-            });
-            
+            tronWebOptions.privateKey = privateKey;
+            this.tronWeb = new TronWebClass(tronWebOptions);
+
             try {
                 this.hotWalletAddress = this.tronWeb.address.fromPrivateKey(privateKey);
                 this.logger.log(`✅ TronWeb inicializado com hot wallet: ${this.hotWalletAddress}`);
@@ -40,9 +55,7 @@ export class TronService implements OnModuleInit {
                 this.logger.log(`✅ TronWeb inicializado com hot wallet: ${this.hotWalletAddress}`);
             }
         } else {
-            this.tronWeb = new TronWebClass({
-                fullHost: 'https://api.trongrid.io'
-            });
+            this.tronWeb = new TronWebClass(tronWebOptions);
             this.logger.warn('⚠️ TronWeb sem private key - apenas leitura');
         }
 
@@ -122,7 +135,7 @@ export class TronService implements OnModuleInit {
             
             const response = await fetch('https://api.trongrid.io/wallet/triggerconstantcontract', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: this.getTronGridHeaders(),
                 body: JSON.stringify({
                     contract_address: USDT_TRC20_CONTRACT,
                     function_selector: 'balanceOf(address)',
@@ -269,10 +282,14 @@ export class TronService implements OnModuleInit {
         try {
             const TronWebModule = require('tronweb');
             const TronWebClass = TronWebModule.TronWeb || TronWebModule.default || TronWebModule;
-            const tronWebWithKey = new TronWebClass({
+            const tronWebKeyOptions: any = {
                 fullHost: 'https://api.trongrid.io',
                 privateKey: privateKey,
-            });
+            };
+            if (this.tronGridApiKey) {
+                tronWebKeyOptions.headers = { 'TRON-PRO-API-KEY': this.tronGridApiKey };
+            }
+            const tronWebWithKey = new TronWebClass(tronWebKeyOptions);
 
             const contract = await tronWebWithKey.contract().at(USDT_TRC20_CONTRACT);
             const amountInSun = Math.floor(amount * 1_000_000);
