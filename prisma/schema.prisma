@@ -131,6 +131,7 @@ model User {
   updatedAt            DateTime  @default(now()) @updatedAt
   kycStatus            String?
   has2FA               Boolean   @default(false)
+  twoFactorSecret      String?
   hasBiometric         Boolean   @default(false)
   hasPin               Boolean   @default(false)
   preferredCurrency    String?   @default("USD")

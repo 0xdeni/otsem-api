@@ -8,6 +8,8 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
+import { generateSecret, generateURI, verifySync } from 'otplib';
+import * as QRCode from 'qrcode';
 import { PrismaService } from '../prisma/prisma.service';
 import { Role, CustomerType, KycLevel } from '@prisma/client';
 import { MailService } from '../mail/mail.service';
@@ -29,7 +31,17 @@ export class AuthService {
   ) { }
 
   async validateUser(email: string, password: string) {
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        email: true,
+        password: true,
+        role: true,
+        has2FA: true,
+        twoFactorSecret: true,
+      },
+    });
     if (!user) throw new UnauthorizedException('invalid_credentials');
     if (!user.password) throw new UnauthorizedException('invalid_credentials');
     const ok = await bcrypt.compare(password, user.password);
@@ -47,8 +59,29 @@ export class AuthService {
     };
   }
 
-  async login(email: string, password: string) {
+  async login(email: string, password: string, twoFactorCode?: string) {
     const user = await this.validateUser(email, password);
+
+    // Se o usuário tem 2FA habilitado, verificar código
+    if (user.has2FA && user.twoFactorSecret) {
+      if (!twoFactorCode) {
+        // Retorna indicação de que 2FA é necessário
+        return {
+          success: true,
+          data: {
+            requires2FA: true,
+            message: 'Código 2FA necessário',
+          },
+        };
+      }
+
+      const result = verifySync({ token: twoFactorCode, secret: user.twoFactorSecret });
+      const isValid = result.valid;
+
+      if (!isValid) {
+        throw new UnauthorizedException('invalid_2fa_code');
+      }
+    }
 
     // Gera accessToken (curto prazo)
     const payload: JwtPayload = {
@@ -458,6 +491,91 @@ export class AuthService {
     return {
       success: true,
       data: { message: 'Logged out successfully' },
+    };
+  }
+
+  // ==================== 2FA ====================
+
+  async setup2FA(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException('user_not_found');
+    if (user.has2FA) throw new BadRequestException('2fa_already_enabled');
+
+    const secret = generateSecret();
+    const issuer = 'OTSEM';
+    const otpAuthUrl = generateURI({
+      label: user.email,
+      issuer,
+      secret,
+      algorithm: 'sha1',
+      digits: 6,
+      period: 30,
+    });
+
+    // Salva o segredo temporariamente (será confirmado no verify)
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { twoFactorSecret: secret },
+    });
+
+    const qrCodeDataUrl = await QRCode.toDataURL(otpAuthUrl);
+
+    return {
+      success: true,
+      data: {
+        secret,
+        qrCode: qrCodeDataUrl,
+        otpAuthUrl,
+      },
+    };
+  }
+
+  async verify2FA(userId: string, code: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException('user_not_found');
+    if (!user.twoFactorSecret) throw new BadRequestException('2fa_not_setup');
+
+    const result = verifySync({ token: code, secret: user.twoFactorSecret });
+    const isValid = result.valid;
+
+    if (!isValid) {
+      throw new BadRequestException('invalid_2fa_code');
+    }
+
+    // Ativa 2FA
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { has2FA: true },
+    });
+
+    return {
+      success: true,
+      data: { message: '2FA ativado com sucesso' },
+    };
+  }
+
+  async disable2FA(userId: string, code: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException('user_not_found');
+    if (!user.has2FA || !user.twoFactorSecret) {
+      throw new BadRequestException('2fa_not_enabled');
+    }
+
+    const result = verifySync({ token: code, secret: user.twoFactorSecret });
+    const isValid = result.valid;
+
+    if (!isValid) {
+      throw new BadRequestException('invalid_2fa_code');
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { has2FA: false, twoFactorSecret: null },
+    });
+
+    return {
+      success: true,
+      data: { message: '2FA desativado com sucesso' },
     };
   }
 

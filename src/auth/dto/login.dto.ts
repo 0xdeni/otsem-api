@@ -1,6 +1,6 @@
 // src/auth/dto/login.dto.ts
-import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsString, MinLength } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsEmail, IsOptional, IsString, Length, MinLength } from 'class-validator';
 
 export class LoginDto {
     @ApiProperty({
@@ -18,4 +18,13 @@ export class LoginDto {
     @IsString()
     @MinLength(8)
     password!: string;
+
+    @ApiPropertyOptional({
+        description: 'Código TOTP de 6 dígitos (obrigatório se 2FA estiver ativo)',
+        example: '123456',
+    })
+    @IsOptional()
+    @IsString()
+    @Length(6, 6)
+    twoFactorCode?: string;
 }

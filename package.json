@@ -51,8 +51,10 @@
     "class-validator": "^0.14.2",
     "ethers": "^6.15.0",
     "nanoid": "^5.1.6",
+    "otplib": "^13.2.1",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
+    "qrcode": "^1.5.4",
     "reflect-metadata": "^0.2.2",
     "resend": "^6.3.0",
     "rxjs": "^7.8.1",
@@ -74,6 +76,7 @@
     "@types/jest": "^30.0.0",
     "@types/multer": "^2.0.0",
     "@types/node": "^22.10.7",
+    "@types/qrcode": "^1.5.6",
     "@types/supertest": "^6.0.2",
     "@types/swagger-ui-express": "^4.1.8",
     "@types/uuid": "^10.0.0",
@@ -113,6 +116,9 @@
       "**/*.(t|j)s"
     ],
     "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "transformIgnorePatterns": [
+      "node_modules/(?!(@otplib|otplib|@scure|@noble)/)"
+    ]
   }
 }
