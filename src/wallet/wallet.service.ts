@@ -1750,6 +1750,9 @@ export class WalletService {
       throw new BadRequestException(`Falha ao enviar taxa de rede: ${error.message}`);
     }
 
+    // Wait for gas transaction to confirm before sending USDT
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+
     // Send USDT from custodial wallet to OKX deposit address using stored private key
     let sendResult: { txId: string; success: boolean };
 
