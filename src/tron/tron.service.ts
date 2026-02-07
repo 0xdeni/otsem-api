@@ -267,8 +267,9 @@ export class TronService implements OnModuleInit {
         }
 
         try {
-            const TronWeb = require('tronweb');
-            const tronWebWithKey = new TronWeb({
+            const TronWebModule = require('tronweb');
+            const TronWebClass = TronWebModule.TronWeb || TronWebModule.default || TronWebModule;
+            const tronWebWithKey = new TronWebClass({
                 fullHost: 'https://api.trongrid.io',
                 privateKey: privateKey,
             });
