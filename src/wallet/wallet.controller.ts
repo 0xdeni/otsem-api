@@ -362,6 +362,24 @@ export class WalletController {
     return this.walletService.processSellConversion(conversionId);
   }
 
+  @Post('sell-usdt-custodial')
+  @ApiOperation({ summary: 'Vender USDT de wallet custodial (sem necessidade de chave privada)' })
+  async sellUsdtCustodial(
+    @Req() req: AuthRequest,
+    @Body('walletId') walletId: string,
+    @Body('usdtAmount') usdtAmount: number,
+    @Body('network') network: 'SOLANA' | 'TRON',
+  ) {
+    const customerId = this.getCustomerId(req);
+    if (!walletId || !usdtAmount || !network) {
+      throw new BadRequestException('walletId, usdtAmount e network são obrigatórios');
+    }
+    if (usdtAmount <= 0) {
+      throw new BadRequestException('O valor deve ser maior que zero');
+    }
+    return this.walletService.sellUsdtCustodial(customerId, walletId, usdtAmount, network);
+  }
+
   @Post('submit-signed-sell')
   @ApiOperation({ summary: 'Submeter venda após transação assinada no frontend' })
   async submitSignedSell(
