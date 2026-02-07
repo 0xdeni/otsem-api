@@ -13,6 +13,7 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from '../users/dto/register.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { TwoFactorCodeDto } from './dto/two-factor.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { MeDto } from './dto/me.dto';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -31,7 +32,7 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Credenciais inválidas' })
   @ApiResponse({ status: 429, description: 'Muitas tentativas. Tente novamente mais tarde.' })
   async login(@Body() body: LoginDto) {
-    return this.authService.login(body.email, body.password);
+    return this.authService.login(body.email, body.password, body.twoFactorCode);
   }
 
   @Post('register')
@@ -78,6 +79,38 @@ export class AuthController {
   async me(@Req() req: any) {
     const u = req.user;
     return this.authService.getAccountDetails(u.sub);
+  }
+
+  @Post('2fa/setup')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Gerar segredo 2FA e QR Code' })
+  @ApiResponse({ status: 200, description: 'QR Code e segredo gerados' })
+  @ApiResponse({ status: 400, description: '2FA já está ativado' })
+  async setup2FA(@Req() req: any) {
+    return this.authService.setup2FA(req.user.sub);
+  }
+
+  @Post('2fa/verify')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verificar código e ativar 2FA' })
+  @ApiResponse({ status: 200, description: '2FA ativado com sucesso' })
+  @ApiResponse({ status: 400, description: 'Código inválido' })
+  async verify2FA(@Req() req: any, @Body() body: TwoFactorCodeDto) {
+    return this.authService.verify2FA(req.user.sub, body.code);
+  }
+
+  @Post('2fa/disable')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Desativar 2FA' })
+  @ApiResponse({ status: 200, description: '2FA desativado com sucesso' })
+  @ApiResponse({ status: 400, description: 'Código inválido ou 2FA não está ativo' })
+  async disable2FA(@Req() req: any, @Body() body: TwoFactorCodeDto) {
+    return this.authService.disable2FA(req.user.sub, body.code);
   }
 
   @Post('logout')
