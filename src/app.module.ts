@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
@@ -31,6 +32,10 @@ import { BoletoPaymentsModule } from './boleto-payments/boleto-payments.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ThrottlerModule.forRoot([{
+      ttl: 60000,  // 1 minute window
+      limit: 10,   // max 10 requests per minute (default, overridden per-route)
+    }]),
     PrismaModule,
     AccountsModule,
     AuthModule,

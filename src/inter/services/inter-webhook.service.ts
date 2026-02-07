@@ -266,6 +266,7 @@ export class InterWebhookService {
 
     /**
      * 🔐 Validar assinatura HMAC SHA256 do webhook
+     * INTER_WEBHOOK_SECRET é obrigatório — rejeita se não estiver configurado.
      */
     async validateWebhookSignature(
         payload: any,
@@ -274,8 +275,8 @@ export class InterWebhookService {
         const secret = this.configService.get<string>('INTER_WEBHOOK_SECRET');
 
         if (!secret) {
-            this.logger.warn('⚠️ INTER_WEBHOOK_SECRET não configurado, pulando validação');
-            return true;
+            this.logger.error('❌ INTER_WEBHOOK_SECRET não configurado! Rejeitando webhook por segurança.');
+            return false;
         }
 
         try {
@@ -284,7 +285,16 @@ export class InterWebhookService {
             hmac.update(payloadString);
             const expectedSignature = hmac.digest('hex');
 
-            const isValid = signature === expectedSignature;
+            // Use timing-safe comparison to prevent timing attacks
+            const sigBuffer = Buffer.from(signature, 'hex');
+            const expectedBuffer = Buffer.from(expectedSignature, 'hex');
+
+            if (sigBuffer.length !== expectedBuffer.length) {
+                this.logger.error('❌ Assinatura inválida (tamanho diferente)');
+                return false;
+            }
+
+            const isValid = crypto.timingSafeEqual(sigBuffer, expectedBuffer);
 
             if (!isValid) {
                 this.logger.error('❌ Assinatura inválida!');
@@ -299,6 +309,29 @@ export class InterWebhookService {
         }
     }
 
+    /**
+     * 📝 Registrar webhook rejeitado (assinatura ausente/inválida)
+     */
+    async logRejectedWebhook(
+        type: string,
+        payload: any,
+        reason: string,
+        ipAddress: string,
+        userAgent: string,
+    ): Promise<void> {
+        await this.prisma.webhookLog.create({
+            data: {
+                source: 'INTER',
+                type: `${type}_rejected`,
+                payload: payload as Prisma.InputJsonValue,
+                processed: false,
+                error: reason,
+                ipAddress,
+                userAgent,
+            },
+        });
+    }
+
     // ==================== PROCESSAR WEBHOOKS ====================
 
     /**
@@ -307,7 +340,7 @@ export class InterWebhookService {
      * - Credita automaticamente na conta do customer
      * - Cria Transaction de PIX_IN (modelo unificado)
      */
-    async handlePixReceived(payload: any): Promise<void> {
+    async handlePixReceived(payload: any, ipAddress?: string, userAgent?: string): Promise<void> {
         this.logger.log('💰 Processando Pix recebido...');
         this.logger.debug('Payload:', JSON.stringify(payload, null, 2));
 
@@ -346,6 +379,8 @@ export class InterWebhookService {
                             txid,
                             processed: true,
                             error: 'Duplicado - já completado',
+                            ipAddress,
+                            userAgent,
                         },
                     });
                     continue;
@@ -444,6 +479,8 @@ export class InterWebhookService {
                                 txid,
                                 processed: true,
                                 processedAt: new Date(),
+                                ipAddress,
+                                userAgent,
                             },
                         }),
                     ]);
@@ -464,6 +501,8 @@ export class InterWebhookService {
                             processed: true,
                             error: 'Pix sem customer vinculado - requer revisão manual',
                             processedAt: new Date(),
+                            ipAddress,
+                            userAgent,
                         },
                     });
 
@@ -481,6 +520,8 @@ export class InterWebhookService {
                         txid: pix.txid,
                         processed: false,
                         error: error.message,
+                        ipAddress,
+                        userAgent,
                     },
                 });
             }

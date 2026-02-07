@@ -621,6 +621,10 @@ model WebhookLog {
   endToEnd String?
   txid     String?
 
+  // Audit fields for tracking webhook origin
+  ipAddress String?
+  userAgent String?
+
   createdAt   DateTime  @default(now())
   processedAt DateTime?
 
