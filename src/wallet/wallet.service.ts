@@ -703,7 +703,11 @@ export class WalletService {
     const { blockhash } = await connection.getLatestBlockhash();
     transaction.recentBlockhash = blockhash;
 
-    const feeLamports = await connection.getFeeForMessage(transaction.compileMessage());
+    const feeResponse = await connection.getFeeForMessage(transaction.compileMessage());
+    const feeLamports = feeResponse.value;
+    if (feeLamports === null) {
+      throw new BadRequestException('Não foi possível estimar a taxa de rede no momento');
+    }
     const balanceLamports = await connection.getBalance(senderPubkey);
 
     if (balanceLamports < lamports + feeLamports) {
