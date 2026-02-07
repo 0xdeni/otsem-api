@@ -1,6 +1,10 @@
 import { Injectable, BadRequestException, NotFoundException, Logger, Inject, forwardRef } from '@nestjs/common';
-import { Keypair, Connection, PublicKey, Transaction, sendAndConfirmTransaction } from '@solana/web3.js';
+import { Keypair, Connection, PublicKey, Transaction, sendAndConfirmTransaction, SystemProgram, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import * as splToken from '@solana/spl-token';
+import { ethers } from 'ethers';
+import * as bitcoin from 'bitcoinjs-lib';
+import * as ecc from 'tiny-secp256k1';
+import { ECPairFactory } from 'ecpair';
 import { PrismaService } from '../prisma/prisma.service';
 import { encryptPrivateKey, decryptPrivateKey } from './wallet-crypto.util';
 
@@ -13,10 +17,31 @@ import { TronService } from '../tron/tron.service';
 import { SolanaService } from '../solana/solana.service';
 import { AffiliatesService } from '../affiliates/affiliates.service';
 import { KycLimitsService } from '../customers/kyc-limits.service';
-import { WalletNetwork, TransactionType } from '@prisma/client';
+import { Wallet, WalletNetwork, TransactionType } from '@prisma/client';
 
 const SOL_FEE_FOR_USDT_TRANSFER = 0.005;
 const TRX_FEE_FOR_USDT_TRANSFER = 15;
+const ECPair = ECPairFactory(ecc);
+
+const NETWORK_CURRENCIES: Record<WalletNetwork, string[]> = {
+  SOLANA: ['USDT', 'SOL'],
+  TRON: ['USDT', 'TRX'],
+  ETHEREUM: ['ETH'],
+  BITCOIN: ['BTC'],
+  POLYGON: [],
+  BSC: [],
+  AVALANCHE: [],
+  ARBITRUM: [],
+  OPTIMISM: [],
+  BASE: [],
+};
+
+const DEFAULT_CURRENCY_BY_NETWORK: Partial<Record<WalletNetwork, string>> = {
+  SOLANA: 'USDT',
+  TRON: 'USDT',
+  ETHEREUM: 'ETH',
+  BITCOIN: 'BTC',
+};
 
 @Injectable()
 export class WalletService {
@@ -34,6 +59,32 @@ export class WalletService {
     private readonly kycLimitsService: KycLimitsService,
   ) { }
 
+  private normalizeCurrency(currency: string | undefined, network: WalletNetwork) {
+    const fallback = DEFAULT_CURRENCY_BY_NETWORK[network] || 'USDT';
+    return (currency || fallback).toUpperCase();
+  }
+
+  private assertSupportedCurrency(network: WalletNetwork, currency: string) {
+    const supported = NETWORK_CURRENCIES[network] || [];
+    if (!supported.includes(currency)) {
+      throw new BadRequestException(
+        `Moeda inválida para ${network}. Suportadas: ${supported.join(', ') || 'nenhuma'}`,
+      );
+    }
+  }
+
+  private getEthProvider() {
+    const rpcUrl =
+      process.env.ALCHEMY_ETH_RPC_URL ||
+      process.env.ETH_RPC_URL ||
+      process.env.ALCHEMY_RPC_URL ||
+      '';
+    if (!rpcUrl) {
+      throw new BadRequestException('ETH_RPC_URL não configurado');
+    }
+    return new ethers.JsonRpcProvider(rpcUrl);
+  }
+
   getTronService() {
     return this.tronService;
   }
@@ -44,8 +95,11 @@ export class WalletService {
     externalAddress: string,
     options?: { currency?: string; label?: string; isMain?: boolean },
   ) {
-    const existing = await this.prisma.wallet.findUnique({
-      where: { customerId_network_externalAddress: { customerId, network, externalAddress } },
+    const currency = this.normalizeCurrency(options?.currency, network);
+    this.assertSupportedCurrency(network, currency);
+
+    const existing = await this.prisma.wallet.findFirst({
+      where: { customerId, network, externalAddress, currency },
     });
     if (existing) {
       throw new BadRequestException('Wallet com este endereço já existe nesta rede');
@@ -64,7 +118,7 @@ export class WalletService {
           customerId,
           network,
           externalAddress,
-          currency: options?.currency || 'USDT',
+          currency,
           label: options?.label,
           isMain: options?.isMain ?? false,
           balance: 0,
@@ -82,7 +136,10 @@ export class WalletService {
     }
   }
 
-  async createSolanaWallet(customerId: string, label?: string) {
+  async createSolanaWallet(customerId: string, label?: string, currencyInput?: string) {
+    const currency = this.normalizeCurrency(currencyInput, 'SOLANA');
+    this.assertSupportedCurrency('SOLANA', currency);
+
     const keypair = Keypair.generate();
     const publicKey = keypair.publicKey.toBase58();
     const secretKey = Buffer.from(keypair.secretKey).toString('hex');
@@ -91,8 +148,8 @@ export class WalletService {
       where: { customerId, network: 'SOLANA', isMain: true },
     });
 
-    const existing = await this.prisma.wallet.findUnique({
-      where: { customerId_network_externalAddress: { customerId, network: 'SOLANA', externalAddress: publicKey } },
+    const existing = await this.prisma.wallet.findFirst({
+      where: { customerId, network: 'SOLANA', externalAddress: publicKey, currency },
     });
     if (existing) {
       throw new BadRequestException('Wallet com este endereço já existe nesta rede');
@@ -111,8 +168,8 @@ export class WalletService {
         network: 'SOLANA',
         externalAddress: publicKey,
         encryptedPrivateKey: encryptPrivateKey(secretKey),
-        currency: 'USDT',
-        label: label || 'Solana Wallet',
+        currency,
+        label: label || `Solana ${currency} Wallet`,
         isMain: !existingMain,
         balance: 0,
       },
@@ -125,15 +182,18 @@ export class WalletService {
     return this.createSolanaWallet(customerId);
   }
 
-  async createTronWallet(customerId: string, label?: string) {
+  async createTronWallet(customerId: string, label?: string, currencyInput?: string) {
+    const currency = this.normalizeCurrency(currencyInput, 'TRON');
+    this.assertSupportedCurrency('TRON', currency);
+
     const { address, privateKey } = await this.tronService.createWallet();
 
     const existingMain = await this.prisma.wallet.findFirst({
       where: { customerId, network: 'TRON', isMain: true },
     });
 
-    const existing = await this.prisma.wallet.findUnique({
-      where: { customerId_network_externalAddress: { customerId, network: 'TRON', externalAddress: address } },
+    const existing = await this.prisma.wallet.findFirst({
+      where: { customerId, network: 'TRON', externalAddress: address, currency },
     });
     if (existing) {
       throw new BadRequestException('Wallet com este endereço já existe nesta rede');
@@ -152,8 +212,8 @@ export class WalletService {
         network: 'TRON',
         externalAddress: address,
         encryptedPrivateKey: encryptPrivateKey(privateKey),
-        currency: 'USDT',
-        label: label || 'Tron Wallet',
+        currency,
+        label: label || `Tron ${currency} Wallet`,
         isMain: !existingMain,
         balance: 0,
       },
@@ -162,12 +222,94 @@ export class WalletService {
     return { address, wallet };
   }
 
+  async createEthereumWallet(customerId: string, label?: string) {
+    const currency = this.normalizeCurrency('ETH', 'ETHEREUM');
+    this.assertSupportedCurrency('ETHEREUM', currency);
+
+    const wallet = ethers.Wallet.createRandom();
+    const address = wallet.address;
+    const privateKey = wallet.privateKey.replace(/^0x/, '');
+
+    const existingMain = await this.prisma.wallet.findFirst({
+      where: { customerId, network: 'ETHEREUM', isMain: true },
+    });
+
+    const existing = await this.prisma.wallet.findFirst({
+      where: { customerId, network: 'ETHEREUM', externalAddress: address, currency },
+    });
+    if (existing) {
+      throw new BadRequestException('Wallet com este endereço já existe nesta rede');
+    }
+
+    const created = await this.prisma.wallet.create({
+      data: {
+        customerId,
+        network: 'ETHEREUM',
+        externalAddress: address,
+        encryptedPrivateKey: privateKey,
+        currency,
+        label: label || 'Ethereum Wallet',
+        isMain: !existingMain,
+        balance: 0,
+      },
+    });
+
+    return { address, privateKey, wallet: created };
+  }
+
+  async createBitcoinWallet(customerId: string, label?: string) {
+    const currency = this.normalizeCurrency('BTC', 'BITCOIN');
+    this.assertSupportedCurrency('BITCOIN', currency);
+
+    const keyPair = ECPair.makeRandom();
+    const payment = bitcoin.payments.p2wpkh({
+      pubkey: keyPair.publicKey,
+      network: bitcoin.networks.bitcoin,
+    });
+    if (!payment.address) {
+      throw new BadRequestException('Falha ao gerar endereço Bitcoin');
+    }
+
+    const address = payment.address;
+    const privateKey = keyPair.toWIF();
+
+    const existingMain = await this.prisma.wallet.findFirst({
+      where: { customerId, network: 'BITCOIN', isMain: true },
+    });
+
+    const existing = await this.prisma.wallet.findFirst({
+      where: { customerId, network: 'BITCOIN', externalAddress: address, currency },
+    });
+    if (existing) {
+      throw new BadRequestException('Wallet com este endereço já existe nesta rede');
+    }
+
+    const created = await this.prisma.wallet.create({
+      data: {
+        customerId,
+        network: 'BITCOIN',
+        externalAddress: address,
+        encryptedPrivateKey: privateKey,
+        currency,
+        label: label || 'Bitcoin Wallet',
+        isMain: !existingMain,
+        balance: 0,
+      },
+    });
+
+    return { address, privateKey, wallet: created };
+  }
+
   async importWallet(
     customerId: string,
     network: WalletNetwork,
     externalAddress: string,
     label?: string,
+    currencyInput?: string,
   ) {
+    const currency = this.normalizeCurrency(currencyInput, network);
+    this.assertSupportedCurrency(network, currency);
+
     // Validate address format for the specified network
     try {
       if (network === 'TRON') {
@@ -179,6 +321,16 @@ export class WalletService {
         const isValid = await this.solanaService.isValidAddress(externalAddress);
         if (!isValid) {
           throw new BadRequestException('Endereço Solana inválido');
+        }
+      } else if (network === 'ETHEREUM') {
+        if (!ethers.isAddress(externalAddress)) {
+          throw new BadRequestException('Endereço Ethereum inválido');
+        }
+      } else if (network === 'BITCOIN') {
+        try {
+          bitcoin.address.toOutputScript(externalAddress, bitcoin.networks.bitcoin);
+        } catch {
+          throw new BadRequestException('Endereço Bitcoin inválido');
         }
       }
     } catch (err) {
@@ -192,8 +344,8 @@ export class WalletService {
     });
 
     return this.createWallet(customerId, network, externalAddress, {
-      currency: 'USDT',
-      label: label || `${network} Wallet`,
+      currency,
+      label: label || `${network} ${currency} Wallet`,
       isMain: !existingMain,
     });
   }
@@ -321,6 +473,71 @@ export class WalletService {
     }
   }
 
+  private async getEthereumBalance(address: string): Promise<number> {
+    try {
+      const provider = this.getEthProvider();
+      const balance = await provider.getBalance(address);
+      return Number(ethers.formatEther(balance));
+    } catch (err: any) {
+      this.logger.error(`Erro ao consultar saldo ETH: ${err.message}`);
+      return 0;
+    }
+  }
+
+  private async getBitcoinBalance(address: string): Promise<number> {
+    try {
+      const response = await fetch(`https://blockstream.info/api/address/${address}`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const data = await response.json() as {
+        chain_stats?: { funded_txo_sum?: number; spent_txo_sum?: number };
+        mempool_stats?: { funded_txo_sum?: number; spent_txo_sum?: number };
+      };
+      const funded =
+        (data.chain_stats?.funded_txo_sum || 0) + (data.mempool_stats?.funded_txo_sum || 0);
+      const spent =
+        (data.chain_stats?.spent_txo_sum || 0) + (data.mempool_stats?.spent_txo_sum || 0);
+      const sats = funded - spent;
+      return sats / 1e8;
+    } catch (err: any) {
+      this.logger.error(`Erro ao consultar saldo BTC: ${err.message}`);
+      return 0;
+    }
+  }
+
+  private async getWalletOnChainBalance(wallet: Wallet): Promise<number> {
+    if (!wallet.externalAddress) return 0;
+
+    if (wallet.network === 'SOLANA') {
+      if (wallet.currency === 'USDT') {
+        return Number(await this.getSolanaUsdtBalance(wallet.externalAddress));
+      }
+      if (wallet.currency === 'SOL') {
+        return this.solanaService.getSolBalance(wallet.externalAddress);
+      }
+    }
+
+    if (wallet.network === 'TRON') {
+      if (wallet.currency === 'USDT') {
+        return Number(await this.getTronUsdtBalance(wallet.externalAddress));
+      }
+      if (wallet.currency === 'TRX') {
+        return this.tronService.getTrxBalance(wallet.externalAddress);
+      }
+    }
+
+    if (wallet.network === 'ETHEREUM' && wallet.currency === 'ETH') {
+      return this.getEthereumBalance(wallet.externalAddress);
+    }
+
+    if (wallet.network === 'BITCOIN' && wallet.currency === 'BTC') {
+      return this.getBitcoinBalance(wallet.externalAddress);
+    }
+
+    return 0;
+  }
+
   async sendUsdt(
     customerId: string,
     walletId: string,
@@ -333,24 +550,51 @@ export class WalletService {
       throw new BadRequestException('Wallet não possui chave privada (não é custodial). Envie diretamente pela carteira externa.');
     }
 
+    if (wallet.currency !== 'USDT') {
+      throw new BadRequestException('Esta carteira não é USDT');
+    }
+
+    const result = await this.sendCrypto(customerId, walletId, toAddress, amount);
+    return { txId: result.txId, success: result.success, network: result.network };
+  }
+
+  async sendCrypto(
+    customerId: string,
+    walletId: string,
+    toAddress: string,
+    amount: number,
+  ): Promise<{ txId: string; success: boolean; network: string; currency: string; fee?: string }> {
+    const wallet = await this.getWalletById(walletId, customerId);
+
+    if (!wallet.encryptedPrivateKey) {
+      throw new BadRequestException('Wallet não possui chave privada (não é custodial). Envie diretamente pela carteira externa.');
+    }
+
     if (Number(wallet.balance) < amount) {
       throw new BadRequestException('Saldo insuficiente na carteira');
     }
 
-    let result: { txId: string; success: boolean };
+    let result: { txId: string; success: boolean; fee?: string };
 
-    if (wallet.network === 'SOLANA') {
+    if (wallet.network === 'SOLANA' && wallet.currency === 'USDT') {
       result = await this.sendSolanaUsdt(walletId, customerId, toAddress, amount);
-    } else if (wallet.network === 'TRON') {
+    } else if (wallet.network === 'SOLANA' && wallet.currency === 'SOL') {
+      result = await this.sendSolanaNative(walletId, customerId, toAddress, amount);
+    } else if (wallet.network === 'TRON' && wallet.currency === 'USDT') {
       result = await this.sendTronUsdt(walletId, customerId, toAddress, amount);
+    } else if (wallet.network === 'TRON' && wallet.currency === 'TRX') {
+      result = await this.sendTronNative(walletId, customerId, toAddress, amount);
+    } else if (wallet.network === 'ETHEREUM' && wallet.currency === 'ETH') {
+      result = await this.sendEthereum(walletId, customerId, toAddress, amount);
+    } else if (wallet.network === 'BITCOIN' && wallet.currency === 'BTC') {
+      result = await this.sendBitcoin(walletId, customerId, toAddress, amount);
     } else {
-      throw new BadRequestException(`Rede não suportada: ${wallet.network}`);
+      throw new BadRequestException(`Rede/moeda não suportada: ${wallet.network} ${wallet.currency}`);
     }
 
-    // Sync balance after send
     await this.syncWalletBalance(walletId, customerId);
 
-    return { ...result, network: wallet.network };
+    return { ...result, network: wallet.network, currency: wallet.currency };
   }
 
   async sendSolanaUsdt(
@@ -417,6 +661,62 @@ export class WalletService {
     return { txId, success: true };
   }
 
+  async sendSolanaNative(
+    walletId: string,
+    customerId: string,
+    toAddress: string,
+    amount: number,
+  ): Promise<{ txId: string; success: boolean; fee?: string }> {
+    const wallet = await this.getWalletById(walletId, customerId);
+
+    if (wallet.network !== 'SOLANA' || wallet.currency !== 'SOL') {
+      throw new BadRequestException('Wallet não é Solana (SOL)');
+    }
+
+    if (!wallet.encryptedPrivateKey) {
+      throw new BadRequestException('Wallet não possui chave privada (não é custodial)');
+    }
+
+    if (!wallet.externalAddress) {
+      throw new BadRequestException('Wallet não possui endereço');
+    }
+
+    const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
+
+    const secretKeyBytes = Buffer.from(wallet.encryptedPrivateKey, 'hex');
+    const senderKeypair = Keypair.fromSecretKey(secretKeyBytes);
+
+    const senderPubkey = new PublicKey(wallet.externalAddress);
+    const recipientPubkey = new PublicKey(toAddress);
+
+    const lamports = Math.floor(amount * LAMPORTS_PER_SOL);
+
+    const transaction = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: senderPubkey,
+        toPubkey: recipientPubkey,
+        lamports,
+      }),
+    );
+
+    transaction.feePayer = senderPubkey;
+    const { blockhash } = await connection.getLatestBlockhash();
+    transaction.recentBlockhash = blockhash;
+
+    const feeLamports = await connection.getFeeForMessage(transaction.compileMessage());
+    const balanceLamports = await connection.getBalance(senderPubkey);
+
+    if (balanceLamports < lamports + feeLamports) {
+      throw new BadRequestException('Saldo insuficiente para valor + taxa de rede');
+    }
+
+    const txId = await sendAndConfirmTransaction(connection, transaction, [senderKeypair]);
+
+    this.logger.log(`✅ SOL enviado: ${amount} para ${toAddress}, txId: ${txId}`);
+
+    return { txId, success: true, fee: (feeLamports / LAMPORTS_PER_SOL).toString() };
+  }
+
   async sendTronUsdt(
     walletId: string,
     customerId: string,
@@ -436,20 +736,198 @@ export class WalletService {
     return this.tronService.sendUsdtWithKey(toAddress, amount, decryptPrivateKey(wallet.encryptedPrivateKey));
   }
 
-  async syncWalletBalance(walletId: string, customerId: string): Promise<{ balance: string; wallet: any }> {
+  async sendTronNative(
+    walletId: string,
+    customerId: string,
+    toAddress: string,
+    amount: number,
+  ): Promise<{ txId: string; success: boolean; fee?: string }> {
     const wallet = await this.getWalletById(walletId, customerId);
-    
-    let balance = '0';
-    if (wallet.externalAddress) {
-      if (wallet.network === 'SOLANA') {
-        balance = await this.getSolanaUsdtBalance(wallet.externalAddress, customerId);
-      } else if (wallet.network === 'TRON') {
-        balance = await this.getTronUsdtBalance(wallet.externalAddress, customerId);
-      }
+
+    if (wallet.network !== 'TRON' || wallet.currency !== 'TRX') {
+      throw new BadRequestException('Wallet não é Tron (TRX)');
     }
 
+    if (!wallet.encryptedPrivateKey) {
+      throw new BadRequestException('Wallet não possui chave privada (não é custodial)');
+    }
+
+    return this.tronService.sendTrxWithKey(toAddress, amount, wallet.encryptedPrivateKey);
+  }
+
+  async sendEthereum(
+    walletId: string,
+    customerId: string,
+    toAddress: string,
+    amount: number,
+  ): Promise<{ txId: string; success: boolean; fee?: string }> {
+    const wallet = await this.getWalletById(walletId, customerId);
+
+    if (wallet.network !== 'ETHEREUM' || wallet.currency !== 'ETH') {
+      throw new BadRequestException('Wallet não é Ethereum (ETH)');
+    }
+
+    if (!wallet.encryptedPrivateKey) {
+      throw new BadRequestException('Wallet não possui chave privada (não é custodial)');
+    }
+
+    if (!ethers.isAddress(toAddress)) {
+      throw new BadRequestException('Endereço Ethereum inválido');
+    }
+
+    const provider = this.getEthProvider();
+    const privateKey = wallet.encryptedPrivateKey.startsWith('0x')
+      ? wallet.encryptedPrivateKey
+      : `0x${wallet.encryptedPrivateKey}`;
+    const signer = new ethers.Wallet(privateKey, provider);
+
+    const value = ethers.parseEther(amount.toString());
+    const feeData = await provider.getFeeData();
+    const gasLimit = await provider.estimateGas({ to: toAddress, value });
+    const maxFeePerGas = feeData.maxFeePerGas ?? feeData.gasPrice ?? 0n;
+    const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas ?? 0n;
+
+    const fee = gasLimit * maxFeePerGas;
+    const balance = await provider.getBalance(signer.address);
+
+    if (balance < value + fee) {
+      throw new BadRequestException('Saldo insuficiente para valor + taxa de rede');
+    }
+
+    const tx = await signer.sendTransaction({
+      to: toAddress,
+      value,
+      gasLimit,
+      maxFeePerGas,
+      maxPriorityFeePerGas,
+    });
+
+    return { txId: tx.hash, success: true, fee: ethers.formatEther(fee) };
+  }
+
+  async sendBitcoin(
+    walletId: string,
+    customerId: string,
+    toAddress: string,
+    amount: number,
+  ): Promise<{ txId: string; success: boolean; fee?: string }> {
+    const wallet = await this.getWalletById(walletId, customerId);
+
+    if (wallet.network !== 'BITCOIN' || wallet.currency !== 'BTC') {
+      throw new BadRequestException('Wallet não é Bitcoin (BTC)');
+    }
+
+    if (!wallet.encryptedPrivateKey) {
+      throw new BadRequestException('Wallet não possui chave privada (não é custodial)');
+    }
+
+    try {
+      bitcoin.address.toOutputScript(toAddress, bitcoin.networks.bitcoin);
+    } catch {
+      throw new BadRequestException('Endereço Bitcoin inválido');
+    }
+
+    const fromAddress = wallet.externalAddress;
+    if (!fromAddress) {
+      throw new BadRequestException('Wallet não possui endereço');
+    }
+
+    const utxoRes = await fetch(`https://blockstream.info/api/address/${fromAddress}/utxo`);
+    if (!utxoRes.ok) {
+      throw new BadRequestException('Falha ao buscar UTXOs');
+    }
+    const utxos = await utxoRes.json() as { txid: string; vout: number; value: number }[];
+    if (!utxos.length) {
+      throw new BadRequestException('Sem UTXOs disponíveis');
+    }
+
+    const feeRes = await fetch('https://blockstream.info/api/fee-estimates');
+    const feeEstimates = feeRes.ok ? await feeRes.json() as Record<string, number> : { '2': 5 };
+    const satPerVbyte = feeEstimates['2'] || feeEstimates['1'] || 5;
+
+    const amountSats = Math.floor(amount * 1e8);
+    let selected: { txid: string; vout: number; value: number }[] = [];
+    let total = 0;
+
+    for (const utxo of utxos) {
+      selected.push(utxo);
+      total += utxo.value;
+
+      const inputCount = selected.length;
+      const outputCount = 2; // recipient + change
+      const vbytes = 10 + inputCount * 68 + outputCount * 31;
+      const fee = Math.ceil(vbytes * satPerVbyte);
+
+      if (total >= amountSats + fee) break;
+    }
+
+    const inputCount = selected.length;
+    const outputCount = 2;
+    const vbytes = 10 + inputCount * 68 + outputCount * 31;
+    const fee = Math.ceil(vbytes * satPerVbyte);
+
+    if (total < amountSats + fee) {
+      throw new BadRequestException('Saldo insuficiente para valor + taxa de rede');
+    }
+
+    const change = total - amountSats - fee;
+    const keyPair = ECPair.fromWIF(wallet.encryptedPrivateKey, bitcoin.networks.bitcoin);
+    const payment = bitcoin.payments.p2wpkh({ pubkey: keyPair.publicKey, network: bitcoin.networks.bitcoin });
+
+    if (!payment.output) {
+      throw new BadRequestException('Falha ao gerar script de assinatura');
+    }
+
+    const psbt = new bitcoin.Psbt({ network: bitcoin.networks.bitcoin });
+    for (const utxo of selected) {
+      psbt.addInput({
+        hash: utxo.txid,
+        index: utxo.vout,
+        witnessUtxo: {
+          script: payment.output,
+          value: utxo.value,
+        },
+      });
+    }
+
+    psbt.addOutput({ address: toAddress, value: amountSats });
+    if (change > 0) {
+      psbt.addOutput({ address: fromAddress, value: change });
+    }
+
+    psbt.signAllInputs(keyPair);
+    psbt.finalizeAllInputs();
+
+    const txHex = psbt.extractTransaction().toHex();
+    const broadcastRes = await fetch('https://blockstream.info/api/tx', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: txHex,
+    });
+
+    if (!broadcastRes.ok) {
+      const errorText = await broadcastRes.text();
+      throw new BadRequestException(`Falha ao enviar BTC: ${errorText}`);
+    }
+
+    const txId = await broadcastRes.text();
+    return { txId, success: true, fee: (fee / 1e8).toString() };
+  }
+
+  async syncWalletBalance(walletId: string, customerId: string): Promise<{ balance: string; wallet: any }> {
+    const wallet = await this.getWalletById(walletId, customerId);
+
+    const onChain = await this.getWalletOnChainBalance(wallet);
+    const reserved = wallet.reserved ? Number(wallet.reserved) : 0;
+    const available = Math.max(onChain - reserved, 0);
+
+    await this.prisma.wallet.update({
+      where: { id: walletId },
+      data: { balance: available },
+    });
+
     const updatedWallet = await this.prisma.wallet.findUnique({ where: { id: walletId } });
-    return { balance, wallet: updatedWallet };
+    return { balance: available.toString(), wallet: updatedWallet };
   }
 
   async updateWalletBalance(walletId: string, customerId: string, balance: string): Promise<any> {
@@ -466,17 +944,29 @@ export class WalletService {
 
     for (const wallet of wallets) {
       try {
-        let balance = '0';
-        if (wallet.externalAddress) {
-          if (wallet.network === 'SOLANA') {
-            balance = await this.getSolanaUsdtBalance(wallet.externalAddress, customerId);
-          } else if (wallet.network === 'TRON') {
-            balance = await this.getTronUsdtBalance(wallet.externalAddress, customerId);
-          }
-        }
-        results.push({ id: wallet.id, network: wallet.network, address: wallet.externalAddress, balance });
+        const onChain = await this.getWalletOnChainBalance(wallet);
+        const reserved = wallet.reserved ? Number(wallet.reserved) : 0;
+        const available = Math.max(onChain - reserved, 0);
+        await this.prisma.wallet.update({
+          where: { id: wallet.id },
+          data: { balance: available },
+        });
+        results.push({
+          id: wallet.id,
+          network: wallet.network,
+          currency: wallet.currency,
+          address: wallet.externalAddress,
+          balance: available.toString(),
+        });
       } catch (err: any) {
-        results.push({ id: wallet.id, network: wallet.network, address: wallet.externalAddress, balance: wallet.balance, error: err.message });
+        results.push({
+          id: wallet.id,
+          network: wallet.network,
+          currency: wallet.currency,
+          address: wallet.externalAddress,
+          balance: wallet.balance,
+          error: err.message,
+        });
       }
     }
 

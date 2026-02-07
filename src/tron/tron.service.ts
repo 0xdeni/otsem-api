@@ -311,4 +311,35 @@ export class TronService implements OnModuleInit {
             throw error;
         }
     }
+
+    async sendTrxWithKey(toAddress: string, amount: number, privateKey: string): Promise<{ txId: string; success: boolean }> {
+        const isValid = await this.isValidAddress(toAddress);
+        if (!isValid) {
+            throw new Error('Endereço Tron inválido');
+        }
+
+        try {
+            const TronWeb = require('tronweb');
+            const tronWebWithKey = new TronWeb({
+                fullHost: 'https://api.trongrid.io',
+                privateKey: privateKey,
+            });
+
+            const amountInSun = Math.floor(amount * 1_000_000);
+            const tx = await tronWebWithKey.trx.sendTransaction(toAddress, amountInSun);
+
+            if (tx.result) {
+                this.logger.log(`✅ TRX enviado: ${amount} para ${toAddress}, txId: ${tx.txid}`);
+                return {
+                    txId: tx.txid,
+                    success: true,
+                };
+            }
+
+            throw new Error(tx.message || 'Falha ao enviar TRX');
+        } catch (error: any) {
+            this.logger.error(`❌ Erro ao enviar TRX: ${error.message}`);
+            throw error;
+        }
+    }
 }

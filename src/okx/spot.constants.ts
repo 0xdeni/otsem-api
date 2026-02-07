@@ -3,7 +3,6 @@ export const SPOT_PAIRS = [
   'ETH-USDT',
   'SOL-USDT',
   'TRX-USDT',
-  'XRP-USDT',
 ] as const;
 
 export type SpotPair = typeof SPOT_PAIRS[number];
@@ -14,5 +13,4 @@ export const SPOT_CURRENCIES = [
   'ETH',
   'SOL',
   'TRX',
-  'XRP',
 ] as const;

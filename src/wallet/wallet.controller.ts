@@ -247,16 +247,38 @@ export class WalletController {
 
   @Post('create-solana')
   @ApiOperation({ summary: 'Criar nova wallet Solana (gera keypair)' })
-  async createSolanaWallet(@Req() req: AuthRequest, @Body('label') label?: string) {
+  async createSolanaWallet(
+    @Req() req: AuthRequest,
+    @Body('label') label?: string,
+    @Body('currency') currency?: string,
+  ) {
     const customerId = this.getCustomerId(req);
-    return this.walletService.createSolanaWallet(customerId, label);
+    return this.walletService.createSolanaWallet(customerId, label, currency);
   }
 
   @Post('create-tron')
   @ApiOperation({ summary: 'Criar nova wallet Tron (gera keypair)' })
-  async createTronWallet(@Req() req: AuthRequest, @Body('label') label?: string) {
+  async createTronWallet(
+    @Req() req: AuthRequest,
+    @Body('label') label?: string,
+    @Body('currency') currency?: string,
+  ) {
     const customerId = this.getCustomerId(req);
-    return this.walletService.createTronWallet(customerId, label);
+    return this.walletService.createTronWallet(customerId, label, currency);
+  }
+
+  @Post('create-ethereum')
+  @ApiOperation({ summary: 'Criar nova wallet Ethereum (gera keypair)' })
+  async createEthereumWallet(@Req() req: AuthRequest, @Body('label') label?: string) {
+    const customerId = this.getCustomerId(req);
+    return this.walletService.createEthereumWallet(customerId, label);
+  }
+
+  @Post('create-bitcoin')
+  @ApiOperation({ summary: 'Criar nova wallet Bitcoin (gera keypair)' })
+  async createBitcoinWallet(@Req() req: AuthRequest, @Body('label') label?: string) {
+    const customerId = this.getCustomerId(req);
+    return this.walletService.createBitcoinWallet(customerId, label);
   }
 
   @Post('import')
@@ -265,7 +287,9 @@ export class WalletController {
     @Req() req: AuthRequest,
     @Body('network') network: WalletNetwork,
     @Body('address') address: string,
+    @Body('externalAddress') externalAddress: string,
     @Body('label') label?: string,
+    @Body('currency') currency?: string,
   ) {
     const customerId = this.getCustomerId(req);
 
@@ -274,11 +298,12 @@ export class WalletController {
       throw new BadRequestException(`Rede inválida. Redes suportadas: ${validNetworks.join(', ')}`);
     }
 
-    if (!address || typeof address !== 'string' || address.trim().length === 0) {
+    const resolvedAddress = (address || externalAddress || '').trim();
+    if (!resolvedAddress) {
       throw new BadRequestException('Endereço da wallet é obrigatório');
     }
 
-    return this.walletService.importWallet(customerId, network, address.trim(), label);
+    return this.walletService.importWallet(customerId, network, resolvedAddress, label, currency);
   }
 
   @Patch(':id/set-main')
@@ -324,6 +349,24 @@ export class WalletController {
       throw new BadRequestException('O valor deve ser maior que zero');
     }
     return this.walletService.sendUsdt(customerId, walletId, toAddress, amount);
+  }
+
+  @Post('send-crypto')
+  @ApiOperation({ summary: 'Enviar crypto de uma wallet custodial para endereço externo' })
+  async sendCrypto(
+    @Req() req: AuthRequest,
+    @Body('walletId') walletId: string,
+    @Body('toAddress') toAddress: string,
+    @Body('amount') amount: number,
+  ) {
+    const customerId = this.getCustomerId(req);
+    if (!walletId || !toAddress || !amount) {
+      throw new BadRequestException('walletId, toAddress e amount são obrigatórios');
+    }
+    if (amount <= 0) {
+      throw new BadRequestException('O valor deve ser maior que zero');
+    }
+    return this.walletService.sendCrypto(customerId, walletId, toAddress, amount);
   }
 
   @Post('buy-usdt-with-brl')
