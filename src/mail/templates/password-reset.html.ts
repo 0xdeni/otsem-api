@@ -1,9 +1,20 @@
 // src/mail/templates/password-reset.html.ts
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 export function passwordResetHtml(params: {
   resetUrl: string;
   productName?: string; // ex.: "Otsem Bank"
 }): string {
-  const { resetUrl, productName = 'Otsem Bank' } = params;
+  const rawProductName = params.productName || 'Otsem Bank';
+  const productName = escapeHtml(rawProductName);
+  const resetUrl = encodeURI(params.resetUrl);
   const year = new Date().getFullYear();
 
   return `

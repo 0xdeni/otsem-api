@@ -5,6 +5,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { Role } from '@prisma/client';
+import { SendSolDto } from './dto/send-sol.dto';
 
 @ApiTags('Solana')
 @ApiBearerAuth()
@@ -41,7 +42,7 @@ export class SolanaController {
 
     @Post('send-sol')
     @ApiOperation({ summary: 'Enviar SOL da hot wallet para endereço' })
-    async sendSol(@Body() body: { toAddress: string; amount: number }) {
+    async sendSol(@Body() body: SendSolDto) {
         return await this.solanaService.sendSol(body.toAddress, body.amount);
     }
 

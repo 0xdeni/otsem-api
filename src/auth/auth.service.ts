@@ -300,7 +300,7 @@ export class AuthService {
     }
 
     // gere o hash da nova senha
-    const hash = await bcrypt.hash(newPassword, 12);
+    const hash = await bcrypt.hash(newPassword, SALT_ROUNDS);
 
     // 🔐 ATENÇÃO: troque "passwordHash" pelo campo certo no seu schema (pode ser "password")
     await this.prisma.$transaction([
@@ -458,6 +458,43 @@ export class AuthService {
     return {
       success: true,
       data: { message: 'Logged out successfully' },
+    };
+  }
+
+  async refreshAccessToken(refreshToken: string) {
+    if (!refreshToken) {
+      throw new UnauthorizedException('Refresh token é obrigatório');
+    }
+
+    const stored = await this.prisma.refreshToken.findFirst({
+      where: {
+        token: refreshToken,
+        revoked: false,
+        expiresAt: { gt: new Date() },
+      },
+      include: { user: true },
+    });
+
+    if (!stored) {
+      throw new UnauthorizedException('Refresh token inválido ou expirado');
+    }
+
+    const customer = await this.prisma.customer.findFirst({
+      where: { userId: stored.userId },
+      select: { id: true },
+    });
+
+    const payload: JwtPayload = {
+      sub: stored.user.id,
+      email: stored.user.email,
+      role: stored.user.role,
+      customerId: customer?.id,
+    };
+    const accessToken = await this.jwt.signAsync(payload, { expiresIn: '15m' });
+
+    return {
+      success: true,
+      data: { accessToken },
     };
   }
 }

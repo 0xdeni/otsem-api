@@ -3,9 +3,9 @@ import { PixKeysService } from './pix-keys.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
-import { Role, PixKeyType } from '@prisma/client';
+import { Role, PixKeyType, PixKeyStatus } from '@prisma/client';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiProperty, ApiResponse, ApiBody } from '@nestjs/swagger';
-import { IsString, IsEnum, IsNotEmpty } from 'class-validator';
+import { IsString, IsEnum, IsNotEmpty, IsIn } from 'class-validator';
 
 export class CreatePixKeyDto {
     @ApiProperty({
@@ -79,7 +79,7 @@ export class PixKeysController {
     async updateKeyStatus(
         @Request() req: any,
         @Param('id') id: string,
-        @Body() dto: { status: any },
+        @Body() dto: { status: PixKeyStatus },
     ) {
         const customerId = req.user?.customerId;
         return this.pixKeysService.updatePixKey(customerId, id, { status: dto.status });

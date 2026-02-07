@@ -81,9 +81,19 @@ export class MailService {
     }
   }
 
+  private escapeHtml(str: string): string {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
   private buildHtmlEmail(message: string, template?: EmailTemplate, recipientName?: string): string {
-    const formattedMessage = message.replace(/\n/g, '<br>');
-    const greeting = recipientName ? `Olá ${recipientName},` : 'Olá,';
+    const formattedMessage = this.escapeHtml(message).replace(/\n/g, '<br>');
+    const safeName = recipientName ? this.escapeHtml(recipientName) : '';
+    const greeting = safeName ? `Olá ${safeName},` : 'Olá,';
     
     const templateStyles = this.getTemplateStyles(template);
     
