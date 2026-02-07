@@ -17,6 +17,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { WalletNetwork } from '@prisma/client';
 import type { AuthRequest } from '../auth/jwt-payload.type';
 import { OkxService } from '../okx/services/okx.service';
+import { ThrottlerGuard, Throttle } from '@nestjs/throttler';
 
 const DEFAULT_SPREAD_VALUE = 0.9905; // 0.95% spread (matches User.spreadValue default)
 
@@ -306,6 +307,8 @@ export class WalletController {
   }
 
   @Post('send-usdt')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
   @ApiOperation({ summary: 'Enviar USDT de uma wallet custodial para endereço externo' })
   async sendUsdt(
     @Req() req: AuthRequest,
@@ -324,6 +327,8 @@ export class WalletController {
   }
 
   @Post('buy-usdt-with-brl')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
   @ApiOperation({ summary: 'Comprar USDT com BRL e transferir para wallet' })
   async buyUsdtWithBrl(
     @Req() req: AuthRequest,
@@ -346,6 +351,8 @@ export class WalletController {
   }
 
   @Post('sell-usdt-to-brl')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
   @ApiOperation({ summary: 'Iniciar venda USDT → BRL (cliente envia USDT para OKX)' })
   async initiateSellUsdtToBrl(
     @Req() req: AuthRequest,
@@ -363,6 +370,8 @@ export class WalletController {
   }
 
   @Post('sell-usdt-custodial')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
   @ApiOperation({ summary: 'Vender USDT de wallet custodial (sem necessidade de chave privada)' })
   async sellUsdtCustodial(
     @Req() req: AuthRequest,

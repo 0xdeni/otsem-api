@@ -9,11 +9,15 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
+import { Role } from '@prisma/client';
 import { AdminWalletsService } from './admin-wallets.service';
 
 @ApiTags('Admin - Wallets')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(Role.ADMIN)
 @Controller('admin/wallets')
 export class AdminWalletsController {
   constructor(private adminWalletsService: AdminWalletsService) {}

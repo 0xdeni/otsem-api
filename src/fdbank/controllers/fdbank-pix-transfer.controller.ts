@@ -1,9 +1,16 @@
-import { Controller, Post, Body, HttpException, HttpStatus } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { Controller, Post, Body, HttpException, HttpStatus, UseGuards } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { FdbankPixTransferService } from '../services/fdbank-pix-transfer.service';
 import { GeneratePixQrCodeDto } from '../dto/generate-qrcode.dto';
+import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
+import { RolesGuard } from '../../auth/roles.guard';
+import { Roles } from '../../auth/roles.decorator';
+import { Role } from '@prisma/client';
 
 @ApiTags('FDBank PIX Transfer')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(Role.ADMIN)
 @Controller('fdbank/pix-transfer')
 export class FdbankPixTransferController {
     constructor(private readonly pixTransferService: FdbankPixTransferService) { }

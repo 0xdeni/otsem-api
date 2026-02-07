@@ -1,8 +1,9 @@
-import { Controller, Post, Body, Logger, HttpCode, HttpStatus, UnauthorizedException } from '@nestjs/common';
+import { Controller, Post, Body, Logger, HttpCode, HttpStatus, Headers, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { PrismaService } from '../prisma/prisma.service';
 import { DiditWebhookPayloadDto } from './dto/webhook.dto';
 import { AccountStatus } from '@prisma/client';
+import * as crypto from 'crypto';
 
 @ApiTags('Didit Webhooks')
 @Controller('kyc/didit')
@@ -11,11 +12,40 @@ export class DiditController {
 
   constructor(private readonly prisma: PrismaService) {}
 
+  private verifyWebhookSignature(rawBody: string, signature: string | undefined): boolean {
+    const secret = process.env.DIDIT_WEBHOOK_SECRET;
+    if (!secret) {
+      this.logger.warn('DIDIT_WEBHOOK_SECRET não configurado — rejeitando webhook');
+      return false;
+    }
+    if (!signature) return false;
+    const computed = crypto
+      .createHmac('sha256', secret)
+      .update(rawBody)
+      .digest('hex');
+    try {
+      return crypto.timingSafeEqual(
+        Buffer.from(computed, 'hex'),
+        Buffer.from(signature, 'hex'),
+      );
+    } catch {
+      return false;
+    }
+  }
+
   @Post()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Webhook para receber notificações de verificação Didit' })
   @ApiResponse({ status: 200, description: 'Webhook processado com sucesso' })
-  async handleVerificationWebhook(@Body() payload: DiditWebhookPayloadDto) {
+  async handleVerificationWebhook(
+    @Body() payload: DiditWebhookPayloadDto,
+    @Headers('x-didit-signature') signature?: string,
+  ) {
+    if (!this.verifyWebhookSignature(JSON.stringify(payload), signature)) {
+      this.logger.warn('Webhook Didit rejeitado: assinatura inválida');
+      throw new BadRequestException('Assinatura do webhook inválida');
+    }
+
     this.logger.log(`Webhook Didit recebido: sessionId=${payload.session_id}, status=${payload.status}`);
 
     await this.prisma.webhookLog.create({

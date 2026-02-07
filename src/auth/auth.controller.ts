@@ -79,4 +79,28 @@ export class AuthController {
     const u = req.user;
     return this.authService.getAccountDetails(u.sub);
   }
+
+  @Post('logout')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Logout — revoga o refresh token' })
+  @ApiResponse({ status: 200, description: 'Logout realizado com sucesso' })
+  async logout(@Body('refreshToken') refreshToken: string) {
+    if (!refreshToken) {
+      return { success: true, data: { message: 'No token provided' } };
+    }
+    return this.authService.logout(refreshToken);
+  }
+
+  @Post('refresh')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Renovar access token usando refresh token' })
+  @ApiResponse({ status: 200, description: 'Token renovado com sucesso' })
+  @ApiResponse({ status: 401, description: 'Refresh token inválido ou expirado' })
+  async refresh(@Body('refreshToken') refreshToken: string) {
+    return this.authService.refreshAccessToken(refreshToken);
+  }
 }

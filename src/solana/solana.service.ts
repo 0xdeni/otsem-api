@@ -34,30 +34,24 @@ export class SolanaService implements OnModuleInit {
     
     if (privateKey) {
       try {
-        this.logger.log(`🔑 Tentando decodificar chave Solana (${privateKey.length} chars)`);
-        
         let decoded: Uint8Array;
-        
+
         if (privateKey.length === 128 && /^[0-9a-fA-F]+$/.test(privateKey)) {
-          this.logger.log('🔑 Formato detectado: HEX (128 chars)');
           decoded = Uint8Array.from(Buffer.from(privateKey, 'hex'));
         } else if (privateKey.length === 88 || privateKey.length === 87) {
-          this.logger.log('🔑 Formato detectado: Base58');
           decoded = bs58.decode(privateKey);
         } else {
           decoded = bs58.decode(privateKey);
         }
-        
-        this.logger.log(`🔑 Decoded ${decoded.length} bytes`);
+
         this.hotWallet = Keypair.fromSecretKey(decoded);
         this.hotWalletAddress = this.hotWallet.publicKey.toBase58();
-        this.logger.log(`✅ Solana hot wallet inicializada: ${this.hotWalletAddress}`);
+        this.logger.log('Solana hot wallet inicializada');
       } catch (error: any) {
-        this.logger.error(`❌ Erro ao inicializar hot wallet Solana: ${error.message}`);
-        this.logger.error(`❌ Primeiros 10 chars: ${privateKey.substring(0, 10)}...`);
+        this.logger.error(`Erro ao inicializar hot wallet Solana: ${error.message}`);
       }
     } else {
-      this.logger.warn('⚠️ Solana hot wallet não configurada - apenas leitura');
+      this.logger.warn('Solana hot wallet não configurada - apenas leitura');
     }
   }
 

@@ -20,9 +20,7 @@ export class OkxAuthService {
             throw new Error('OKX API Secret is not defined');
         }
         const prehash = timestamp + method.toUpperCase() + requestPath + body;
-        console.log('OKX prehash:', prehash); // Adicione este log
         const sign = crypto.createHmac('sha256', apiSecret).update(prehash).digest('base64');
-        console.log('OKX sign:', sign); // Adicione este log
         return sign;
     }
 

@@ -37,11 +37,26 @@ interface RejectRequestDto {
   reason: string;
 }
 
+const ALLOWED_MIME_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'application/pdf',
+];
+const ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.pdf'];
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB per file
+
 const kycUpgradeStorage = diskStorage({
   destination: './uploads/kyc-upgrades',
   filename: (req: Request, file: Express.Multer.File, callback: (error: Error | null, filename: string) => void) => {
+    const ext = extname(file.originalname).toLowerCase();
+    if (!ALLOWED_EXTENSIONS.includes(ext)) {
+      return callback(new Error(`Extensão não permitida: ${ext}. Use: ${ALLOWED_EXTENSIONS.join(', ')}`), '');
+    }
+    if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+      return callback(new Error(`Tipo de arquivo não permitido: ${file.mimetype}`), '');
+    }
     const uniqueId = uuidv4();
-    const ext = extname(file.originalname);
     callback(null, `${uniqueId}${ext}`);
   },
 });
@@ -54,7 +69,7 @@ export class KycUpgradeController {
 
   @Post('customers/kyc-upgrade-requests')
   @UseGuards(JwtAuthGuard)
-  @UseInterceptors(FilesInterceptor('documents', 10, { storage: kycUpgradeStorage }))
+  @UseInterceptors(FilesInterceptor('documents', 10, { storage: kycUpgradeStorage, limits: { fileSize: MAX_FILE_SIZE } }))
   @ApiOperation({ summary: 'Criar solicitação de upgrade de KYC' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({

@@ -5,8 +5,10 @@ import {
   Param,
   Body,
   NotFoundException,
+  ForbiddenException,
   UseGuards,
   Request,
+  Req,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -33,7 +35,12 @@ export class AccountsController {
   @ApiBearerAuth()
   async getAccountSummary(
     @Param('customerId') customerId: string,
+    @Req() req: { user: { sub: string; role: string; customerId?: string } },
   ): Promise<AccountSummaryDto> {
+    // IDOR protection: customers can only access their own account
+    if (req.user.role !== 'ADMIN' && req.user.customerId !== customerId) {
+      throw new ForbiddenException('Acesso negado');
+    }
     const summary = await this.accountsService.getAccountSummary(customerId);
     if (!summary) {
       throw new NotFoundException('Account not found');

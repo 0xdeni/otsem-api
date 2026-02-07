@@ -11,11 +11,15 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
+import { Role } from '@prisma/client';
 import { AffiliatesService } from './affiliates.service';
 
 @ApiTags('Admin - Affiliates')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(Role.ADMIN)
 @Controller('admin/affiliates')
 export class AffiliatesController {
   constructor(private affiliatesService: AffiliatesService) {}
@@ -43,8 +47,8 @@ export class AffiliatesController {
     @Query('limit') limit?: string,
   ) {
     return this.affiliatesService.findAll(
-      page ? parseInt(page) : 1,
-      limit ? parseInt(limit) : 20,
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 20,
     );
   }
 
@@ -94,8 +98,8 @@ export class AffiliatesController {
   ) {
     return this.affiliatesService.getCommissions(
       id,
-      page ? parseInt(page) : 1,
-      limit ? parseInt(limit) : 20,
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 20,
     );
   }
 

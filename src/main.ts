@@ -11,10 +11,14 @@ async function bootstrap() {
 
   const allowedOrigins = process.env.FRONTEND_BASE_URL
     ? process.env.FRONTEND_BASE_URL.split(',').map((o) => o.trim().replace(/\/+$/, ''))
-    : null;
+    : [];
+
+  if (allowedOrigins.length === 0) {
+    console.warn('FRONTEND_BASE_URL not set — CORS will reject all cross-origin requests');
+  }
 
   app.enableCors({
-    origin: allowedOrigins ?? true,
+    origin: allowedOrigins.length > 0 ? allowedOrigins : false,
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     exposedHeaders: ['Authorization'],

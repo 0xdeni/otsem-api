@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, NotFoundException, Logger, Inject, for
 import { Keypair, Connection, PublicKey, Transaction, sendAndConfirmTransaction } from '@solana/web3.js';
 import * as splToken from '@solana/spl-token';
 import { PrismaService } from '../prisma/prisma.service';
+import { encryptPrivateKey, decryptPrivateKey } from './wallet-crypto.util';
 
 const USDT_MINT_SOLANA = new PublicKey('Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB');
 const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
@@ -109,7 +110,7 @@ export class WalletService {
         customerId,
         network: 'SOLANA',
         externalAddress: publicKey,
-        encryptedPrivateKey: secretKey,
+        encryptedPrivateKey: encryptPrivateKey(secretKey),
         currency: 'USDT',
         label: label || 'Solana Wallet',
         isMain: !existingMain,
@@ -117,7 +118,7 @@ export class WalletService {
       },
     });
 
-    return { publicKey, secretKey, wallet };
+    return { publicKey, wallet };
   }
 
   async createSolanaWalletForCustomer(customerId: string) {
@@ -150,7 +151,7 @@ export class WalletService {
         customerId,
         network: 'TRON',
         externalAddress: address,
-        encryptedPrivateKey: privateKey,
+        encryptedPrivateKey: encryptPrivateKey(privateKey),
         currency: 'USDT',
         label: label || 'Tron Wallet',
         isMain: !existingMain,
@@ -158,7 +159,7 @@ export class WalletService {
       },
     });
 
-    return { address, privateKey, wallet };
+    return { address, wallet };
   }
 
   async importWallet(
@@ -374,7 +375,8 @@ export class WalletService {
 
     const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
     
-    const secretKeyBytes = Buffer.from(wallet.encryptedPrivateKey, 'hex');
+    const decryptedKey = decryptPrivateKey(wallet.encryptedPrivateKey);
+    const secretKeyBytes = Buffer.from(decryptedKey, 'hex');
     const senderKeypair = Keypair.fromSecretKey(secretKeyBytes);
     
     const senderPubkey = new PublicKey(wallet.externalAddress);
@@ -431,7 +433,7 @@ export class WalletService {
       throw new BadRequestException('Wallet não possui chave privada (não é custodial)');
     }
 
-    return this.tronService.sendUsdtWithKey(toAddress, amount, wallet.encryptedPrivateKey);
+    return this.tronService.sendUsdtWithKey(toAddress, amount, decryptPrivateKey(wallet.encryptedPrivateKey));
   }
 
   async syncWalletBalance(walletId: string, customerId: string): Promise<{ balance: string; wallet: any }> {
