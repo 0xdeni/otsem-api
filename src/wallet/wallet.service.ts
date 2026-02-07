@@ -1662,6 +1662,125 @@ export class WalletService {
     return sellLabels[status] || status;
   }
 
+  /**
+   * Venda custodial: usa a chave privada armazenada para enviar USDT ao endereço OKX
+   * e cria a conversão automaticamente. Não exige assinatura externa.
+   */
+  async sellUsdtCustodial(
+    customerId: string,
+    walletId: string,
+    usdtAmount: number,
+    network: 'SOLANA' | 'TRON',
+  ) {
+    if (usdtAmount < 10) {
+      throw new BadRequestException('Quantidade mínima é 10 USDT');
+    }
+
+    const wallet = await this.prisma.wallet.findFirst({
+      where: { id: walletId, customerId },
+    });
+
+    if (!wallet) {
+      throw new NotFoundException('Carteira não encontrada');
+    }
+
+    if (!wallet.encryptedPrivateKey) {
+      throw new BadRequestException(
+        'Wallet não possui chave privada (não é custodial). Use o fluxo de assinatura externa.',
+      );
+    }
+
+    if (wallet.network !== network) {
+      throw new BadRequestException(`Carteira é da rede ${wallet.network}, não ${network}`);
+    }
+
+    if (!wallet.externalAddress) {
+      throw new BadRequestException('Carteira não possui endereço');
+    }
+
+    if (Number(wallet.balance) < usdtAmount) {
+      // Sync balance before failing
+      await this.syncWalletBalance(walletId, customerId);
+      const refreshed = await this.prisma.wallet.findUnique({ where: { id: walletId } });
+      if (Number(refreshed?.balance) < usdtAmount) {
+        throw new BadRequestException('Saldo insuficiente na carteira');
+      }
+    }
+
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+    });
+
+    if (!customer) {
+      throw new NotFoundException('Cliente não encontrado');
+    }
+
+    const account = await this.prisma.account.findFirst({ where: { customerId } });
+    if (!account) {
+      throw new BadRequestException('Conta não encontrada');
+    }
+
+    // Get OKX deposit address
+    const depositAddress = await this.getUsdtDepositAddress(network);
+    const quote = await this.quoteSellUsdt(customerId, usdtAmount, network);
+
+    // Send USDT from custodial wallet to OKX deposit address using stored private key
+    let sendResult: { txId: string; success: boolean };
+
+    if (network === 'SOLANA') {
+      sendResult = await this.sendSolanaUsdt(walletId, customerId, depositAddress.address, usdtAmount);
+    } else {
+      sendResult = await this.sendTronUsdt(walletId, customerId, depositAddress.address, usdtAmount);
+    }
+
+    // Sync balance after send
+    await this.syncWalletBalance(walletId, customerId);
+
+    // Create conversion record with txHash
+    const conversion = await this.prisma.conversion.create({
+      data: {
+        customerId,
+        accountId: account.id,
+        type: 'SELL',
+        brlCharged: 0,
+        brlExchanged: quote.brlFromExchange,
+        spreadPercent: quote.spreadPercent / 100,
+        spreadBrl: quote.spreadBrl,
+        usdtPurchased: usdtAmount,
+        usdtWithdrawn: 0,
+        exchangeRate: quote.exchangeRate,
+        network,
+        walletAddress: wallet.externalAddress,
+        walletId: wallet.id,
+        okxWithdrawFee: 0,
+        okxTradingFee: quote.okxTradingFee,
+        totalOkxFees: quote.okxTradingFee,
+        grossProfit: quote.spreadBrl,
+        netProfit: quote.spreadBrl - quote.okxTradingFee,
+        status: 'PENDING',
+        txHash: sendResult.txId,
+      },
+    });
+
+    this.logger.log(
+      `[SELL-CUSTODIAL] USDT enviado da wallet ${walletId} para OKX: ${usdtAmount} USDT, txHash: ${sendResult.txId}`,
+    );
+
+    return {
+      conversionId: conversion.id,
+      status: 'PENDING',
+      txHash: sendResult.txId,
+      usdtAmount,
+      network,
+      quote: {
+        brlToReceive: quote.brlToReceive,
+        exchangeRate: quote.exchangeRate,
+        spreadPercent: quote.spreadPercent,
+      },
+      message: 'USDT enviado automaticamente para a exchange. Após confirmação na blockchain, o BRL será creditado na sua conta.',
+    };
+  }
+
   async getConversionDetails(customerId: string, conversionId: string) {
     const conversion = await this.prisma.conversion.findFirst({
       where: { id: conversionId, customerId },
