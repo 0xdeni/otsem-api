@@ -209,6 +209,13 @@ export class TronService implements OnModuleInit {
             throw new Error('Endereço Tron inválido');
         }
 
+        // Pre-check hot wallet TRX balance
+        const hotWalletBalance = await this.getTrxBalance(this.hotWalletAddress);
+        if (hotWalletBalance < amount) {
+            this.logger.error(`❌ Saldo TRX insuficiente na hot wallet: ${hotWalletBalance} TRX disponível, ${amount} TRX necessário`);
+            throw new Error(`Saldo TRX insuficiente no sistema para enviar taxa de rede (disponível: ${hotWalletBalance.toFixed(2)} TRX, necessário: ${amount} TRX)`);
+        }
+
         try {
             const amountInSun = Math.floor(amount * 1_000_000);
             const tx = await this.tronWeb.trx.sendTransaction(toAddress, amountInSun);
@@ -220,7 +227,16 @@ export class TronService implements OnModuleInit {
                     success: true
                 };
             } else {
-                throw new Error(tx.message || 'Falha ao enviar TRX');
+                // TronWeb returns error messages as hex-encoded strings
+                let errorMsg = 'Falha ao enviar TRX';
+                if (tx.message) {
+                    try {
+                        errorMsg = Buffer.from(tx.message, 'hex').toString('utf-8');
+                    } catch {
+                        errorMsg = tx.message;
+                    }
+                }
+                throw new Error(errorMsg);
             }
         } catch (error: any) {
             this.logger.error(`❌ Erro ao enviar TRX: ${error.message}`);
