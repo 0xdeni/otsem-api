@@ -149,6 +149,12 @@ export class SellProcessingService {
     this.logger.log(`[SELL] Vendendo ${conversion.usdtPurchased} USDT por BRL...`);
 
     const usdtAmount = parseFloat(conversion.usdtPurchased.toString());
+
+    // Transfer USDT from funding to trading account before selling
+    this.logger.log(`[SELL] Transferindo ${usdtAmount} USDT de funding para trading...`);
+    await this.okxService.transferUsdtToTrading(usdtAmount);
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
     const sellResult = await this.okxService.sellUsdtForBrl(usdtAmount);
 
     const spreadPercent = parseFloat(conversion.spreadPercent.toString());
