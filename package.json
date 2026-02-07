@@ -21,9 +21,6 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev",
-    "prisma:seed": "ts-node --transpile-only prisma/seed.ts",
     "inter:test": "ts-node scripts/test-inter-auth.ts",
     "webhook:setup": "ts-node scripts/setup-webhooks.ts",
     "db:erase-customers": "tsx prisma/erase-customers.ts"

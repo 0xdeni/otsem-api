@@ -93,9 +93,7 @@ src/
 │   ├── kyc-limits.service.ts
 │   ├── kyc-upgrade.controller.ts
 │   ├── kyc-upgrade.service.ts
-│   ├── dto/                   # CreateCustomerLocalDto, QueryCustomersDto
-│   ├── entities/
-│   └── guards/
+│   └── dto/                   # CreateCustomerLocalDto, QueryCustomersDto
 ├── accounts/                  # Banking accounts (balance, limits)
 ├── statements/                # Balance & statement queries
 ├── transactions/              # Transaction ledger
@@ -126,13 +124,11 @@ src/
 ├── push-notifications/        # Web push notifications
 ├── common/                    # Shared DTOs (AddressDto, etc.)
 ├── config/                    # Configuration/validation schemas
-├── @types/                    # Custom type declarations
-└── scripts/                   # Internal utility scripts
+└── @types/                    # Custom type declarations
 
 prisma/
-├── schema.prisma              # Full database schema (20 models, 17 enums)
+├── schema.prisma              # Full database schema (23 models, 19 enums)
 ├── migrations/                # 70+ sequential migrations
-├── seed.ts                    # Default admin user creation
 └── erase-customers.ts         # Data cleanup utility
 
 scripts/
@@ -215,6 +211,14 @@ this.logger.error('error message');
 - **Relations:** Explicit `onDelete` behavior (Cascade, SetNull, Restrict)
 - **Table mapping:** Some models use `@@map("table_name")` for snake_case table names
 
+### Key Models (23 total)
+
+User, PasswordResetToken, RefreshToken, Customer, Address, KycLevelConfig, KycUpgradeRequest, PixKey, Payment, Deposit, Wallet, SpotBalance, SpotOrder, SpotTransfer, Account, Transaction, PushSubscription, SystemSettings, WebhookLog, Affiliate, AffiliateCommission, BoletoPayment, Conversion
+
+### Key Enums (19 total)
+
+Role, CustomerType, AccountStatus, KycLevel, PixKeyType, PixKeyStatus, PaymentStatus, DepositStatus, TransactionType, TransactionStatus, SpotOrderStatus, SpotTransferDirection, BankProvider, KycUpgradeRequestStatus, CommissionStatus, WalletNetwork, BoletoPaymentStatus, ConversionType, ConversionStatus
+
 ### Migration Workflow
 
 ```bash
@@ -272,7 +276,7 @@ Key variables required (configured via `.env` or server environment):
 DATABASE_URL          # PostgreSQL connection string
 JWT_SECRET            # Secret for JWT signing
 FRONTEND_BASE_URL     # Frontend URL for CORS origin
-PORT                  # Server port (default 5000 in dev, 3333 in production)
+PORT                  # Server port (defaults to 5000; set to 3333 in production)
 
 # Inter Bank
 INTER_CLIENT_ID
@@ -280,10 +284,16 @@ INTER_CLIENT_SECRET
 INTER_CERT_PATH
 INTER_KEY_PATH
 
+# FDBank
+FDBANK_API_URL
+FDBANK_API_KEY
+
 # OKX Exchange
 OKX_API_KEY
 OKX_SECRET_KEY
 OKX_PASSPHRASE
+OKX_TRON_DEPOSIT_ADDRESS
+OKX_SOLANA_DEPOSIT_ADDRESS
 
 # Resend (email)
 RESEND_API_KEY
@@ -307,6 +317,8 @@ GitHub Actions workflow (`.github/workflows/deploy.yml`):
 4. Creates tarball of `dist/`, `package.json`, `prisma/` (schema + migrations)
 5. SCPs artifact to DigitalOcean droplet
 6. SSHs into server: extracts, installs production deps, runs `prisma migrate deploy`, reloads PM2
+
+Production server runs via PM2 (`ecosystem.config.js`) on `/var/www/otsem-api`.
 
 ## API Documentation
 
