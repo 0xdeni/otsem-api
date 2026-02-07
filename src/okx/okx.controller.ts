@@ -1,15 +1,19 @@
 import { Controller, Get, Post, Body, Query, BadRequestException, UseGuards, Req } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
 import { OkxService } from './services/okx.service';
 import { OkxSpotService } from './services/okx-spot.service';
 import { SPOT_PAIRS, type SpotPair } from './spot.constants';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
+import { Role } from '@prisma/client';
 import type { AuthRequest } from '../auth/jwt-payload.type';
 
 const SPOT_PAIR_SET = new Set(SPOT_PAIRS);
 
 @ApiTags('OKX')
-@UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('okx')
 export class OkxController {
     constructor(
@@ -35,24 +39,28 @@ export class OkxController {
     }
 
     @Get('balance-brl')
+    @Roles(Role.ADMIN)
     @ApiOperation({ summary: 'Saldo BRL na OKX' })
     async getBrlBalance() {
         return await this.okxService.getBrlBalance();
     }
 
     @Get('balance-usdt')
+    @Roles(Role.ADMIN)
     @ApiOperation({ summary: 'Saldo USDT na OKX' })
     async getUsdtBalance() {
         return await this.okxService.getUsdtBalance();
     }
 
     @Post('buy-and-check-history')
+    @Roles(Role.ADMIN)
     @ApiOperation({ summary: 'Comprar USDT com BRL e retornar detalhes' })
     async buyAndCheckHistory(@Body('brlAmount') brlAmount: number) {
         return await this.okxService.buyAndCheckHistory(brlAmount);
     }
 
     @Post('withdraw-usdt')
+    @Roles(Role.ADMIN)
     @ApiOperation({ summary: 'Sacar USDT para endereço externo (completo)' })
     async safeWithdrawUsdt(@Body() body: {
         amount: string | number;
@@ -72,6 +80,7 @@ export class OkxController {
     }
 
     @Post('withdraw-simple')
+    @Roles(Role.ADMIN)
     @ApiOperation({ summary: 'Sacar USDT (simplificado - taxa automática)' })
     async withdrawSimple(@Body() body: {
         amount: string | number;
@@ -89,6 +98,7 @@ export class OkxController {
     }
 
     @Get('deposit-address')
+    @Roles(Role.ADMIN)
     @ApiOperation({ summary: 'Endereço de depósito USDT (Solana ou Tron)' })
     @ApiQuery({ name: 'network', enum: ['Solana', 'TRC20'], required: true })
     async getDepositAddress(@Query('network') network: 'Solana' | 'TRC20') {
@@ -96,36 +106,42 @@ export class OkxController {
     }
 
     @Get('deposits')
+    @Roles(Role.ADMIN)
     @ApiOperation({ summary: 'Lista depósitos recentes de USDT' })
     async getRecentDeposits() {
         return await this.okxService.getRecentDeposits();
     }
 
     @Get('withdrawals')
+    @Roles(Role.ADMIN)
     @ApiOperation({ summary: 'Lista saques recentes de USDT' })
     async getRecentWithdrawals() {
         return await this.okxService.getRecentWithdrawals();
     }
 
     @Get('trades')
+    @Roles(Role.ADMIN)
     @ApiOperation({ summary: 'Histórico de trades (compras/vendas)' })
     async getTradeHistory() {
         return await this.okxService.getTradeHistory();
     }
 
     @Post('transfer-to-funding')
+    @Roles(Role.ADMIN)
     @ApiOperation({ summary: 'Transferir USDT de trading para funding' })
     async transferToFunding(@Body('amount') amount: string) {
         return await this.okxService.transferFromTradingToFunding('USDT', amount);
     }
 
     @Get('funding-balance')
+    @Roles(Role.ADMIN)
     @ApiOperation({ summary: 'Saldo USDT na conta funding (para saque)' })
     async getFundingBalance() {
         return await this.okxService.getFundingBalance('USDT');
     }
 
     @Post('withdraw-crypto')
+    @Roles(Role.ADMIN)
     @ApiOperation({ summary: 'Sacar qualquer crypto (SOL, TRX, etc) para endereço externo' })
     async withdrawCrypto(@Body() body: {
         currency: string;
@@ -145,6 +161,7 @@ export class OkxController {
     }
 
     @Get('withdrawal-fee')
+    @Roles(Role.ADMIN)
     @ApiOperation({ summary: 'Taxa mínima de saque para uma crypto/chain' })
     @ApiQuery({ name: 'currency', type: String, required: true })
     @ApiQuery({ name: 'chain', type: String, required: true })
@@ -157,12 +174,14 @@ export class OkxController {
     }
 
     @Post('buy-crypto')
+    @Roles(Role.ADMIN)
     @ApiOperation({ summary: 'Comprar crypto (SOL, TRX, etc) com USDT' })
     async buyCrypto(@Body() body: { crypto: string; usdtAmount: number }) {
         return await this.okxService.buyCryptoWithUsdt(body.crypto, body.usdtAmount);
     }
 
     @Get('crypto-balance')
+    @Roles(Role.ADMIN)
     @ApiOperation({ summary: 'Saldo de qualquer crypto na conta trading' })
     @ApiQuery({ name: 'currency', type: String, required: true })
     async getCryptoBalance(@Query('currency') currency: string) {
@@ -171,6 +190,7 @@ export class OkxController {
     }
 
     @Get('all-balances')
+    @Roles(Role.ADMIN)
     @ApiOperation({ summary: 'Todos os saldos (trading + funding)' })
     async getAllBalances() {
         const [trading, funding] = await Promise.all([
@@ -181,18 +201,21 @@ export class OkxController {
     }
 
     @Post('transfer-crypto-to-funding')
+    @Roles(Role.ADMIN)
     @ApiOperation({ summary: 'Transferir crypto de trading para funding (para saque)' })
     async transferCryptoToFunding(@Body() body: { currency: string; amount: string }) {
         return await this.okxService.transferCryptoToFunding(body.currency, body.amount);
     }
 
     @Get('spot/pairs')
+    @Roles(Role.CUSTOMER, Role.ADMIN)
     @ApiOperation({ summary: 'Pares spot suportados para o PRO' })
     async getSpotPairs() {
         return { pairs: SPOT_PAIRS };
     }
 
     @Get('spot/instruments')
+    @Roles(Role.CUSTOMER, Role.ADMIN)
     @ApiOperation({ summary: 'Instrumentos spot (OKX) para os pares suportados' })
     @ApiQuery({ name: 'instIds', required: false, type: String, description: 'Lista separada por vírgula' })
     async getSpotInstruments(@Query('instIds') instIds?: string) {
@@ -202,6 +225,7 @@ export class OkxController {
     }
 
     @Get('spot/ticker')
+    @Roles(Role.CUSTOMER, Role.ADMIN)
     @ApiOperation({ summary: 'Ticker spot (último preço, variação, volume)' })
     @ApiQuery({ name: 'instId', required: true, type: String })
     async getSpotTicker(@Query('instId') instId: string) {
@@ -210,6 +234,7 @@ export class OkxController {
     }
 
     @Get('spot/orderbook')
+    @Roles(Role.CUSTOMER, Role.ADMIN)
     @ApiOperation({ summary: 'Livro de ofertas (5 níveis por padrão)' })
     @ApiQuery({ name: 'instId', required: true, type: String })
     @ApiQuery({ name: 'depth', required: false, type: Number })
@@ -223,6 +248,7 @@ export class OkxController {
     }
 
     @Get('spot/trades')
+    @Roles(Role.CUSTOMER, Role.ADMIN)
     @ApiOperation({ summary: 'Últimos negócios (trades) spot' })
     @ApiQuery({ name: 'instId', required: true, type: String })
     @ApiQuery({ name: 'limit', required: false, type: Number })
@@ -236,6 +262,7 @@ export class OkxController {
     }
 
     @Get('spot/candles')
+    @Roles(Role.CUSTOMER, Role.ADMIN)
     @ApiOperation({ summary: 'Candles spot para o gráfico' })
     @ApiQuery({ name: 'instId', required: true, type: String })
     @ApiQuery({ name: 'bar', required: false, type: String })
@@ -251,6 +278,7 @@ export class OkxController {
     }
 
     @Get('spot/balances')
+    @Roles(Role.CUSTOMER, Role.ADMIN)
     @ApiOperation({ summary: 'Saldos spot do usuário' })
     async getSpotBalances(@Req() req: AuthRequest) {
         const customerId = req.user?.customerId;
@@ -261,6 +289,7 @@ export class OkxController {
     }
 
     @Post('spot/transfer-to-pro')
+    @Roles(Role.CUSTOMER, Role.ADMIN)
     @ApiOperation({ summary: 'Transferir USDT da carteira para PRO' })
     async transferToPro(
         @Req() req: AuthRequest,
@@ -274,6 +303,7 @@ export class OkxController {
     }
 
     @Post('spot/transfer-to-wallet')
+    @Roles(Role.CUSTOMER, Role.ADMIN)
     @ApiOperation({ summary: 'Transferir USDT do PRO para carteira' })
     async transferToWallet(
         @Req() req: AuthRequest,
@@ -287,6 +317,7 @@ export class OkxController {
     }
 
     @Get('spot/transfers')
+    @Roles(Role.CUSTOMER, Role.ADMIN)
     @ApiOperation({ summary: 'Histórico de transferências PRO' })
     @ApiQuery({ name: 'page', required: false, type: Number })
     @ApiQuery({ name: 'limit', required: false, type: Number })
@@ -310,6 +341,7 @@ export class OkxController {
     }
 
     @Get('spot/orders')
+    @Roles(Role.CUSTOMER, Role.ADMIN)
     @ApiOperation({ summary: 'Histórico de ordens PRO' })
     @ApiQuery({ name: 'page', required: false, type: Number })
     @ApiQuery({ name: 'limit', required: false, type: Number })
@@ -336,6 +368,7 @@ export class OkxController {
     }
 
     @Post('spot/cancel-order')
+    @Roles(Role.CUSTOMER, Role.ADMIN)
     @ApiOperation({ summary: 'Cancelar ordem limite' })
     async cancelSpotOrder(
         @Req() req: AuthRequest,
@@ -352,6 +385,7 @@ export class OkxController {
     }
 
     @Post('spot/order')
+    @Roles(Role.CUSTOMER, Role.ADMIN)
     @ApiOperation({ summary: 'Enviar ordem spot (limit/market)' })
     async placeSpotOrder(@Req() req: AuthRequest, @Body() body: {
         instId: string;

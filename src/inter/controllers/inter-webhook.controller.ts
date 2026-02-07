@@ -147,20 +147,23 @@ export class InterWebhookController {
         this.logger.debug('Body:', JSON.stringify(req.body, null, 2));
 
         try {
-            // ✅ Validar assinatura (se configurada)
+            // ✅ Validar assinatura (OBRIGATÓRIA)
             const signature = headers['x-inter-signature'] || headers['x-signature'];
-            if (signature) {
-                const isValid = await this.service.validateWebhookSignature(
-                    req.body,
-                    signature,
-                );
-
-                if (!isValid) {
-                    this.logger.error('❌ Assinatura inválida!');
-                    throw new BadRequestException('Assinatura inválida');
-                }
-                this.logger.log('✅ Assinatura validada');
+            if (!signature) {
+                this.logger.error('❌ Header de assinatura ausente — rejeitando webhook');
+                throw new BadRequestException('Assinatura obrigatória');
             }
+
+            const isValid = await this.service.validateWebhookSignature(
+                req.body,
+                signature,
+            );
+
+            if (!isValid) {
+                this.logger.error('❌ Assinatura inválida!');
+                throw new BadRequestException('Assinatura inválida');
+            }
+            this.logger.log('✅ Assinatura validada');
 
             // ✅ Processar webhook
             await this.service.handlePixReceived(req.body);
@@ -205,16 +208,20 @@ export class InterWebhookController {
         this.logger.log('📥 Webhook Boleto recebido');
 
         try {
+            // ✅ Validar assinatura (OBRIGATÓRIA)
             const signature = headers['x-inter-signature'] || headers['x-signature'];
-            if (signature) {
-                const isValid = await this.service.validateWebhookSignature(
-                    req.body,
-                    signature,
-                );
+            if (!signature) {
+                this.logger.error('❌ Header de assinatura ausente — rejeitando webhook');
+                throw new BadRequestException('Assinatura obrigatória');
+            }
 
-                if (!isValid) {
-                    throw new BadRequestException('Assinatura inválida');
-                }
+            const isValid = await this.service.validateWebhookSignature(
+                req.body,
+                signature,
+            );
+
+            if (!isValid) {
+                throw new BadRequestException('Assinatura inválida');
             }
 
             await this.service.handleBoletoReceived(req.body);

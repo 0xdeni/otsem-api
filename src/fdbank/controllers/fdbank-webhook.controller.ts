@@ -3,17 +3,21 @@ import {
     Post,
     Get,
     Body,
+    Headers,
     UseGuards,
     Logger,
     HttpCode,
+    BadRequestException,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiHeader } from '@nestjs/swagger';
+import { ConfigService } from '@nestjs/config';
 import { FdbankWebhookService } from '../services/fdbank-webhook.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { RolesGuard } from '../../auth/roles.guard';
 import { Roles } from '../../auth/roles.decorator';
 import { Role } from '@prisma/client';
+import * as crypto from 'crypto';
 
 @ApiTags('FDBank Webhooks')
 @Controller('fdbank/webhooks')
@@ -23,23 +27,50 @@ export class FdbankWebhookController {
     constructor(
         private readonly webhookService: FdbankWebhookService,
         private readonly prisma: PrismaService,
+        private readonly configService: ConfigService,
     ) {}
 
+    private validateWebhookSecret(headers: any): void {
+        const secret = this.configService.get<string>('FDBANK_WEBHOOK_SECRET');
+        if (!secret) {
+            this.logger.error('❌ FDBANK_WEBHOOK_SECRET não configurado — rejeitando webhook por segurança');
+            throw new BadRequestException('Webhook secret not configured');
+        }
+
+        const receivedSecret = headers['x-webhook-secret'] || headers['x-fdbank-signature'];
+        if (!receivedSecret) {
+            this.logger.error('❌ Header de autenticação ausente no webhook FDBank');
+            throw new BadRequestException('Webhook authentication required');
+        }
+
+        const isValid = crypto.timingSafeEqual(
+            Buffer.from(receivedSecret),
+            Buffer.from(secret),
+        );
+
+        if (!isValid) {
+            this.logger.error('❌ Webhook secret inválido');
+            throw new BadRequestException('Invalid webhook secret');
+        }
+    }
+
     /**
-     * Receive PIX webhook from FDBank (public endpoint - no auth)
+     * Receive PIX webhook from FDBank — requires x-webhook-secret header
      */
     @Post('receive/pix')
     @HttpCode(200)
     @ApiOperation({ summary: 'Receive PIX webhook from FDBank' })
-    async handlePixWebhook(@Body() payload: any) {
+    @ApiHeader({ name: 'x-webhook-secret', description: 'Shared webhook secret', required: true })
+    async handlePixWebhook(@Body() payload: any, @Headers() headers: any) {
         this.logger.log('Received FDBank PIX webhook');
+
+        this.validateWebhookSecret(headers);
 
         try {
             await this.webhookService.handlePixReceived(payload);
             return { status: 'ok' };
         } catch (error: any) {
             this.logger.error(`Error processing FDBank PIX webhook: ${error.message}`);
-            // Return 200 even on error to prevent FDBank from retrying
             return { status: 'error', message: error.message };
         }
     }

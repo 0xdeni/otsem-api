@@ -274,8 +274,8 @@ export class InterWebhookService {
         const secret = this.configService.get<string>('INTER_WEBHOOK_SECRET');
 
         if (!secret) {
-            this.logger.warn('⚠️ INTER_WEBHOOK_SECRET não configurado, pulando validação');
-            return true;
+            this.logger.error('❌ INTER_WEBHOOK_SECRET não configurado — rejeitando webhook por segurança');
+            return false;
         }
 
         try {
