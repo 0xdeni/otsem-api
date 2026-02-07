@@ -99,9 +99,9 @@ export class InterPixController {
     }
 
     @Post('testar-envio')
-    @ApiOperation({ summary: '🔬 Testar envio Pix (direto para Inter)' })
+    @Roles(Role.ADMIN)
+    @ApiOperation({ summary: '🔬 Testar envio Pix (direto para Inter) — ADMIN ONLY' })
     async testarEnvioPix(@Body() body: PixTestePayload, @Query('idIdempotente') idIdempotente: string) {
-        console.log('Controller - testarEnvioPix - body recebido:', body);
         return this.pixTesteService.testarEnvioPix({
             payload: body,
             idIdempotente,

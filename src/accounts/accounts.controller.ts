@@ -28,6 +28,9 @@ export class AccountsController {
   constructor(private readonly accountsService: AccountsService) {}
 
   @Get(':customerId/summary')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.CUSTOMER, Role.ADMIN)
+  @ApiBearerAuth()
   async getAccountSummary(
     @Param('customerId') customerId: string,
   ): Promise<AccountSummaryDto> {
