@@ -330,7 +330,8 @@ export class OkxService {
             bodyObj,
             { headers }
         );
-        
+        this.validateOkxResponse(response.data, 'sellUsdtForBrl');
+
         const orderId = response.data?.data?.[0]?.ordId;
         if (!orderId) {
             throw new Error('Ordem de venda não criada: ' + JSON.stringify(response.data));
