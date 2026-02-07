@@ -35,6 +35,7 @@ import {
     UpdateWebhookCallbackDto,
 } from '../dto/webhook.dto';
 import type { Request } from 'express';
+import { ThrottlerGuard, Throttle } from '@nestjs/throttler';
 
 @ApiTags('🔔 Webhooks (Inter)')
 @Controller('inter/webhooks')
@@ -118,16 +119,18 @@ export class InterWebhookController {
     // ==================== RECEBER WEBHOOKS (PÚBLICO) ====================
 
     @Post('receive/pix')
+    @UseGuards(ThrottlerGuard)
+    @Throttle({ default: { ttl: 60000, limit: 30 } }) // 30 webhook calls per minute per IP
     @HttpCode(HttpStatus.OK)
     @ApiOperation({
         summary: '💰 Receber webhook de Pix (Público)',
         description:
-            'Endpoint chamado automaticamente pelo Banco Inter quando um Pix é recebido',
+            'Endpoint chamado automaticamente pelo Banco Inter quando um Pix é recebido. Requer assinatura HMAC válida.',
     })
     @ApiHeader({
         name: 'x-inter-signature',
-        description: 'Assinatura HMAC SHA256 do webhook',
-        required: false,
+        description: 'Assinatura HMAC SHA256 do webhook (obrigatória)',
+        required: true,
     })
     @ApiResponse({
         status: 200,
@@ -141,8 +144,12 @@ export class InterWebhookController {
         },
     })
     @ApiResponse({ status: 400, description: 'Erro ao processar webhook' })
+    @ApiResponse({ status: 401, description: 'Assinatura ausente ou inválida' })
     async handlePixWebhook(@Req() req: Request, @Headers() headers: any) {
-        this.logger.log('📥 Webhook Pix recebido');
+        const ipAddress = req.ip || req.headers['x-forwarded-for'] || 'unknown';
+        const userAgent = req.headers['user-agent'] || 'unknown';
+
+        this.logger.log(`📥 Webhook Pix recebido de IP: ${ipAddress}`);
         this.logger.debug('Headers:', JSON.stringify(headers, null, 2));
         this.logger.debug('Body:', JSON.stringify(req.body, null, 2));
 
@@ -150,9 +157,22 @@ export class InterWebhookController {
             // ✅ Validar assinatura (OBRIGATÓRIA)
             const signature = headers['x-inter-signature'] || headers['x-signature'];
             if (!signature) {
-                this.logger.error('❌ Header de assinatura ausente — rejeitando webhook');
+                this.logger.error(`❌ Webhook Pix sem assinatura! IP: ${ipAddress} | UA: ${userAgent}`);
+                await this.service.logRejectedWebhook('pix_received', req.body, 'Assinatura ausente', String(ipAddress), String(userAgent));
                 throw new BadRequestException('Assinatura obrigatória');
             }
+
+            const isValid = await this.service.validateWebhookSignature(
+                req.body,
+                signature,
+            );
+
+            if (!isValid) {
+                this.logger.error(`❌ Assinatura inválida! IP: ${ipAddress} | UA: ${userAgent}`);
+                await this.service.logRejectedWebhook('pix_received', req.body, 'Assinatura inválida', String(ipAddress), String(userAgent));
+                throw new BadRequestException('Assinatura inválida');
+            }
+            this.logger.log('✅ Assinatura validada');
 
             const isValid = await this.service.validateWebhookSignature(
                 req.body,
@@ -166,7 +186,7 @@ export class InterWebhookController {
             this.logger.log('✅ Assinatura validada');
 
             // ✅ Processar webhook
-            await this.service.handlePixReceived(req.body);
+            await this.service.handlePixReceived(req.body, String(ipAddress), String(userAgent));
 
             this.logger.log('✅ Webhook Pix processado com sucesso');
 
@@ -179,7 +199,12 @@ export class InterWebhookController {
             this.logger.error('❌ Erro ao processar webhook Pix:', error.message);
             this.logger.error('Stack:', error.stack);
 
-            // ✅ Retornar erro mas com status 200 (para não reenviar)
+            // Re-throw BadRequestException so NestJS returns the proper status
+            if (error instanceof BadRequestException) {
+                throw error;
+            }
+
+            // For other errors, return 200 to prevent Inter from retrying
             return {
                 success: false,
                 error: error.message,
@@ -189,29 +214,36 @@ export class InterWebhookController {
     }
 
     @Post('receive/boletos')
+    @UseGuards(ThrottlerGuard)
+    @Throttle({ default: { ttl: 60000, limit: 30 } }) // 30 webhook calls per minute per IP
     @HttpCode(HttpStatus.OK)
     @ApiOperation({
         summary: '📄 Receber webhook de Boleto (Público)',
         description:
-            'Endpoint chamado automaticamente pelo Banco Inter quando há alteração em boleto',
+            'Endpoint chamado automaticamente pelo Banco Inter quando há alteração em boleto. Requer assinatura HMAC válida.',
     })
     @ApiHeader({
         name: 'x-inter-signature',
-        description: 'Assinatura HMAC SHA256',
-        required: false,
+        description: 'Assinatura HMAC SHA256 (obrigatória)',
+        required: true,
     })
     @ApiResponse({
         status: 200,
         description: 'Webhook processado',
     })
+    @ApiResponse({ status: 401, description: 'Assinatura ausente ou inválida' })
     async handleBoletoWebhook(@Req() req: Request, @Headers() headers: any) {
-        this.logger.log('📥 Webhook Boleto recebido');
+        const ipAddress = req.ip || req.headers['x-forwarded-for'] || 'unknown';
+        const userAgent = req.headers['user-agent'] || 'unknown';
+
+        this.logger.log(`📥 Webhook Boleto recebido de IP: ${ipAddress}`);
 
         try {
             // ✅ Validar assinatura (OBRIGATÓRIA)
             const signature = headers['x-inter-signature'] || headers['x-signature'];
             if (!signature) {
-                this.logger.error('❌ Header de assinatura ausente — rejeitando webhook');
+                this.logger.error(`❌ Webhook Boleto sem assinatura! IP: ${ipAddress} | UA: ${userAgent}`);
+                await this.service.logRejectedWebhook('boleto_received', req.body, 'Assinatura ausente', String(ipAddress), String(userAgent));
                 throw new BadRequestException('Assinatura obrigatória');
             }
 
@@ -221,6 +253,8 @@ export class InterWebhookController {
             );
 
             if (!isValid) {
+                this.logger.error(`❌ Assinatura inválida! IP: ${ipAddress} | UA: ${userAgent}`);
+                await this.service.logRejectedWebhook('boleto_received', req.body, 'Assinatura inválida', String(ipAddress), String(userAgent));
                 throw new BadRequestException('Assinatura inválida');
             }
 
@@ -235,6 +269,10 @@ export class InterWebhookController {
             };
         } catch (error: any) {
             this.logger.error('❌ Erro ao processar webhook Boleto:', error.message);
+
+            if (error instanceof BadRequestException) {
+                throw error;
+            }
 
             return {
                 success: false,
