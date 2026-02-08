@@ -246,7 +246,7 @@ export class WalletService {
         customerId,
         network: 'ETHEREUM',
         externalAddress: address,
-        encryptedPrivateKey: privateKey,
+        encryptedPrivateKey: encryptPrivateKey(privateKey),
         currency,
         label: label || 'Ethereum Wallet',
         isMain: !existingMain,
@@ -289,7 +289,7 @@ export class WalletService {
         customerId,
         network: 'BITCOIN',
         externalAddress: address,
-        encryptedPrivateKey: privateKey,
+        encryptedPrivateKey: encryptPrivateKey(privateKey),
         currency,
         label: label || 'Bitcoin Wallet',
         isMain: !existingMain,
@@ -683,7 +683,8 @@ export class WalletService {
 
     const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
 
-    const secretKeyBytes = Buffer.from(wallet.encryptedPrivateKey, 'hex');
+    const decryptedKey = decryptPrivateKey(wallet.encryptedPrivateKey);
+    const secretKeyBytes = Buffer.from(decryptedKey, 'hex');
     const senderKeypair = Keypair.fromSecretKey(secretKeyBytes);
 
     const senderPubkey = new PublicKey(wallet.externalAddress);
@@ -756,7 +757,7 @@ export class WalletService {
       throw new BadRequestException('Wallet não possui chave privada (não é custodial)');
     }
 
-    return this.tronService.sendTrxWithKey(toAddress, amount, wallet.encryptedPrivateKey);
+    return this.tronService.sendTrxWithKey(toAddress, amount, decryptPrivateKey(wallet.encryptedPrivateKey));
   }
 
   async sendEthereum(
@@ -780,9 +781,10 @@ export class WalletService {
     }
 
     const provider = this.getEthProvider();
-    const privateKey = wallet.encryptedPrivateKey.startsWith('0x')
-      ? wallet.encryptedPrivateKey
-      : `0x${wallet.encryptedPrivateKey}`;
+    const decryptedKey = decryptPrivateKey(wallet.encryptedPrivateKey);
+    const privateKey = decryptedKey.startsWith('0x')
+      ? decryptedKey
+      : `0x${decryptedKey}`;
     const signer = new ethers.Wallet(privateKey, provider);
 
     const value = ethers.parseEther(amount.toString());
@@ -875,7 +877,8 @@ export class WalletService {
     }
 
     const change = total - amountSats - fee;
-    const keyPair = ECPair.fromWIF(wallet.encryptedPrivateKey, bitcoin.networks.bitcoin);
+    const decryptedWif = decryptPrivateKey(wallet.encryptedPrivateKey);
+    const keyPair = ECPair.fromWIF(decryptedWif, bitcoin.networks.bitcoin);
     const payment = bitcoin.payments.p2wpkh({ pubkey: keyPair.publicKey, network: bitcoin.networks.bitcoin });
 
     if (!payment.output) {

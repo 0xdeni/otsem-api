@@ -290,30 +290,30 @@ export class OkxController {
 
     @Post('spot/transfer-to-pro')
     @Roles(Role.CUSTOMER, Role.ADMIN)
-    @ApiOperation({ summary: 'Transferir USDT da carteira para PRO' })
+    @ApiOperation({ summary: 'Transferir ativo da carteira para PRO' })
     async transferToPro(
         @Req() req: AuthRequest,
-        @Body() body: { amount: number; walletId?: string },
+        @Body() body: { amount: number; currency?: string; walletId?: string },
     ) {
         const customerId = req.user?.customerId;
         if (!customerId) {
             throw new BadRequestException('Cliente não identificado');
         }
-        return await this.okxSpotService.transferToPro(customerId, Number(body.amount), body.walletId);
+        return await this.okxSpotService.transferToPro(customerId, Number(body.amount), body.currency, body.walletId);
     }
 
     @Post('spot/transfer-to-wallet')
     @Roles(Role.CUSTOMER, Role.ADMIN)
-    @ApiOperation({ summary: 'Transferir USDT do PRO para carteira' })
+    @ApiOperation({ summary: 'Transferir ativo do PRO para carteira' })
     async transferToWallet(
         @Req() req: AuthRequest,
-        @Body() body: { amount: number; walletId?: string },
+        @Body() body: { amount: number; currency?: string; walletId?: string },
     ) {
         const customerId = req.user?.customerId;
         if (!customerId) {
             throw new BadRequestException('Cliente não identificado');
         }
-        return await this.okxSpotService.transferToWallet(customerId, Number(body.amount), body.walletId);
+        return await this.okxSpotService.transferToWallet(customerId, Number(body.amount), body.currency, body.walletId);
     }
 
     @Get('spot/transfers')

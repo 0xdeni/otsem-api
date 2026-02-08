@@ -507,6 +507,16 @@ export class OkxService {
         return response.data;
     }
 
+    async getCurrencyChains(currency: string) {
+        const method = 'GET';
+        const requestPath = `/api/v5/asset/currencies?ccy=${currency}`;
+        const headers = this.authService.getAuthHeaders(method, requestPath, '');
+        const url = `https://www.okx.com${requestPath}`;
+        const response = await axios.get(url, { headers });
+        this.validateOkxResponse(response.data, `getCurrencyChains ${currency}`);
+        return response.data?.data || [];
+    }
+
     async getWithdrawalFee(currency: string, chain: string) {
         const method = 'GET';
         const requestPath = `/api/v5/asset/currencies?ccy=${currency}`;

@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { Decimal } from '@prisma/client/runtime/library';
-import { Prisma, SpotOrderStatus, SpotTransferDirection } from '@prisma/client';
+import { Prisma, SpotOrderStatus, SpotTransferDirection, WalletNetwork } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { OkxService } from './okx.service';
 import { SPOT_CURRENCIES } from '../spot.constants';
@@ -12,6 +12,19 @@ const PRO_FEE_RATE = (() => {
   if (!Number.isFinite(raw) || raw < 0) return 0;
   return raw;
 })();
+const SPOT_CURRENCY_SET = new Set(SPOT_CURRENCIES);
+const NETWORK_HINTS: Record<WalletNetwork, string[]> = {
+  SOLANA: ['SOLANA'],
+  TRON: ['TRON', 'TRC20'],
+  ETHEREUM: ['ERC20', 'ETH'],
+  BITCOIN: ['BITCOIN', 'BTC'],
+  POLYGON: ['POLYGON', 'MATIC'],
+  BSC: ['BSC', 'BEP20'],
+  AVALANCHE: ['AVALANCHE', 'AVAX'],
+  ARBITRUM: ['ARBITRUM'],
+  OPTIMISM: ['OPTIMISM'],
+  BASE: ['BASE'],
+};
 
 @Injectable()
 export class OkxSpotService {
@@ -36,6 +49,31 @@ export class OkxSpotService {
   private feeForQuote(quoteAmount: Decimal) {
     if (quoteAmount.lte(0)) return new Decimal(0);
     return quoteAmount.mul(this.feeRateDecimal());
+  }
+
+  private normalizeCurrency(input?: string) {
+    const currency = (input || 'USDT').toUpperCase();
+    if (!SPOT_CURRENCY_SET.has(currency as any)) {
+      throw new BadRequestException(`Moeda não suportada: ${currency}`);
+    }
+    return currency;
+  }
+
+  private resolveNetworks(currency: string): WalletNetwork[] {
+    switch (currency) {
+      case 'USDT':
+        return ['SOLANA', 'TRON'];
+      case 'SOL':
+        return ['SOLANA'];
+      case 'TRX':
+        return ['TRON'];
+      case 'ETH':
+        return ['ETHEREUM'];
+      case 'BTC':
+        return ['BITCOIN'];
+      default:
+        return [];
+    }
   }
 
   private parseInstId(instId: string) {
@@ -86,37 +124,68 @@ export class OkxSpotService {
     }));
   }
 
-  private async getWalletForTransfer(customerId: string, walletId?: string) {
+  private async getWalletForTransfer(customerId: string, currency: string, walletId?: string) {
     if (walletId) {
       return this.prisma.wallet.findFirst({
-        where: { id: walletId, customerId, currency: 'USDT', isActive: true },
+        where: { id: walletId, customerId, currency, isActive: true },
       });
     }
 
-    const mainSol = await this.prisma.wallet.findFirst({
-      where: { customerId, currency: 'USDT', network: 'SOLANA', isMain: true, isActive: true },
-    });
-    if (mainSol) return mainSol;
+    const networks = this.resolveNetworks(currency);
+    for (const network of networks) {
+      const main = await this.prisma.wallet.findFirst({
+        where: { customerId, currency, network, isMain: true, isActive: true },
+      });
+      if (main) return main;
+    }
 
-    const mainTron = await this.prisma.wallet.findFirst({
-      where: { customerId, currency: 'USDT', network: 'TRON', isMain: true, isActive: true },
-    });
-    if (mainTron) return mainTron;
+    for (const network of networks) {
+      const any = await this.prisma.wallet.findFirst({
+        where: { customerId, currency, network, isActive: true },
+      });
+      if (any) return any;
+    }
 
-    return this.prisma.wallet.findFirst({
-      where: { customerId, currency: 'USDT', isActive: true },
-      orderBy: { network: 'asc' },
-    });
+    return null;
   }
 
-  async transferToPro(customerId: string, amount: number, walletId?: string) {
+  private async resolveOkxChain(currency: string, network: WalletNetwork) {
+    const chains = await this.okxService.getCurrencyChains(currency);
+    const hints = NETWORK_HINTS[network] || [];
+    const normalizedCurrency = currency.toUpperCase();
+
+    const match = chains.find((item: any) => {
+      const chain = String(item.chain || '').toUpperCase();
+      if (!chain) return false;
+      const networkMatch = hints.some((hint) => chain.includes(hint));
+      if (!networkMatch) return false;
+      return chain.includes(normalizedCurrency);
+    }) || chains.find((item: any) => {
+      const chain = String(item.chain || '').toUpperCase();
+      const networkMatch = hints.some((hint) => chain.includes(hint));
+      return networkMatch;
+    });
+
+    if (!match) {
+      throw new BadRequestException(`Chain OKX não encontrada para ${currency} (${network})`);
+    }
+
+    return {
+      chain: match.chain as string,
+      minFee: match.minFee ?? match.minWdFee ?? match.wdFee ?? '0',
+      minWithdrawal: match.minWd ?? match.minWithdrawal ?? null,
+    };
+  }
+
+  async transferToPro(customerId: string, amount: number, currencyInput?: string, walletId?: string) {
+    const currency = this.normalizeCurrency(currencyInput);
     if (!Number.isFinite(amount) || amount <= 0) {
       throw new BadRequestException('Valor inválido');
     }
 
-    const wallet = await this.getWalletForTransfer(customerId, walletId);
+    const wallet = await this.getWalletForTransfer(customerId, currency, walletId);
     if (!wallet) {
-      throw new BadRequestException('Wallet USDT não encontrada');
+      throw new BadRequestException(`Wallet ${currency} não encontrada`);
     }
 
     const amountDecimal = this.toDecimal(amount);
@@ -138,9 +207,9 @@ export class OkxSpotService {
         },
       });
 
-      await this.upsertBalance(tx, customerId, 'USDT');
+      await this.upsertBalance(tx, customerId, currency);
       await tx.spotBalance.update({
-        where: { customerId_currency: { customerId, currency: 'USDT' } },
+        where: { customerId_currency: { customerId, currency } },
         data: { available: { increment: amountDecimal } },
       });
 
@@ -148,7 +217,7 @@ export class OkxSpotService {
         data: {
           customerId,
           walletId: wallet.id,
-          currency: 'USDT',
+          currency,
           amount: amountDecimal,
           direction: SpotTransferDirection.TO_PRO,
         },
@@ -158,61 +227,91 @@ export class OkxSpotService {
     return { success: true };
   }
 
-  async transferToWallet(customerId: string, amount: number, walletId?: string) {
+  async transferToWallet(customerId: string, amount: number, currencyInput?: string, walletId?: string) {
+    const currency = this.normalizeCurrency(currencyInput);
     if (!Number.isFinite(amount) || amount <= 0) {
       throw new BadRequestException('Valor inválido');
     }
 
-    const wallet = await this.getWalletForTransfer(customerId, walletId);
+    const wallet = await this.getWalletForTransfer(customerId, currency, walletId);
     if (!wallet) {
-      throw new BadRequestException('Wallet USDT não encontrada');
+      throw new BadRequestException(`Wallet ${currency} não encontrada`);
     }
 
     const amountDecimal = this.toDecimal(amount);
 
+    const spot = await this.prisma.spotBalance.findUnique({
+      where: { customerId_currency: { customerId, currency } },
+    });
+    if (!spot || new Decimal(spot.available).lt(amountDecimal)) {
+      throw new BadRequestException('Saldo insuficiente no PRO');
+    }
+
+    const currentWallet = await this.prisma.wallet.findUnique({ where: { id: wallet.id } });
+    if (!currentWallet) {
+      throw new BadRequestException('Wallet não encontrada');
+    }
+
+    const reserved = new Decimal(currentWallet.reserved || 0);
+    const releaseAmount = reserved.gte(amountDecimal) ? amountDecimal : reserved;
+    const withdrawAmount = amountDecimal.sub(releaseAmount);
+
+    let okxWithdraw: any = null;
+    if (withdrawAmount.gt(0)) {
+      try {
+        if (!currentWallet.externalAddress) {
+          throw new BadRequestException('Wallet sem endereço para saque');
+        }
+        if (!currentWallet.okxWhitelisted) {
+          throw new BadRequestException('Wallet não está na whitelist da OKX');
+        }
+
+        const { chain, minFee } = await this.resolveOkxChain(currency, currentWallet.network);
+        const fee = minFee || '0';
+        const withdrawAmountStr = withdrawAmount.toFixed(8);
+
+        await this.okxService.transferFromTradingToFunding(currency, withdrawAmountStr);
+        okxWithdraw = await this.okxService.withdrawCrypto({
+          currency,
+          amount: withdrawAmountStr,
+          toAddress: currentWallet.externalAddress,
+          chain,
+          fee: String(fee),
+        });
+      } catch (error: any) {
+        this.logger.error(`Erro ao sacar ${currency}: ${error?.message || error}`);
+        throw new BadRequestException(error?.message || `Erro ao sacar ${currency}`);
+      }
+    }
+
     await this.prisma.$transaction(async (tx) => {
-      const spot = await tx.spotBalance.findUnique({
-        where: { customerId_currency: { customerId, currency: 'USDT' } },
-      });
-      if (!spot || new Decimal(spot.available).lt(amountDecimal)) {
-        throw new BadRequestException('Saldo insuficiente no PRO');
-      }
-
-      const currentWallet = await tx.wallet.findUnique({ where: { id: wallet.id } });
-      if (!currentWallet) {
-        throw new BadRequestException('Wallet não encontrada');
-      }
-
-      const reserved = new Decimal(currentWallet.reserved || 0);
-      if (reserved.lt(amountDecimal)) {
-        throw new BadRequestException('Saldo reservado insuficiente');
-      }
-
       await tx.spotBalance.update({
-        where: { customerId_currency: { customerId, currency: 'USDT' } },
+        where: { customerId_currency: { customerId, currency } },
         data: { available: { decrement: amountDecimal } },
       });
 
-      await tx.wallet.update({
-        where: { id: wallet.id },
-        data: {
-          balance: { increment: amountDecimal },
-          reserved: { decrement: amountDecimal },
-        },
-      });
+      if (releaseAmount.gt(0)) {
+        await tx.wallet.update({
+          where: { id: wallet.id },
+          data: {
+            balance: { increment: releaseAmount },
+            reserved: { decrement: releaseAmount },
+          },
+        });
+      }
 
       await tx.spotTransfer.create({
         data: {
           customerId,
           walletId: wallet.id,
-          currency: 'USDT',
+          currency,
           amount: amountDecimal,
           direction: SpotTransferDirection.TO_WALLET,
         },
       });
     });
 
-    return { success: true };
+    return { success: true, okxWithdraw };
   }
 
   async placeOrder(

@@ -8,6 +8,13 @@ import { SolanaService } from '../solana/solana.service';
 import { AffiliatesService } from '../affiliates/affiliates.service';
 import { KycLimitsService } from '../customers/kyc-limits.service';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { decryptPrivateKey, encryptPrivateKey } from './wallet-crypto.util';
+import { ethers } from 'ethers';
+import * as bitcoin from 'bitcoinjs-lib';
+import * as ecc from 'tiny-secp256k1';
+import { ECPairFactory } from 'ecpair';
+
+const ECPair = ECPairFactory(ecc);
 
 describe('WalletService', () => {
   let service: WalletService;
@@ -69,6 +76,7 @@ describe('WalletService', () => {
     sendUsdtWithKey: jest.fn(),
     getTrxBalance: jest.fn(),
     sendTrx: jest.fn(),
+    sendTrxWithKey: jest.fn(),
   };
 
   const mockSolanaService = {
@@ -91,6 +99,7 @@ describe('WalletService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    process.env.WALLET_ENCRYPTION_KEY = 'test-wallet-encryption-key';
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -110,7 +119,7 @@ describe('WalletService', () => {
 
   describe('createWallet', () => {
     it('should throw BadRequestException when wallet already exists', async () => {
-      mockPrisma.wallet.findUnique.mockResolvedValue({
+      mockPrisma.wallet.findFirst.mockResolvedValue({
         id: 'existing-wallet',
       });
 
@@ -120,7 +129,7 @@ describe('WalletService', () => {
     });
 
     it('should create wallet successfully', async () => {
-      mockPrisma.wallet.findUnique.mockResolvedValue(null);
+      mockPrisma.wallet.findFirst.mockResolvedValue(null);
       const createdWallet = {
         id: 'wallet-1',
         customerId: 'cust-1',
@@ -151,7 +160,7 @@ describe('WalletService', () => {
     });
 
     it('should unset other main wallets when isMain is true', async () => {
-      mockPrisma.wallet.findUnique.mockResolvedValue(null);
+      mockPrisma.wallet.findFirst.mockResolvedValue(null);
       mockPrisma.wallet.updateMany.mockResolvedValue({ count: 1 });
       mockPrisma.wallet.create.mockResolvedValue({ id: 'wallet-new' });
 
@@ -166,7 +175,7 @@ describe('WalletService', () => {
     });
 
     it('should handle P2002 (unique constraint) error', async () => {
-      mockPrisma.wallet.findUnique.mockResolvedValue(null);
+      mockPrisma.wallet.findFirst.mockResolvedValue(null);
       mockPrisma.wallet.create.mockRejectedValue({
         code: 'P2002',
         message: 'Unique constraint',
@@ -178,7 +187,7 @@ describe('WalletService', () => {
     });
 
     it('should handle P2003 (foreign key) error', async () => {
-      mockPrisma.wallet.findUnique.mockResolvedValue(null);
+      mockPrisma.wallet.findFirst.mockResolvedValue(null);
       mockPrisma.wallet.create.mockRejectedValue({
         code: 'P2003',
         message: 'Foreign key constraint',
@@ -710,6 +719,174 @@ describe('WalletService', () => {
         where: { id: 'w-1' },
         data: { label: 'New Label' },
       });
+    });
+  });
+
+  describe('custody encryption hardening', () => {
+    it('should encrypt Ethereum private key before storing', async () => {
+      mockPrisma.wallet.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null);
+      mockPrisma.wallet.create.mockImplementation(async ({ data }: any) => ({
+        id: 'eth-wallet',
+        ...data,
+      }));
+
+      const result = await service.createEthereumWallet('cust-1');
+
+      const createCall = mockPrisma.wallet.create.mock.calls[0][0];
+      const encryptedStoredKey = createCall.data.encryptedPrivateKey;
+
+      expect(encryptedStoredKey).not.toBe(result.privateKey);
+      expect(encryptedStoredKey).toContain(':');
+      expect(decryptPrivateKey(encryptedStoredKey)).toBe(result.privateKey);
+    });
+
+    it('should encrypt Bitcoin private key before storing', async () => {
+      mockPrisma.wallet.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null);
+      mockPrisma.wallet.create.mockImplementation(async ({ data }: any) => ({
+        id: 'btc-wallet',
+        ...data,
+      }));
+
+      const result = await service.createBitcoinWallet('cust-1');
+
+      const createCall = mockPrisma.wallet.create.mock.calls[0][0];
+      const encryptedStoredKey = createCall.data.encryptedPrivateKey;
+
+      expect(encryptedStoredKey).not.toBe(result.privateKey);
+      expect(encryptedStoredKey).toContain(':');
+      expect(decryptPrivateKey(encryptedStoredKey)).toBe(result.privateKey);
+    });
+
+    it('should decrypt key before TRX transfer', async () => {
+      const decryptedKey = 'my-tron-private-key';
+      const encryptedKey = encryptPrivateKey(decryptedKey);
+      jest.spyOn(service, 'getWalletById').mockResolvedValue({
+        id: 'wallet-trx',
+        customerId: 'cust-1',
+        network: 'TRON',
+        currency: 'TRX',
+        encryptedPrivateKey: encryptedKey,
+      } as any);
+      mockTronService.sendTrxWithKey.mockResolvedValue({
+        txId: 'trx-123',
+        success: true,
+      });
+
+      const result = await service.sendTronNative('wallet-trx', 'cust-1', 'TXxx', 1);
+
+      expect(result).toEqual({ txId: 'trx-123', success: true });
+      expect(mockTronService.sendTrxWithKey).toHaveBeenCalledWith(
+        'TXxx',
+        1,
+        decryptedKey,
+      );
+    });
+
+    it('should decrypt key before ETH transfer', async () => {
+      const rawPrivateKey = '59c6995e998f97a5a0044966f0945382d7f8a5a1b7f795e6fcd5082b9795f2a6';
+      const encryptedKey = encryptPrivateKey(rawPrivateKey);
+      const providerMock = {
+        getFeeData: jest.fn().mockResolvedValue({
+          maxFeePerGas: 2n,
+          maxPriorityFeePerGas: 1n,
+          gasPrice: 2n,
+        }),
+        estimateGas: jest.fn().mockResolvedValue(21000n),
+        getBalance: jest.fn().mockResolvedValue(ethers.parseEther('2')),
+      };
+
+      jest.spyOn(service, 'getWalletById').mockResolvedValue({
+        id: 'wallet-eth',
+        customerId: 'cust-1',
+        network: 'ETHEREUM',
+        currency: 'ETH',
+        encryptedPrivateKey: encryptedKey,
+      } as any);
+      jest.spyOn(service as any, 'getEthProvider').mockReturnValue(providerMock as any);
+
+      const sendTxSpy = jest
+        .spyOn(ethers.Wallet.prototype, 'sendTransaction')
+        .mockResolvedValue({ hash: '0xethhash' } as any);
+
+      const result = await service.sendEthereum(
+        'wallet-eth',
+        'cust-1',
+        '0x742d35Cc6634C0532925a3b844Bc454e4438f44e',
+        0.1,
+      );
+
+      expect(result).toEqual({ txId: '0xethhash', success: true, fee: expect.any(String) });
+      expect(providerMock.getFeeData).toHaveBeenCalled();
+      sendTxSpy.mockRestore();
+    });
+
+    it('should decrypt key before BTC transfer', async () => {
+      const fromKeyPair = ECPair.makeRandom();
+      const fromPayment = bitcoin.payments.p2wpkh({
+        pubkey: fromKeyPair.publicKey,
+        network: bitcoin.networks.bitcoin,
+      });
+      const toKeyPair = ECPair.makeRandom();
+      const toPayment = bitcoin.payments.p2wpkh({
+        pubkey: toKeyPair.publicKey,
+        network: bitcoin.networks.bitcoin,
+      });
+
+      if (!fromPayment.address || !toPayment.address) {
+        throw new Error('Failed to build BTC test addresses');
+      }
+
+      const encryptedWif = encryptPrivateKey(fromKeyPair.toWIF());
+      jest.spyOn(service, 'getWalletById').mockResolvedValue({
+        id: 'wallet-btc',
+        customerId: 'cust-1',
+        network: 'BITCOIN',
+        currency: 'BTC',
+        externalAddress: fromPayment.address,
+        encryptedPrivateKey: encryptedWif,
+      } as any);
+
+      const fetchMock = jest.spyOn(global, 'fetch' as any).mockImplementation(async (input: any, init?: any) => {
+        const url = String(input);
+        if (url.includes('/utxo')) {
+          return {
+            ok: true,
+            json: async () => [
+              { txid: 'f'.repeat(64), vout: 0, value: 100000 },
+            ],
+          } as any;
+        }
+        if (url.includes('/fee-estimates')) {
+          return {
+            ok: true,
+            json: async () => ({ '2': 5 }),
+          } as any;
+        }
+        if (url.endsWith('/tx') && init?.method === 'POST') {
+          return {
+            ok: true,
+            text: async () => 'btc-tx-id',
+          } as any;
+        }
+        return {
+          ok: false,
+          text: async () => 'unexpected',
+        } as any;
+      });
+
+      const result = await service.sendBitcoin(
+        'wallet-btc',
+        'cust-1',
+        toPayment.address,
+        0.0005,
+      );
+
+      expect(result).toEqual({ txId: 'btc-tx-id', success: true, fee: expect.any(String) });
+      fetchMock.mockRestore();
     });
   });
 });
