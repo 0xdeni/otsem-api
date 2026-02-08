@@ -73,6 +73,30 @@ export class WalletService {
     }
   }
 
+  private isOkxWhitelistErrorMessage(message?: string) {
+    if (!message) return false;
+    const normalized = message.toLowerCase();
+    return (
+      normalized.includes('verified addresses') ||
+      normalized.includes('whitelist') ||
+      normalized.includes('58207')
+    );
+  }
+
+  private async markWalletAsNotWhitelisted(walletId?: string | null) {
+    if (!walletId) return;
+    try {
+      await this.prisma.wallet.update({
+        where: { id: walletId },
+        data: { okxWhitelisted: false },
+      });
+    } catch (error: any) {
+      this.logger.warn(
+        `[BUY] Não foi possível atualizar okxWhitelisted=false para wallet ${walletId}: ${error?.message}`,
+      );
+    }
+  }
+
   private getEthProvider() {
     const rpcUrl =
       process.env.ALCHEMY_ETH_RPC_URL ||
@@ -998,11 +1022,11 @@ export class WalletService {
       });
     } else {
       wallet = await this.prisma.wallet.findFirst({
-        where: { customerId, currency: 'USDT', isMain: true, okxWhitelisted: true },
+        where: { customerId, currency: 'USDT', isMain: true },
       });
       if (!wallet) {
         wallet = await this.prisma.wallet.findFirst({
-          where: { customerId, currency: 'USDT', okxWhitelisted: true },
+          where: { customerId, currency: 'USDT' },
         });
       }
     }
@@ -1050,11 +1074,15 @@ export class WalletService {
         whitelisted: wallet.okxWhitelisted,
       } : null,
       balanceBrl: balance,
-      canProceed: balance >= brlAmount && brlAmount >= 10 && usdtNet > 0 && wallet?.okxWhitelisted,
+      canProceed: balance >= brlAmount && brlAmount >= 10 && usdtNet > 0 && !!wallet,
       minBrlRecommended: minBrl,
       message: usdtNet <= 0
         ? `Valor mínimo: R$ ${minBrl}`
-        : `Você receberá ${usdtNet.toFixed(2)} USDT (taxa de rede: ${networkFee} USDT)`,
+        : !wallet
+          ? 'Cadastre uma carteira USDT para prosseguir com a compra.'
+          : wallet.okxWhitelisted === false
+            ? `Você receberá ${usdtNet.toFixed(2)} USDT (taxa de rede: ${networkFee} USDT). Atenção: endereço ainda não confirmado na whitelist da OKX.`
+            : `Você receberá ${usdtNet.toFixed(2)} USDT (taxa de rede: ${networkFee} USDT)`,
     };
   }
 
@@ -1105,10 +1133,6 @@ export class WalletService {
 
     if (!wallet || !wallet.externalAddress) {
       throw new BadRequestException('Carteira (Solana ou Tron) não encontrada para o cliente');
-    }
-
-    if (!wallet.okxWhitelisted) {
-      throw new BadRequestException('Carteira não está na whitelist da OKX. Adicione o endereço na OKX e marque como whitelistada antes de converter.');
     }
 
     // Criar Conversion com status PENDING para tracking em tempo real
@@ -1366,14 +1390,21 @@ export class WalletService {
     } catch (error: any) {
       // Atualizar Conversion para FAILED
       const axiosMsg = error?.response?.data?.msg || error?.response?.data?.message;
-      const errorMsg = axiosMsg || (error instanceof Error ? error.message : 'Erro na compra/transferência USDT');
+      const rawMessage = axiosMsg || (error instanceof Error ? error.message : 'Erro na compra/transferência USDT');
+      const isWhitelistError = this.isOkxWhitelistErrorMessage(rawMessage);
+      if (isWhitelistError) {
+        await this.markWalletAsNotWhitelisted(wallet?.id);
+      }
+      const publicMessage = isWhitelistError
+        ? 'Endereço não confirmado na whitelist da OKX. Autorize o endereço no app/web da OKX e tente novamente.'
+        : rawMessage;
       await this.prisma.conversion.update({
         where: { id: conversion.id },
-        data: { status: 'FAILED', errorMessage: errorMsg },
+        data: { status: 'FAILED', errorMessage: publicMessage },
       });
-      this.logger.error(`[BUY] Conversion ${conversion.id} FAILED: ${errorMsg}`, error?.stack || error);
+      this.logger.error(`[BUY] Conversion ${conversion.id} FAILED: ${publicMessage}`, error?.stack || error);
 
-      throw new BadRequestException(`Erro na compra USDT: ${errorMsg}`);
+      throw new BadRequestException(`Erro na compra USDT: ${publicMessage}`);
     }
   }
 

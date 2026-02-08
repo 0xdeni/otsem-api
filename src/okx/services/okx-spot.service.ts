@@ -59,6 +59,16 @@ export class OkxSpotService {
     return currency;
   }
 
+  private isOkxWhitelistErrorMessage(message?: string) {
+    if (!message) return false;
+    const normalized = message.toLowerCase();
+    return (
+      normalized.includes('verified addresses') ||
+      normalized.includes('whitelist') ||
+      normalized.includes('58207')
+    );
+  }
+
   private resolveNetworks(currency: string): WalletNetwork[] {
     switch (currency) {
       case 'USDT':
@@ -262,9 +272,6 @@ export class OkxSpotService {
         if (!currentWallet.externalAddress) {
           throw new BadRequestException('Wallet sem endereço para saque');
         }
-        if (!currentWallet.okxWhitelisted) {
-          throw new BadRequestException('Wallet não está na whitelist da OKX');
-        }
 
         const { chain, minFee } = await this.resolveOkxChain(currency, currentWallet.network);
         const fee = minFee || '0';
@@ -279,8 +286,19 @@ export class OkxSpotService {
           fee: String(fee),
         });
       } catch (error: any) {
-        this.logger.error(`Erro ao sacar ${currency}: ${error?.message || error}`);
-        throw new BadRequestException(error?.message || `Erro ao sacar ${currency}`);
+        const rawMessage = error?.message || `Erro ao sacar ${currency}`;
+        const isWhitelistError = this.isOkxWhitelistErrorMessage(rawMessage);
+        if (isWhitelistError) {
+          await this.prisma.wallet.update({
+            where: { id: currentWallet.id },
+            data: { okxWhitelisted: false },
+          }).catch(() => null);
+        }
+        const publicMessage = isWhitelistError
+          ? 'Endereço não confirmado na whitelist da OKX. Autorize o endereço no app/web da OKX e tente novamente.'
+          : rawMessage;
+        this.logger.error(`Erro ao sacar ${currency}: ${publicMessage}`);
+        throw new BadRequestException(publicMessage);
       }
     }
 

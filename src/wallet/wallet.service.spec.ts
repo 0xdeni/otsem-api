@@ -410,6 +410,20 @@ describe('WalletService', () => {
 
       expect(result.networkFeeUsdt).toBe(2.1);
     });
+
+    it('should not block quote when wallet is not marked as whitelisted', async () => {
+      mockPrisma.wallet.findFirst.mockResolvedValue({
+        id: 'w1',
+        externalAddress: 'addr-1',
+        network: 'SOLANA',
+        okxWhitelisted: false,
+      });
+
+      const result = await service.getUsdtQuote('cust-1', 100);
+
+      expect(result.canProceed).toBe(true);
+      expect(result.wallet?.whitelisted).toBe(false);
+    });
   });
 
   describe('buyUsdtWithBrl', () => {
@@ -471,32 +485,6 @@ describe('WalletService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should throw BadRequestException when wallet is not OKX whitelisted', async () => {
-      mockPrisma.account.findFirst.mockResolvedValue({
-        id: 'acc-1',
-        balance: 1000,
-      });
-      mockKycLimitsService.validateTransactionLimit.mockResolvedValue({
-        allowed: true,
-      });
-      mockPrisma.customer.findUnique.mockResolvedValue({
-        user: { spreadValue: null },
-        affiliateId: null,
-      });
-      mockAffiliatesService.getAffiliateForCustomer.mockResolvedValue({
-        affiliate: null,
-      });
-      mockPrisma.wallet.findFirst.mockResolvedValue({
-        id: 'w-1',
-        externalAddress: 'addr',
-        network: 'SOLANA',
-        okxWhitelisted: false,
-      });
-
-      await expect(
-        service.buyUsdtWithBrl('cust-1', 100),
-      ).rejects.toThrow(BadRequestException);
-    });
   });
 
   describe('sellUsdtForBrl', () => {
